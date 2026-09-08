@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Studio — NEO術</title>
-  <meta name="description" content="NeoJutsu Studio: generate, edit and export original chiptune. Four hardware voices, chip-style effects, real MIDI out.">
+  <meta name="description" content="NeoJutsu Studio: generate, edit and export original chiptune. Four hardware voices, a live mixer, and MP3, WAV and MIDI export.">
   <meta name="theme-color" content="#07060c">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2307060c'/%3E%3Ctext x='32' y='47' font-size='42' text-anchor='middle' font-family='serif' fill='%23ff2e88'%3E術%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,6 +29,18 @@
   </header>
 
   <main class="studio">
+    <section class="session-bar panel" aria-label="Session and transport">
+      <div class="session-name"><span class="eyebrow">YOUR CHIP WORKSPACE</span>
+        <label class="sr-only" for="x-title">Track title</label><input id="x-title" value="neojutsu-track" maxlength="100" spellcheck="false" aria-label="Track title">
+        <span id="autosave-status" role="status">Autosave ready</span>
+      </div>
+      <div class="session-controls">
+        <button class="btn btn-primary" id="play" type="button" aria-pressed="false" title="Play / stop (Space)"><span id="play-icon">▶</span> <span id="play-label">Play</span></button>
+        <label class="tempo"><span>BPM <b id="bpm-val">150</b></span><input type="range" id="bpm" min="80" max="220" value="150" aria-label="Playback tempo"></label>
+        <output id="position" aria-label="Playback position">01 : 01</output>
+      </div>
+      <div class="session-actions"><button class="mini" id="toggle-inspector" aria-expanded="true" aria-controls="inspector" type="button">Effects &amp; files</button><button class="btn btn-export" id="x-mp3" type="button">↓ Export MP3</button></div>
+    </section>
     <!-- ===== left: generate ===== -->
     <aside class="panel gen">
       <h2 class="panel-title"><span class="k">生</span> Generate</h2>
@@ -87,7 +99,7 @@
         <label class="field">
           <span>Bars</span>
           <select id="g-bars">
-            <option value="2">2</option><option value="4" selected>4</option><option value="8">8</option>
+            <option value="2">2</option><option value="4" selected>4</option><option value="8">8</option><option value="16">16</option>
           </select>
         </label>
         <label class="field">
@@ -108,19 +120,12 @@
 
       <button class="btn btn-primary wide" id="g-go" type="button"><span class="btn-icon">◆</span> Generate</button>
 
-      <p class="gen-note">
-        <b>型 kata</b> engines are rule-based, so the whole path works today:
-        controls → pattern → chip synth → MIDI. <b>術 NeoJutsu</b> is the trained model
-        and slots in here when it's ready. Same controls, same seeds.
-      </p>
+      <p class="gen-note">Choose a mood. Find a seed. Make it yours.<br><b>型 kata</b> composes with rules; NeoJutsu v1 is still training.</p>
     </aside>
 
     <!-- ===== centre: editor ===== -->
     <section class="panel editor">
       <div class="transport">
-        <button class="btn btn-primary" id="play" type="button" aria-pressed="false">
-          <span class="btn-icon" id="play-icon">▶</span> <span id="play-label">Play</span>
-        </button>
         <div class="lane-tabs" role="tablist" aria-label="Channel to edit">
           <button class="lane active" data-lane="p1" role="tab" aria-selected="true"><span class="dot p1"></span>Pulse 1</button>
           <button class="lane" data-lane="p2" role="tab" aria-selected="false"><span class="dot p2"></span>Pulse 2</button>
@@ -131,27 +136,32 @@
           <button type="button" class="mini" id="t-clear" title="Clear this channel">clear</button>
           <button type="button" class="mini" id="t-shift-up" title="Transpose channel up an octave">+8va</button>
           <button type="button" class="mini" id="t-shift-dn" title="Transpose channel down an octave">−8va</button>
-          <button type="button" class="mini" id="t-undo" title="Undo (⌘Z)">undo</button>
+          <button type="button" class="mini" id="t-undo" title="Undo (⌘/Ctrl Z)">↶ Undo</button>
+          <button type="button" class="mini" id="t-redo" title="Redo (⌘/Ctrl Shift Z)">↷ Redo</button>
         </div>
-        <label class="tempo">
-          <span>BPM <b id="bpm-val">150</b></span>
-          <input type="range" id="bpm" min="80" max="220" value="150">
-        </label>
+
       </div>
 
+      <div class="edit-options">
+        <div class="loop-controls"><button class="mini" id="loop-toggle" type="button" aria-pressed="false" title="Toggle selected loop (L)">↻ Loop</button><label>From bar <select id="loop-start" aria-label="Loop start bar"></select></label><label>to <select id="loop-end" aria-label="Loop end bar"></select></label></div>
+        <div class="copy-controls"><label class="sr-only" for="copy-target">Duplicate notes to voice</label><select id="copy-target"><option value="p2">To Pulse 2</option><option value="p1">To Pulse 1</option><option value="tr">To Triangle</option></select><button class="mini" id="t-duplicate" type="button" title="Replace the target voice with a copy of the selected voice; undo is available">Copy voice</button></div>
+        <button class="mini" id="t-double" type="button" title="Repeat the full pattern, up to 16 bars">Double pattern</button>
+      </div>
       <div class="roll-wrap">
+        <div id="bar-ruler" class="bar-ruler" aria-label="Pattern bars"></div>
         <canvas id="roll" aria-label="Piano roll editor"></canvas>
       </div>
       <p class="roll-help">
         <b>Click</b> places a note. <b>Drag right from a note</b> holds it (a sustained note).
         <b>Drag</b> across empty cells to paint. <b>Right-click</b> or <b>shift-click</b> erases.
-        <b>Space</b> plays. One note per step per voice, the way the hardware works.
+        <b>Space</b> plays · <b>1–4</b> select a voice · <b>L</b> toggles the loop · <b>⌘/Ctrl Z</b> undoes.
       </p>
+      <section class="mixer" aria-label="Track mixer"><div class="mixer-heading"><h2>Mix your sound</h2><span>Volume · pan · mute · solo</span></div><div class="mixer-strips" id="mixer-strips"></div><label class="master-level">Master <input type="range" id="mix-master" min="0" max="100" value="100"><output id="mix-master-value">100%</output></label></section>
       <canvas id="scope" width="1200" height="70" aria-label="Oscilloscope"></canvas>
     </section>
 
     <!-- ===== right: fx, export, saved ===== -->
-    <aside class="panel side">
+    <aside class="panel side" id="inspector">
       <h2 class="panel-title"><span class="k">効</span> Effects <small id="fx-lane-name" class="fx-lane">Pulse 1</small></h2>
       <div class="fx" id="fx-voice">
         <label class="fx-row"><span>Vibrato</span><input type="range" id="fx-vib" min="0" max="100" value="0"><b id="fx-vib-v">0</b></label>
@@ -182,7 +192,7 @@
 
       <h2 class="panel-title mt"><span class="k">出</span> Export</h2>
       <div class="track-meta">
-        <div><span>Title</span><input type="text" id="x-title" value="neojutsu-track" spellcheck="false"></div>
+
         <div class="meta-grid">
           <div><span>Chip</span><b id="x-chip">NES · 2A03</b></div>
           <div><span>Length</span><b id="x-len">4 bars</b></div>
@@ -190,9 +200,15 @@
           <div><span>Model</span><b id="x-engine">kata-A</b></div>
         </div>
       </div>
+      <label class="field"><span>MP3 quality</span><select id="x-quality"><option value="128">128 kbps · compact</option><option value="192" selected>192 kbps · balanced</option><option value="320">320 kbps · highest</option></select></label>
+      <label class="field"><span>Audio range</span><select id="x-range"><option value="full">Full pattern</option><option value="loop">Selected bars</option></select></label>
+      <label class="export-check"><input id="x-tail" type="checkbox" checked> Include effects tail</label>
+      <div class="export-progress" id="export-progress" hidden><label for="x-progress" id="export-label">Preparing audio…</label><progress id="x-progress" max="100" value="0"></progress></div>
+      <a id="x-download" class="btn btn-ghost wide" hidden>Download again</a>
+      <button class="btn btn-ghost wide" id="x-wav" type="button">↓ Download WAV</button>
       <button class="btn btn-ghost wide" id="x-midi" type="button">⬇ Download MIDI</button>
       <button class="btn btn-ghost wide" id="x-link" type="button">⧉ Copy share link</button>
-      <p class="side-note" id="x-status"></p>
+      <p class="side-note" id="x-status" role="status" aria-live="polite"></p>
 
       <h2 class="panel-title mt"><span class="k">庫</span> Saved</h2>
       <div class="saved" id="saved-list"><p class="side-note">Nothing saved yet.</p></div>
@@ -201,10 +217,11 @@
   </main>
 
   <footer class="footer studio-footer">
-    <p>NeoJutsu Studio · everything runs in your browser · nothing is uploaded</p>
+    <p>NeoJutsu Studio · everything runs in your browser · nothing is uploaded<br>MP3 encoding by <a href="https://github.com/zhuker/lamejs">lamejs</a> / <a href="https://lame.sourceforge.net/">LAME</a> · <a href="vendor/LGPL-3.0.txt">LGPL license</a></p>
   </footer>
 
   <script src="chip.js"></script>
+  <script src="audio-export.js"></script>
   <script src="studio.js"></script>
 </body>
 </html>

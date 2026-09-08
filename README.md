@@ -32,3 +32,28 @@ The model is trained separately and is not in this repo yet.
 - [ ] Clean and tokenize
 - [ ] Train
 - [ ] Generator on the site
+
+
+## Studio
+
+Open `studio.html` directly or serve the repository with a static host. The studio includes:
+
+- A session bar with title, playback, tempo and MP3 export.
+- MP3 at 128, 192 or 320 kbps, stereo WAV, and MIDI downloads. MP3/WAV render the same chip synth and effects used for playback, with full-pattern or selected-bar export and optional effects tails. MIDI includes volume/pan controllers; the receiving instrument determines its sound.
+- Four hardware voices with volume, pan, mute, solo, measured level meters and master volume.
+- Selected-bar looping, copying a melodic voice into another voice, and doubling patterns up to 16 bars. Copying replaces the target notes and effects and can be undone.
+- Undo/redo for notes, generation, title, mixer and effects. Space plays/stops, 1–4 select voices, L toggles looping, and Cmd/Ctrl Z / Shift Z undo/redo. Arrow keys navigate voice tabs.
+- Browser autosave and named saves. A valid share link takes precedence over a draft. Storage failures are shown in the UI.
+- A collapsible effects/file panel and a responsive layout.
+
+Audio stays in the browser. `audio-export.js` loads the bundled, unmodified `vendor/lame-1.2.1.min.js` on the first MP3 export; no encoding service is used. See `vendor/README.md` and the included LAME license files.
+
+### Browser checks
+
+With Python 3 and Playwright installed (`python3 -m pip install playwright` and `python3 -m playwright install chromium`), run:
+
+```sh
+python3 tests/studio_smoke.py
+```
+
+The checks exercise editing/history, reload recovery, mixing, loop playback, all chip renderers, MP3 quality options, MP3 decoding, audio/MIDI downloads, corrupted storage/link handling, and mobile layout. Screenshots and exported audio are written to a temporary directory printed in the result. Tests use a fresh browser context and do not access your browser's saved sessions.

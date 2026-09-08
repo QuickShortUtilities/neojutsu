@@ -21,7 +21,7 @@
     tr: { vib: 0, echo: 0, duty: null, slide: false },
     no: { echo: 0 },
   });
-  const defaultMaster = () => ({ crush: 0, echoDiv: '8d', echoFb: 0.35 });
+  const defaultMaster = () => ({ crush: 0, echoDiv: '8d', echoFb: 0.35, volume: 1 });
   // chip-appropriate starting FX, applied on generate
   const CHIP_FX = {
     nes:     { p1: { duty: 0.125 }, p2: { duty: 0.5 } },
@@ -32,21 +32,64 @@
 
   let pattern = normalize(blank(64, 150, 'nes'));
   let lane = 'p1';
-  let seedUsed = '—', engineUsed = 'kataA';
-  const undo = [];
+  let seedUsed = '—', engineUsed = 'kataA', trackTitle = 'neojutsu-track';
+  const undo = [], redo = [];
+  const AUTOSAVE_KEY = 'neojutsu.draft.v1';
+  let saveTimer, restoredDraft = false;
 
   function blank(steps, bpm, chip) {
     return { steps, bpm, chip, p1: Array(steps).fill(null), p2: Array(steps).fill(null), tr: Array(steps).fill(null), no: Array(steps).fill(null) };
   }
-  function normalize(p) {              // older saves / shared links may lack fx
-    const d = defaultFx();
-    p.fx = p.fx || {};
-    for (const l of LANES) p.fx[l] = Object.assign(d[l], p.fx[l] || {});
+  function normalize(p) {
+    if (!p || !Number.isInteger(p.steps) || p.steps < 16 || p.steps > 256 || p.steps % 16 || !NeoChip.CHIPS[p.chip]) throw new Error('Invalid pattern');
+    p = JSON.parse(JSON.stringify(p));
+    const bounded = (v, min, max, fallback) => typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fallback;
+    p.bpm = bounded(p.bpm, 80, 220, 150);
+    const defaults = defaultFx(); p.fx ||= {}; p.mix ||= {};
+    for (const l of LANES) {
+      if (!Array.isArray(p[l]) || p[l].length !== p.steps) throw new Error('Invalid voice');
+      p[l] = p[l].map(v => l === 'no' ? (DRUMS.includes(v) ? v : null) : (Number.isInteger(v) && v >= -1 && v <= 127 ? v : null));
+      p.fx[l] = Object.assign(defaults[l], p.fx[l] || {});
+      for (const k of ['vib', 'echo']) p.fx[l][k] = bounded(p.fx[l][k], 0, 1, 0);
+      p.fx[l].duty = [.125, .25, .5].includes(p.fx[l].duty) ? p.fx[l].duty : null;
+      p.fx[l].slide = !!p.fx[l].slide;
+      const m = p.mix[l] || {};
+      p.mix[l] = { volume: bounded(m.volume, 0, 1, 1), pan: bounded(m.pan, -1, 1, 0), mute: !!m.mute, solo: !!m.solo };
+    }
     p.master = Object.assign(defaultMaster(), p.master || {});
+    p.master.crush = bounded(p.master.crush, 0, 1, 0); p.master.echoFb = bounded(p.master.echoFb, 0, .8, .35); p.master.volume = bounded(p.master.volume, 0, 1, 1);
+    if (!['16', '8', '8d', '4'].includes(p.master.echoDiv)) p.master.echoDiv = '8d';
+    const bars = p.steps / 16, loop = p.loop || {};
+    const start = Math.round(bounded(loop.start, 1, bars, 1));
+    p.loop = { enabled: !!loop.enabled, start, end: Math.round(bounded(loop.end, start, bars, bars)) };
     return p;
   }
-  function snapshot() { undo.push(JSON.stringify(pattern)); if (undo.length > 50) undo.shift(); }
-  function restore() { const s = undo.pop(); if (s) { pattern = normalize(JSON.parse(s)); syncUI(); } }
+  function session() {
+    return { pattern, seed: seedUsed, engine: engineUsed, title: trackTitle,
+      generator: { mood: $('g-mood').value, key: $('g-key').value, scale: $('g-scale').value } };
+  }
+  function queueSave() {
+    $('autosave-status').textContent = 'Saving…';
+    clearTimeout(saveTimer); saveTimer = setTimeout(saveDraft, 450);
+  }
+  function saveDraft() {
+    clearTimeout(saveTimer);
+    try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(session())); $('autosave-status').textContent = 'Autosaved on this browser'; }
+    catch { $('autosave-status').textContent = 'Autosave unavailable · export to keep your work'; }
+  }
+  function applySession(data) {
+    const next = normalize(data.pattern); stop(); pattern = next;
+    seedUsed = data.seed || '—'; engineUsed = ENGINES[data.engine] ? data.engine : 'kataA';
+    trackTitle = data.title || data.name || 'neojutsu-track'; $('x-title').value = trackTitle;
+    if (data.generator) for (const key of ['mood', 'key', 'scale']) { const el = $('g-' + key); if ([...el.options].some(o => o.value === data.generator[key])) el.value = data.generator[key]; }
+    syncUI(); queueSave();
+  }
+  function historyUI() { $('t-undo').disabled = !undo.length; $('t-redo').disabled = !redo.length; }
+  function snapshot() { undo.push(JSON.stringify(session())); if (undo.length > 50) undo.shift(); redo.length = 0; historyUI(); queueSave(); }
+  function restore(forward = false) {
+    const from = forward ? redo : undo, to = forward ? undo : redo, value = from.pop();
+    if (!value) return; to.push(JSON.stringify(session())); applySession(JSON.parse(value)); historyUI();
+  }
 
   // =============== music helpers ===============
   const SCALES = {
@@ -189,7 +232,8 @@
 
   // =============== audio ===============
   const engine = NeoChip.create();
-  const seq = NeoChip.sequencer(engine, () => pattern);
+  let audibleStep = -1;
+  const seq = NeoChip.sequencer(engine, () => pattern, (step, time) => { setTimeout(() => { if (seq.playing) audibleStep = step; }, Math.max(0, (time - engine.now) * 1000)); });
 
   // =============== DOM ===============
   const $ = (id) => document.getElementById(id);
@@ -198,6 +242,7 @@
   const playBtn = $('play'), playIcon = $('play-icon'), playLabel = $('play-label'), bpmIn = $('bpm'), bpmVal = $('bpm-val');
   const xTitle = $('x-title'), xChip = $('x-chip'), xLen = $('x-len'), xSeed = $('x-seed'), xEngine = $('x-engine'), xStatus = $('x-status');
   const engineBadge = $('engine-badge');
+  xTitle.addEventListener('input', () => { trackTitle = xTitle.value; });
 
   const randomSeed = () => Math.random().toString(36).slice(2, 8);
   gDice.addEventListener('click', () => { gSeed.value = randomSeed(); });
@@ -215,32 +260,43 @@
     const seed = gSeed.value.trim() || randomSeed();
     gSeed.value = seed; seedUsed = seed; engineUsed = gEngine.value;
     pattern = ENGINES[engineUsed]({ seed, engine: engineUsed, chip: gChip.value, mood: gMood.value, key: gKey.value, scale: gScale.value, bars: +gBars.value, bpm: +gBpm.value });
-    rememberSeed(seed); syncUI();
-    if (!seq.playing) start();
+    stop(); rememberSeed(seed); syncUI(); start();
     flash(`generated · ${ENGINE_LABEL[engineUsed]} · seed ${seed}`);
   }
   gGo.addEventListener('click', run);
 
   function setPlayUI(on) { playBtn.setAttribute('aria-pressed', on); playIcon.textContent = on ? '■' : '▶'; playLabel.textContent = on ? 'Stop' : 'Play'; }
-  const start = () => { seq.start(); setPlayUI(true); };
-  const stop = () => { seq.stop(); setPlayUI(false); };
+  const start = () => { try { seq.start(); setPlayUI(true); } catch { flash('Audio could not start. Please try again.'); } };
+  const stop = () => { seq.stop(); audibleStep = -1; setPlayUI(false); };
   playBtn.addEventListener('click', () => (seq.playing ? stop() : start()));
-  bpmIn.addEventListener('input', () => { pattern.bpm = +bpmIn.value; bpmVal.textContent = pattern.bpm; });
+  bpmIn.addEventListener('input', () => { pattern.bpm = +bpmIn.value; bpmVal.textContent = pattern.bpm; gBpm.value = pattern.bpm; gBpmVal.textContent = pattern.bpm; syncLength(); });
   document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
-    if (e.code === 'Space') { e.preventDefault(); seq.playing ? stop() : start(); }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); restore(); }
+    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable) return;
+    if (e.code === 'Space' && e.target.tagName !== 'BUTTON') { e.preventDefault(); if (!e.repeat) seq.playing ? stop() : start(); }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); restore(e.shiftKey); }
+    else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); restore(true); }
+    else if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (['1','2','3','4'].includes(e.key)) document.querySelectorAll('.lane')[+e.key - 1].click();
+      if (e.key.toLowerCase() === 'l') $('loop-toggle').click();
+    }
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden && seq.playing) stop(); });
 
   document.querySelectorAll('.lane').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.lane').forEach((x) => { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
-    b.classList.add('active'); b.setAttribute('aria-selected', 'true'); lane = b.dataset.lane; syncFx();
+    b.classList.add('active'); b.setAttribute('aria-selected', 'true'); lane = b.dataset.lane; syncFx(); syncCopy();
   }));
+  document.querySelector('.lane-tabs').addEventListener('keydown', e => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return; e.preventDefault();
+    const tabs = [...document.querySelectorAll('.lane')], current = tabs.indexOf(document.activeElement);
+    const index = e.key === 'Home' ? 0 : e.key === 'End' ? 3 : (current + (e.key === 'ArrowRight' ? 1 : 3)) % 4;
+    tabs[index].focus(); tabs[index].click();
+  });
   $('t-clear').addEventListener('click', () => { snapshot(); pattern[lane].fill(null); });
   $('t-shift-up').addEventListener('click', () => shift(12));
   $('t-shift-dn').addEventListener('click', () => shift(-12));
-  $('t-undo').addEventListener('click', restore);
+  $('t-undo').addEventListener('click', () => restore());
+  $('t-redo').addEventListener('click', () => restore(true));
   function shift(n) {
     if (lane === 'no') return; snapshot();
     pattern[lane] = pattern[lane].map((m) => (m == null || m === TIE) ? m : Math.max(MIN_MIDI, Math.min(MAX_MIDI, m + n)));
@@ -248,7 +304,7 @@
 
   // ---- seed history
   const SEEDS_KEY = 'neojutsu.seeds';
-  const loadSeeds = () => { try { return JSON.parse(localStorage.getItem(SEEDS_KEY) || '[]'); } catch { return []; } };
+  const loadSeeds = () => { try { const list = JSON.parse(localStorage.getItem(SEEDS_KEY) || '[]'); return Array.isArray(list) ? list.filter(s => typeof s === 'string').slice(0, 10) : []; } catch { return []; } };
   function rememberSeed(seed) {
     const list = [seed, ...loadSeeds().filter((s) => s !== seed)].slice(0, 10);
     try { localStorage.setItem(SEEDS_KEY, JSON.stringify(list)); } catch {}
@@ -281,7 +337,7 @@
     fxDiv.value = pattern.master.echoDiv; fxFb.value = Math.round(pattern.master.echoFb * 100); $('fx-echofb-v').textContent = fxFb.value;
   }
   fxVib.addEventListener('input', () => { pattern.fx[lane].vib = fxVib.value / 100; $('fx-vib-v').textContent = fxVib.value; });
-  fxEcho.addEventListener('input', () => { pattern.fx[lane].echo = fxEcho.value / 100; $('fx-echo-v').textContent = fxEcho.value; });
+  fxEcho.addEventListener('input', () => { pattern.fx[lane].echo = fxEcho.value / 100; $('fx-echo-v').textContent = fxEcho.value; engine.setMix(pattern); });
   fxDuty.addEventListener('change', () => { pattern.fx[lane].duty = fxDuty.value ? +fxDuty.value : null; });
   fxSlide.addEventListener('change', () => { pattern.fx[lane].slide = fxSlide.checked; });
   fxCrush.addEventListener('input', () => { pattern.master.crush = fxCrush.value / 100; $('fx-crush-v').textContent = fxCrush.value; });
@@ -289,12 +345,14 @@
   fxFb.addEventListener('input', () => { pattern.master.echoFb = fxFb.value / 100; $('fx-echofb-v').textContent = fxFb.value; });
 
   function syncUI() {
-    bpmIn.value = pattern.bpm; bpmVal.textContent = pattern.bpm;
+    bpmIn.value = pattern.bpm; bpmVal.textContent = pattern.bpm; gBpm.value = pattern.bpm; gBpmVal.textContent = pattern.bpm;
     xChip.textContent = NeoChip.CHIPS[pattern.chip].label;
-    xLen.textContent = `${pattern.steps / 16} bars`;
+    syncLength();
     xSeed.textContent = seedUsed; xEngine.textContent = ENGINE_LABEL[engineUsed] || engineUsed;
     gChip.value = pattern.chip;
-    syncFx(); renderSeeds();
+    gSeed.value = seedUsed; gEngine.value = engineUsed;
+    gBars.value = String(pattern.steps / 16); engineBadge.textContent = `engine: 型 ${ENGINE_LABEL[engineUsed]}`;
+    syncFx(); syncMix(); syncLoop(); syncCopy(); renderSeeds(); historyUI(); resize();
   }
   gChip.addEventListener('change', () => { pattern.chip = gChip.value; syncUI(); });
   function flash(msg) { xStatus.textContent = msg; clearTimeout(flash.t); flash.t = setTimeout(() => (xStatus.textContent = ''), 3500); }
@@ -305,10 +363,12 @@
   let W = 0, H = 0, dpr = 1;
   function resize() {
     dpr = window.devicePixelRatio || 1;
+    const width = Math.max(roll.parentElement.clientWidth, pattern.steps * 10 + LABEL_W);
+    roll.style.width = width + 'px'; $('bar-ruler').style.width = width + 'px';
     W = roll.clientWidth; H = roll.clientHeight;
     roll.width = W * dpr; roll.height = H * dpr; rc.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
-  window.addEventListener('resize', resize); resize();
+  window.addEventListener('resize', resize); new ResizeObserver(resize).observe(roll.parentElement); resize();
 
   const rows = () => (lane === 'no' ? DRUMS.length : (MAX_MIDI - MIN_MIDI + 1));
   const rowH = () => H / rows();
@@ -358,15 +418,17 @@
   });
   roll.addEventListener('pointerup', () => {
     if (mode === 'extend' && !moved) eraseAt(pattern[lane], anchor.s);   // plain click on a note removes it
-    mode = null;
+    mode = null; queueSave();
   });
+  roll.addEventListener('pointercancel', () => { mode = null; queueSave(); });
   function paint(c) {
     const arr = pattern[lane], v = valueForRow(c.row);
     if (lane !== 'no' && arr[c.s] === TIE) eraseAt(arr, c.s);
     arr[c.s] = v;
   }
   function audition(v) {
-    if (seq.playing) return; engine.ensure();
+    if (seq.playing) return; engine.ensure(); engine.setMix(pattern);
+    engine.setCrush(pattern.master.crush); engine.setEcho(NeoChip.echoSeconds(pattern.bpm, pattern.master.echoDiv), pattern.master.echoFb);
     if (lane === 'no') engine.drum(pattern.chip, v, engine.now + 0.01, pattern.fx.no);
     else engine.note(pattern.chip, lane, v, engine.now + 0.01, 0.18, pattern.fx[lane]);
   }
@@ -393,7 +455,7 @@
       rc.fillStyle = s % 16 === 0 ? 'rgba(139,92,246,.45)' : s % 4 === 0 ? 'rgba(139,92,246,.2)' : 'rgba(139,92,246,.08)';
       rc.fillRect(LABEL_W + s * cw, 0, 1, H);
     }
-    const cur = seq.playing ? ((seq.step - 1 + pattern.steps) % pattern.steps) : -1;
+    const cur = seq.playing ? audibleStep : -1;
     if (cur >= 0) { rc.fillStyle = 'rgba(255,255,255,.07)'; rc.fillRect(LABEL_W + cur * cw, 0, cw, H); }
 
     const drawLane = (ln, bright) => {
@@ -429,7 +491,7 @@
     for (let i = 0; i < wave.length; i++) { const y = h / 2 + ((wave[i] - 128) / 128) * (h / 2 - 3); i ? sc.lineTo(i * w / wave.length, y) : sc.moveTo(0, y); }
     sc.stroke(); sc.shadowBlur = 0;
   }
-  (function loop() { requestAnimationFrame(loop); drawRoll(); drawScope(); })();
+  function animate() { requestAnimationFrame(animate); drawRoll(); drawScope(); drawMeters(); }
 
   // =============== MIDI export (SMF type 1) ===============
   const TPQ = 480, TICK16 = TPQ / 4;
@@ -444,8 +506,9 @@
     out.push(...vlq(0), 0xff, 0x2f, 0x00);
     return [...str('MTrk'), ...u32(out.length), ...out];
   }
-  function laneTrack(arr, ch, program, name, fx) {
+  function laneTrack(arr, ch, program, name, fx, mix) {
     const ev = [{ t: 0, bytes: [0xff, 0x03, name.length, ...str(name)] }, { t: 0, bytes: [0xc0 | ch, program] }];
+    ev.push({ t: 0, bytes: [0xb0 | ch, 7, mix.volume] }, { t: 0, bytes: [0xb0 | ch, 10, mix.pan] });
     if (fx.vib) ev.push({ t: 0, bytes: [0xb0 | ch, 1, Math.round(fx.vib * 127)] });            // CC1 mod wheel = vibrato
     if (fx.echo) ev.push({ t: 0, bytes: [0xb0 | ch, 91, Math.round(fx.echo * 127)] });         // CC91 effects depth = echo
     if (fx.slide) ev.push({ t: 0, bytes: [0xb0 | ch, 65, 127] }, { t: 0, bytes: [0xb0 | ch, 5, 20] }); // portamento on + time
@@ -457,9 +520,9 @@
     }
     return track(ev);
   }
-  function drumTrack(arr) {
+  function drumTrack(arr, mix) {
     const map = { k: 36, s: 38, h: 42 };
-    const ev = [{ t: 0, bytes: [0xff, 0x03, 5, ...str('Noise')] }];
+    const ev = [{ t: 0, bytes: [0xff, 0x03, 5, ...str('Noise')] }, { t: 0, bytes: [0xb9, 7, mix.volume] }, { t: 0, bytes: [0xb9, 10, mix.pan] }];
     for (let s = 0; s < arr.length; s++) {
       const d = arr[s]; if (!d) continue;
       ev.push({ t: s * TICK16, bytes: [0x99, map[d], d === 'h' ? 80 : 110] });
@@ -470,19 +533,21 @@
   function toMidi(p, title) {
     const mpq = Math.round(60000000 / p.bpm);
     const meta = track([
-      { t: 0, bytes: [0xff, 0x03, title.length, ...str(title)] },
+      { t: 0, bytes: [0xff, 0x03, ...vlq(str(title).length), ...str(title)] },
       { t: 0, bytes: [0xff, 0x51, 0x03, (mpq >> 16) & 255, (mpq >> 8) & 255, mpq & 255] },
       { t: 0, bytes: [0xff, 0x58, 0x04, 4, 2, 24, 8] },
     ]);
     const prog = { p1: 80, p2: 80, tr: 38 };
     if (p.chip === 'c64') prog.p1 = 81;
     if (p.chip === 'genesis') { prog.p1 = 87; prog.p2 = 88; prog.tr = 39; }
-    const tracks = [meta, laneTrack(p.p1, 0, prog.p1, 'Pulse 1', p.fx.p1), laneTrack(p.p2, 1, prog.p2, 'Pulse 2', p.fx.p2), laneTrack(p.tr, 2, prog.tr, 'Triangle', p.fx.tr), drumTrack(p.no)];
+    const anySolo = LANES.some(l => p.mix[l].solo);
+    const midiMix = l => ({ volume: Math.round((p.mix[l].mute || (anySolo && !p.mix[l].solo) ? 0 : p.mix[l].volume * p.master.volume) * 127), pan: Math.round((p.mix[l].pan + 1) * 63.5) });
+    const tracks = [meta, laneTrack(p.p1, 0, prog.p1, 'Pulse 1', p.fx.p1, midiMix('p1')), laneTrack(p.p2, 1, prog.p2, 'Pulse 2', p.fx.p2, midiMix('p2')), laneTrack(p.tr, 2, prog.tr, 'Triangle', p.fx.tr, midiMix('tr')), drumTrack(p.no, midiMix('no'))];
     const header = [...str('MThd'), ...u32(6), ...u16(1), ...u16(tracks.length), ...u16(TPQ)];
     return new Uint8Array([...header, ...tracks.flat()]);
   }
   $('x-midi').addEventListener('click', () => {
-    const title = (xTitle.value.trim() || 'neojutsu-track').replace(/[^\w\- ]+/g, '');
+    const title = (xTitle.value.trim() || 'neojutsu-track').replace(/[^\w\- ]+/g, '') || 'neojutsu-track';
     const blob = new Blob([toMidi(pattern, title)], { type: 'audio/midi' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${title}.mid`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -498,16 +563,17 @@
   });
 
   const KEY = 'neojutsu.saved';
-  const loadSaved = () => { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; } };
-  const storeSaved = (list) => { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {} };
+  const loadSaved = () => { try { const list = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(list) ? list.filter(item => { try { normalize(item.pattern); return typeof item.name === 'string'; } catch { return false; } }).slice(0,30) : []; } catch { return []; } };
+  const storeSaved = (list) => { try { localStorage.setItem(KEY, JSON.stringify(list)); return true; } catch { flash('Browser storage is full or unavailable. Export your audio to keep it.'); return false; } };
   function renderSaved() {
     const list = loadSaved(), el = $('saved-list'); el.innerHTML = '';
     if (!list.length) { el.innerHTML = '<p class="side-note">Nothing saved yet.</p>'; return; }
     list.forEach((item, i) => {
       const row = document.createElement('div'); row.className = 'saved-item';
-      row.innerHTML = `<span class="dot p1"></span><span class="name" title="load">${item.name}</span><button class="del" title="delete">×</button>`;
-      row.querySelector('.name').addEventListener('click', () => { snapshot(); pattern = normalize(item.pattern); seedUsed = item.seed || '—'; engineUsed = item.engine || 'kataA'; xTitle.value = item.name; syncUI(); flash(`loaded ${item.name}`); });
-      row.querySelector('.del').addEventListener('click', () => { list.splice(i, 1); storeSaved(list); renderSaved(); });
+      row.innerHTML = '<span class="dot p1"></span><button class="name" title="Load saved track"></button><button class="del" title="Delete saved track">×</button>';
+      row.querySelector('.name').textContent = item.name;
+      row.querySelector('.name').addEventListener('click', () => { snapshot(); applySession(item); flash(`loaded ${item.name}`); });
+      row.querySelector('.del').addEventListener('click', () => { list.splice(i, 1); if (storeSaved(list)) renderSaved(); });
       el.appendChild(row);
     });
   }
@@ -516,16 +582,141 @@
     const idx = list.findIndex((x) => x.name === name);
     const item = { name, seed: seedUsed, engine: engineUsed, pattern: JSON.parse(JSON.stringify(pattern)), at: Date.now() };
     if (idx >= 0) list[idx] = item; else list.unshift(item);
-    storeSaved(list.slice(0, 30)); renderSaved(); flash(`saved ${name}`);
+    if (storeSaved(list.slice(0, 30))) { renderSaved(); flash(`saved ${name}`); }
   });
+
+  // =============== workspace controls ===============
+  function syncLength() { xLen.textContent = `${pattern.steps / 16} bars · ${(pattern.steps * 60 / pattern.bpm / 4).toFixed(1)}s`; }
+  function syncCopy() {
+    const target = $('copy-target');
+    for (const option of target.options) option.disabled = option.value === lane;
+    if (target.value === lane) target.value = [...target.options].find(o => !o.disabled).value;
+    target.disabled = $('t-duplicate').disabled = lane === 'no';
+    $('t-shift-up').disabled = $('t-shift-dn').disabled = lane === 'no';
+    $('t-double').disabled = pattern.steps >= 256;
+  }
+  $('t-duplicate').addEventListener('click', () => {
+    const target = $('copy-target').value; if (lane === 'no' || target === lane) return;
+    snapshot(); pattern[target] = [...pattern[lane]]; pattern.fx[target] = { ...pattern.fx[lane] }; syncUI();
+    flash(`${LANE_NAME[lane]} copied to ${LANE_NAME[target]} · Undo to restore`);
+  });
+  $('t-double').addEventListener('click', () => {
+    if (pattern.steps >= 256) return; snapshot();
+    for (const l of LANES) pattern[l] = [...pattern[l], ...pattern[l]];
+    pattern.steps *= 2; pattern.loop.end = pattern.steps / 16; syncUI();
+  });
+  function syncLoop() {
+    for (const side of ['start', 'end']) {
+      const select = $('loop-' + side); select.replaceChildren();
+      for (let bar = 1; bar <= pattern.steps / 16; bar++) { const option = new Option(String(bar), String(bar)); select.add(option); }
+      select.value = pattern.loop[side];
+    }
+    $('loop-toggle').setAttribute('aria-pressed', pattern.loop.enabled);
+    $('bar-ruler').replaceChildren();
+    for (let bar = 1; bar <= pattern.steps / 16; bar++) {
+      const el = document.createElement('span'); el.textContent = String(bar);
+      el.className = pattern.loop.enabled && bar >= pattern.loop.start && bar <= pattern.loop.end ? 'selected' : '';
+      $('bar-ruler').append(el);
+    }
+  }
+  $('loop-toggle').addEventListener('click', () => { snapshot(); pattern.loop.enabled = !pattern.loop.enabled; if (seq.playing) { stop(); start(); } syncLoop(); });
+  for (const side of ['start', 'end']) $('loop-' + side).addEventListener('change', () => {
+    snapshot(); pattern.loop[side] = +$('loop-' + side).value;
+    if (pattern.loop.start > pattern.loop.end) pattern.loop[side === 'start' ? 'end' : 'start'] = pattern.loop[side];
+    if (seq.playing) { stop(); start(); } syncLoop();
+  });
+  $('toggle-inspector').addEventListener('click', () => {
+    const hidden = !$('inspector').hidden; $('inspector').hidden = hidden;
+    document.querySelector('.studio').classList.toggle('inspector-hidden', hidden);
+    $('toggle-inspector').setAttribute('aria-expanded', !hidden);
+  });
+  const meterData = new Uint8Array(256);
+  for (const l of LANES) {
+    const strip = document.createElement('div'); strip.className = 'mixer-strip'; strip.style.setProperty('--voice', COLORS[l]);
+    strip.innerHTML = `<h3>${LANE_NAME[l]}</h3><div class="meter" role="meter" aria-label="${LANE_NAME[l]} level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="meter-${l}"></i></div>
+      <label for="mix-${l}-volume">Volume <output id="value-${l}-volume">100%</output></label><input id="mix-${l}-volume" type="range" min="0" max="100" value="100" aria-label="${LANE_NAME[l]} volume">
+      <label for="mix-${l}-pan">Pan <output id="value-${l}-pan">C</output></label><input id="mix-${l}-pan" type="range" min="-100" max="100" value="0" aria-label="${LANE_NAME[l]} pan">
+      <div class="mix-buttons"><button class="mini" id="mix-${l}-mute" type="button" aria-pressed="false" aria-label="Mute ${LANE_NAME[l]}">Mute</button><button class="mini" id="mix-${l}-solo" type="button" aria-pressed="false" aria-label="Solo ${LANE_NAME[l]}">Solo</button></div>`;
+    $('mixer-strips').append(strip);
+    for (const property of ['volume', 'pan']) $('mix-' + l + '-' + property).addEventListener('input', e => { pattern.mix[l][property] = +e.target.value / 100; syncMix(); });
+    for (const property of ['mute', 'solo']) $('mix-' + l + '-' + property).addEventListener('click', () => { snapshot(); pattern.mix[l][property] = !pattern.mix[l][property]; syncMix(); });
+  }
+  function syncMix() {
+    for (const l of LANES) {
+      const m = pattern.mix[l];
+      for (const k of ['volume', 'pan']) $('mix-' + l + '-' + k).value = Math.round(m[k] * 100);
+      $('value-' + l + '-volume').textContent = `${Math.round(m.volume * 100)}%`;
+      $('value-' + l + '-pan').textContent = m.pan === 0 ? 'C' : `${m.pan < 0 ? 'L' : 'R'} ${Math.round(Math.abs(m.pan) * 100)}`;
+      for (const k of ['mute', 'solo']) $('mix-' + l + '-' + k).setAttribute('aria-pressed', m[k]);
+    }
+    $('mix-master').value = Math.round(pattern.master.volume * 100); $('mix-master-value').textContent = `${$('mix-master').value}%`;
+    engine.setMix(pattern);
+  }
+  $('mix-master').addEventListener('input', e => { pattern.master.volume = +e.target.value / 100; syncMix(); });
+  function drawMeters() {
+    for (const l of LANES) {
+      const analyser = engine.channelAnalyser(l); let peak = 0;
+      if (analyser) { analyser.getByteTimeDomainData(meterData); for (const value of meterData) peak = Math.max(peak, Math.abs(value - 128) / 128); }
+      const level = Math.min(1, peak), el = $('meter-' + l);
+      if (el) { el.style.transform = `scaleX(${level})`; el.parentElement.setAttribute('aria-valuenow', Math.round(level * 100)); }
+    }
+    const step = seq.playing && audibleStep >= 0 ? audibleStep : 0;
+    $('position').textContent = `${String(Math.floor(step / 16) + 1).padStart(2, '0')} : ${String(Math.floor(step % 16 / 4) + 1).padStart(2, '0')}`;
+  }
+  // Capture an edit before input handlers mutate state; group slider drags into one undo.
+  const editable = '#bpm, #x-title, #g-chip, #fx-voice input, #fx-voice select, .fx-master input, .fx-master select, .mixer input';
+  let activeControl = null, lastControlTime = 0;
+  for (const event of ['input', 'change']) document.addEventListener(event, e => {
+    if (!e.target.matches(editable)) return;
+    if (activeControl !== e.target || Date.now() - lastControlTime > 700) snapshot();
+    activeControl = e.target; lastControlTime = Date.now(); queueSave();
+  }, true);
+  document.addEventListener('pointerup', () => { activeControl = null; });
+  document.addEventListener('focusout', () => { activeControl = null; });
+  window.addEventListener('pagehide', saveDraft);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveDraft(); });
+
+  // =============== audio export ===============
+  let exporting = false, downloadURL;
+  async function exportAudio(format) {
+    if (exporting) return; exporting = true;
+    const p = JSON.parse(JSON.stringify(pattern));
+    const title = xTitle.value.trim().replace(/[^\w\- ]+/g, '') || 'neojutsu-track';
+    const quality = +$('x-quality').value;
+    if ($('x-range').value === 'loop') p.loop.enabled = true;
+    const options = { selection: $('x-range').value === 'loop', tail: $('x-tail').checked };
+    $('x-mp3').disabled = $('x-wav').disabled = true;
+    $('export-progress').hidden = false; $('x-progress').value = 5; $('export-label').textContent = 'Rendering chip audio…';
+    $('x-mp3').textContent = 'Rendering…';
+    try {
+      await new Promise(resolve => setTimeout(resolve, 30));
+      const buffer = await NeoChip.render(p, options);
+      $('export-label').textContent = `Encoding ${format.toUpperCase()}…`;
+      const progress = value => { $('x-progress').value = 20 + value * 80; $('x-mp3').textContent = `Exporting ${Math.round(20 + value * 80)}%`; };
+      const blob = format === 'mp3' ? await NeoExport.mp3(buffer, quality, progress) : NeoExport.wav(buffer);
+      if (downloadURL) URL.revokeObjectURL(downloadURL);
+      downloadURL = URL.createObjectURL(blob);
+      const link = $('x-download'); link.href = downloadURL; link.download = `${title}.${format}`; link.textContent = `↓ Download ${format.toUpperCase()} again`; link.hidden = false; link.click();
+      $('x-progress').value = 100; $('export-label').textContent = `${format.toUpperCase()} ready · ${(blob.size / 1024).toFixed(0)} KB`;
+      flash(`${format.toUpperCase()} exported · ${buffer.duration.toFixed(1)}s`);
+    } catch (error) { $('export-label').textContent = 'Export failed. Please try again.'; flash(error.message || 'Audio export failed.'); }
+    finally { exporting = false; $('x-mp3').disabled = $('x-wav').disabled = false; $('x-mp3').textContent = '↓ Export MP3'; }
+  }
+  $('x-mp3').addEventListener('click', () => exportAudio('mp3'));
+  $('x-wav').addEventListener('click', () => exportAudio('wav'));
 
   // =============== boot ===============
   const shared = location.hash.startsWith('#p=') ? decode(location.hash.slice(3)) : null;
-  if (shared && shared.steps && shared.p1) { pattern = normalize(shared); seedUsed = 'shared'; }
-  else {
+  let loaded = false;
+  if (shared) { try { pattern = normalize(shared); seedUsed = 'shared'; loaded = true; } catch { flash('This share link is invalid.'); } }
+  if (!loaded) {
+    try { const draft = JSON.parse(localStorage.getItem(AUTOSAVE_KEY)); if (draft) { applySession(draft); loaded = restoredDraft = true; } } catch {}
+  }
+  if (!loaded) {
     gSeed.value = randomSeed(); seedUsed = gSeed.value;
     pattern = kataA({ seed: seedUsed, engine: 'kataA', chip: 'nes', mood: 'stage', key: 'A', scale: 'minor', bars: 4, bpm: 150 });
     rememberSeed(seedUsed);
   }
-  renderSaved(); syncUI();
+  renderSaved(); syncUI(); saveDraft(); animate();
+  if (restoredDraft) $('autosave-status').textContent = 'Restored your last session';
 })();

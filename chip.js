@@ -24,10 +24,14 @@
 
   const midiToHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
-  function create() {
+  function create(context = null) {
     let ctx = null, master = null, analyser = null, noiseBuf = null, shaper = null;
     let delay = null, fbGain = null, wetGain = null;
     const waveCache = {};
+    const channels = {};
+    const sources = new Set();
+    function trackSource(source) { sources.add(source); source.addEventListener('ended', () => { sources.delete(source); source.disconnect(); }); return source; }
+    function silence() { for (const source of sources) { try { source.stop(); } catch {} } sources.clear(); }
     let crushBits = 16;
 
     function crushCurve(bits) {
@@ -41,8 +45,8 @@
     }
 
     function ensure() {
-      if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return ctx; }
-      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx) { if (!context && ctx.state === 'suspended') ctx.resume(); return ctx; }
+      ctx = context || new (window.AudioContext || window.webkitAudioContext)();
       master = ctx.createGain(); master.gain.value = 0.9;
       shaper = ctx.createWaveShaper(); shaper.curve = crushCurve(crushBits);
       analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
@@ -54,6 +58,13 @@
       const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 3200;
       delay.connect(tone).connect(fbGain).connect(delay);
       tone.connect(wetGain).connect(master);
+      for (const ch of ['p1', 'p2', 'tr', 'no']) {
+        const gain = ctx.createGain(), pan = ctx.createStereoPanner(), meter = ctx.createAnalyser(), send = ctx.createGain();
+        meter.fftSize = 256; send.gain.value = 0;
+        gain.connect(pan).connect(meter).connect(master);
+        pan.connect(send).connect(delay);
+        channels[ch] = { gain, pan, meter, send };
+      }
       const len = ctx.sampleRate;
       noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
       const d = noiseBuf.getChannelData(0);
@@ -79,9 +90,18 @@
     }
     const getPulse = (duty) => (waveCache[duty] ||= pulseWave(duty));
 
-    function output(g, echoAmt) {
-      g.connect(master);
-      if (echoAmt > 0) { const s = ctx.createGain(); s.gain.value = echoAmt; g.connect(s).connect(delay); }
+    function output(g, ch) { g.connect(channels[ch].gain); }
+    function setMix(p, immediate = false) {
+      if (!ctx) return;
+      const solo = Object.values(p.mix || {}).some(m => m.solo);
+      const set = (param, value) => immediate ? param.setValueAtTime(value, ctx.currentTime) : param.setTargetAtTime(value, ctx.currentTime, 0.008);
+      for (const ch of Object.keys(channels)) {
+        const mix = p.mix?.[ch] || {}, bus = channels[ch];
+        set(bus.gain.gain, mix.mute || (solo && !mix.solo) ? 0 : (mix.volume ?? 1));
+        set(bus.pan.pan, mix.pan || 0);
+        set(bus.send.gain, p.fx?.[ch]?.echo || 0);
+      }
+      set(master.gain, 0.9 * (p.master?.volume ?? 1));
     }
 
     // fx: { vib: 0..1, echo: 0..1, duty: number|null, slide: bool }, prevMidi: for slide
@@ -94,14 +114,14 @@
       g.gain.linearRampToValueAtTime(cfg.gain, t + 0.004);
       g.gain.setTargetAtTime(cfg.gain * 0.7, t + 0.03, 0.05);
       g.gain.setTargetAtTime(0, t + dur - 0.02, 0.012);
-      output(g, fx.echo || 0);
+      output(g, ch);
 
       const stopAt = t + dur + 0.05;
       const pitchTargets = [];
       let lfo = null;
 
       if (cfg.type === 'fm') {
-        const car = ctx.createOscillator(), mod = ctx.createOscillator(), mg = ctx.createGain();
+        const car = trackSource(ctx.createOscillator()), mod = trackSource(ctx.createOscillator()), mg = ctx.createGain();
         car.frequency.value = hz; mod.frequency.value = hz * cfg.ratio;
         mg.gain.setValueAtTime(hz * cfg.index, t);
         mg.gain.exponentialRampToValueAtTime(hz * cfg.index * 0.25, t + Math.max(0.05, dur));
@@ -110,7 +130,7 @@
         pitchTargets.push(car.frequency, mod.frequency);
         car.start(t); mod.start(t); car.stop(stopAt); mod.stop(stopAt);
       } else {
-        const osc = ctx.createOscillator();
+        const osc = trackSource(ctx.createOscillator());
         if (cfg.type === 'pulse') osc.setPeriodicWave(getPulse(fx.duty || cfg.duty));
         else if (cfg.type === 'tri' || cfg.type === 'wave') osc.type = 'triangle';
         else if (cfg.type === 'saw') osc.type = 'sawtooth';
@@ -143,7 +163,7 @@
       }
       // vibrato: delayed LFO, depth in cents
       if (fx.vib > 0) {
-        lfo = ctx.createOscillator(); lfo.frequency.value = 5.5 + fx.vib * 1.5;
+        lfo = trackSource(ctx.createOscillator()); lfo.frequency.value = 5.5 + fx.vib * 1.5;
         const depth = ctx.createGain();
         const cents = 8 + fx.vib * 40;
         const amp = hz * (Math.pow(2, cents / 1200) - 1);
@@ -158,13 +178,13 @@
     function drum(chipName, kind, t, fx = {}) {
       if (!kind) return;
       const hi = CHIPS[chipName].noise === 'hifi';
-      const src = ctx.createBufferSource(); src.buffer = noiseBuf;
+      const src = trackSource(ctx.createBufferSource()); src.buffer = noiseBuf;
       const g = ctx.createGain(), f = ctx.createBiquadFilter();
       if (kind === 'k') {
-        const o = ctx.createOscillator(); const og = ctx.createGain();
+        const o = trackSource(ctx.createOscillator()); const og = ctx.createGain();
         o.frequency.setValueAtTime(hi ? 160 : 120, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
         og.gain.setValueAtTime(.5, t); og.gain.exponentialRampToValueAtTime(.001, t + 0.14);
-        o.connect(og).connect(master); o.start(t); o.stop(t + 0.16);
+        o.connect(og); output(og, 'no'); o.start(t); o.stop(t + 0.16);
         f.type = 'lowpass'; f.frequency.value = 800;
         g.gain.setValueAtTime(.25, t); g.gain.exponentialRampToValueAtTime(.001, t + 0.05);
       } else if (kind === 's') {
@@ -174,12 +194,13 @@
         f.type = 'highpass'; f.frequency.value = 6000;
         g.gain.setValueAtTime(.12, t); g.gain.exponentialRampToValueAtTime(.001, t + 0.035);
       }
-      src.connect(f).connect(g); output(g, kind === 's' ? (fx.echo || 0) : 0);
+      src.connect(f).connect(g); output(g, 'no');
       src.start(t); src.stop(t + 0.3);
     }
 
     return {
-      ensure, note, drum, midiToHz, setCrush, setEcho,
+      ensure, note, drum, midiToHz, setCrush, setEcho, setMix, silence,
+      channelAnalyser(ch) { return channels[ch]?.meter; },
       get ctx() { return ctx; },
       get analyser() { return analyser; },
       get now() { return ctx ? ctx.currentTime : 0; },
@@ -189,6 +210,14 @@
   /* ---------- helpers for tied notes ---------- */
   function noteLength(arr, i) {           // steps a note at i is held for (1 + following ties)
     let len = 1; while (i + len < arr.length && arr[i + len] === TIE) len++; return len;
+  }
+  function noteInRange(arr, i, bounds) {
+    let v = arr[i];
+    if (v === TIE && i === bounds.start) {
+      let head = i; while (head >= 0 && arr[head] === TIE) head--;
+      v = head >= 0 ? arr[head] : null;
+    }
+    return { v, len: Math.min(noteLength(arr, i), bounds.end - i) };
   }
   function echoSeconds(bpm, div) {        // tempo-synced echo time
     const beat = 60 / bpm;
@@ -203,6 +232,7 @@
     const lookahead = 0.12, interval = 25;
     const prev = { p1: null, p2: null, tr: null };
     function applyMaster(p) {
+      engine.setMix(p);
       const m = p.master || {};
       engine.setCrush(m.crush || 0);
       engine.setEcho(echoSeconds(p.bpm, m.echoDiv || '8d'), m.echoFb == null ? 0.35 : m.echoFb);
@@ -210,14 +240,15 @@
     function schedule() {
       const p = getPattern();
       applyMaster(p);
+      const bounds = loopBounds(p);
+      if (step < bounds.start || step >= bounds.end) step = bounds.start;
       const spb = 60 / p.bpm / 4;
       const fx = p.fx || {};
       while (nextTime < engine.now + lookahead) {
         const i = step;
         for (const ch of ['p1', 'p2', 'tr']) {
-          const v = p[ch][i];
+          const { v, len } = noteInRange(p[ch], i, bounds);
           if (v == null || v === TIE) continue;
-          const len = noteLength(p[ch], i);
           const dur = len > 1 ? len * spb * 0.97 : spb * (ch === 'p2' ? 0.55 : ch === 'tr' ? 0.8 : 0.9);
           engine.note(p.chip, ch, v, nextTime, dur, fx[ch] || {}, prev[ch]);
           prev[ch] = v;
@@ -225,17 +256,46 @@
         engine.drum(p.chip, p.no[i], nextTime, fx.no || {});
         if (onStep) onStep(i, nextTime);
         nextTime += spb;
-        step = (step + 1) % p.steps;
+        step = step + 1 >= bounds.end ? bounds.start : step + 1;
       }
     }
     return {
-      start() { engine.ensure(); playing = true; step = 0; nextTime = engine.now + 0.05; prev.p1 = prev.p2 = prev.tr = null; timer = setInterval(schedule, interval); },
-      stop() { playing = false; clearInterval(timer); },
+      start() { if (playing) return; engine.ensure(); playing = true; step = loopBounds(getPattern()).start; nextTime = engine.now + 0.05; prev.p1 = prev.p2 = prev.tr = null; timer = setInterval(schedule, interval); },
+      stop() { playing = false; clearInterval(timer); engine.silence(); },
       get playing() { return playing; },
       get step() { return step; },
       get nextTime() { return nextTime; },
     };
   }
 
-  window.NeoChip = { CHIPS, TIE, create, sequencer, midiToHz, noteLength, echoSeconds };
+  function loopBounds(p) {
+    const loop = p.loop;
+    return loop?.enabled ? { start: (loop.start - 1) * 16, end: loop.end * 16 } : { start: 0, end: p.steps };
+  }
+
+  // Use the same synth and note timing for listening and offline audio exports.
+  async function render(p, { selection = false, tail = true } = {}) {
+    const bounds = selection ? loopBounds(p) : { start: 0, end: p.steps };
+    const stepTime = 60 / p.bpm / 4, duration = (bounds.end - bounds.start) * stepTime;
+    const echo = echoSeconds(p.bpm, p.master?.echoDiv || '8d');
+    const feedback = Math.min(.8, p.master?.echoFb ?? .35);
+    const hasEcho = Object.values(p.fx || {}).some(f => f.echo > 0);
+    const release = tail ? Math.max(.35, hasEcho ? echo * Math.ceil(Math.log(.001) / Math.log(Math.max(.01, feedback))) : 0) : 0;
+    const offline = new OfflineAudioContext(2, Math.ceil((duration + release) * 44100), 44100);
+    const synth = create(offline); synth.ensure(); synth.setMix(p, true);
+    synth.setCrush(p.master?.crush || 0); synth.setEcho(echo, feedback);
+    const prev = { p1: null, p2: null, tr: null };
+    for (let i = bounds.start; i < bounds.end; i++) {
+      const t = (i - bounds.start) * stepTime;
+      for (const ch of ['p1', 'p2', 'tr']) {
+        const { v, len } = noteInRange(p[ch], i, bounds); if (v == null || v === TIE) continue;
+        const dur = len > 1 ? len * stepTime * .97 : stepTime * (ch === 'p2' ? .55 : ch === 'tr' ? .8 : .9);
+        synth.note(p.chip, ch, v, t, dur, p.fx?.[ch] || {}, prev[ch]); prev[ch] = v;
+      }
+      synth.drum(p.chip, p.no[i], t, p.fx?.no || {});
+    }
+    return offline.startRendering();
+  }
+
+  window.NeoChip = { CHIPS, TIE, create, sequencer, midiToHz, noteLength, echoSeconds, loopBounds, render };
 })();
