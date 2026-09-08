@@ -32,7 +32,7 @@
   const display = $('v-canvas'), dctx = display.getContext('2d');
   const low = document.createElement('canvas'), lctx = low.getContext('2d', { willReadFrequently: true });
   const scratch = document.createElement('canvas'), sctx = scratch.getContext('2d');
-  let playing = false, lastFrame = 0, genTime = 0, metaScene = '';
+  let playing = false, lastFrame = 0, genTime = 0, metaScene = '', scrubStep = 0;
   let audio = null, gain = null, analyser = null, trackNode = null, recorderDest = null;
   let buffer = null, savedTracks = [], freqData = null, waveData = null;
   let layers = [], selected = 0, rack = null;
@@ -219,7 +219,8 @@
     }
     if (!ready()) { display.classList.add('idle'); return; }
     display.classList.remove('idle');
-    processFrame(cfg, playing ? dt : 0);
+    processFrame(cfg, playing ? dt : scrubStep);
+    scrubStep = 0;
     const d = duration(cfg);
     if (d) { $('v-scrub').value = Math.round((genTime / d) * 1000); $('v-position').textContent = clock(genTime); }
     if (timeline.on && timeline.shots.length) {
@@ -339,6 +340,14 @@
   function stop() { for (const L of layers) if (L._video) L._video.pause(); stopTrack(); setPlaying(false); }
   const toggle = () => (playing ? stop() : play());
 
+  // Put every layer back to its seeded starting state and clear frame feedback.
+  function resetScenes() {
+    genTime = 0; metaScene = '';
+    for (const L of layers) { L._sig = ''; L._scene = null; }
+    window.NeoFX.resetTrails();
+    seekClips(0);
+  }
+
   // ---------- export ----------
   const safeName = t => (t || 'neojutsu-video').replace(/[^\w.-]+/g, '-');
   function download(blob, name) {
@@ -357,7 +366,11 @@
   async function exportVideo() {
     const cfg = look();
     if (!ready()) { status('Nothing to export yet.'); return; }
-    stop(); genTime = 0;
+    stop();
+    // Rewind everything, not just the clock. Scenes integrate their own motion,
+    // so an export that inherited state from the preview - or from the previous
+    // export - would not reproduce, which defeats the point of a seed.
+    resetScenes();
     await loadSoundtrack(cfg);
     const total = duration(cfg) || cfg.len;
     const [bw, bh] = baseSize(cfg);
@@ -376,6 +389,7 @@
   // video is long and the result is deterministic for a given seed.
   async function exportMp4(cfg, out, octx, total, bw, bh) {
     const fps = cfg.fps;
+    resetScenes();
     const envs = buffer ? window.NeoVideoExport.analyse(buffer, fps, total, cfg.react) : null;
     const t0 = performance.now();
     // Flat palette art with hard edges is exactly what H.264 hates, so spend
@@ -403,7 +417,7 @@
     if (typeof MediaRecorder === 'undefined') { status('This browser cannot record video.'); return; }
     const ac = ctx();
     recorderDest = ac.createMediaStreamDestination();
-    seekClips(0);
+    resetScenes();
     const stream = out.captureStream(cfg.fps);
     const type = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
       .find(t => MediaRecorder.isTypeSupported(t)) || '';
@@ -840,7 +854,9 @@
     });
     $('v-scrub').addEventListener('input', e => {
       const d = duration(look()); if (!d) return;
-      genTime = (e.target.value / 1000) * d; seekClips(genTime);
+      const to = (e.target.value / 1000) * d;
+      scrubStep = Math.max(0, Math.min(.5, to - genTime));
+      genTime = to; seekClips(genTime);
     });
     $('v-audio-src').addEventListener('change', async () => {
       stopTrack(); await loadSoundtrack(look()); if (playing) startAudio(look()); save();

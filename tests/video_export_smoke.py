@@ -58,6 +58,24 @@ with sync_playwright() as p:
                           'video_length_s':int(length),'faster_than_realtime': elapsed2 < int(length)}
     assert report['scored_mp4']['faster_than_realtime'], 'MP4 export was not faster than real time'
 
+    # A seed has to reproduce the footage. The video pipeline is checked for
+    # exact reproduction on a silent export - MP4 headers carry a creation
+    # timestamp at one-second resolution, so those few bytes are excluded and
+    # the entire encoded payload must match. Scored exports are only bounded by
+    # size, because the browser's AAC encoder is not bit-reproducible.
+    page.select_option('#v-audio-src','none'); page.wait_for_timeout(800)
+    outs=[]
+    for i in range(2):
+        with page.expect_download(timeout=300000) as d:
+            page.click('#v-open-export')
+        f=ART/f'repeat{i}.mp4'; d.value.save_as(str(f)); outs.append(f.read_bytes())
+    a, c = outs
+    assert len(a) == len(c), f'silent export lengths differ: {len(a)} vs {len(c)}'
+    diffs = [i for i, (x, y) in enumerate(zip(a, c)) if x != y]
+    assert all(i < 1024 for i in diffs), f'video differs outside the header at {[i for i in diffs if i>=1024][:8]}'
+    assert len(diffs) <= 8, f'{len(diffs)} bytes differ between identical silent exports'
+    report['deterministic_video'] = {'differing_bytes': len(diffs), 'confined_to_header': True}
+
     report['files']=[str(path),str(path2)]
     report['browser_errors']=errors
     assert not errors, errors

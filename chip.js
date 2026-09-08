@@ -135,10 +135,19 @@
         pan.connect(send).connect(delay);
         channels[ch] = { gain, pan, meter, send };
       }
+      // Fixed-seed noise. Math.random here meant every render produced different
+      // audio, so the same track never exported twice the same - and anything
+      // reacting to that audio, like the Video Studio, could not reproduce either.
       const len = ctx.sampleRate;
       noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
       const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      let a = 0x9e3779b9;
+      for (let i = 0; i < len; i++) {
+        a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        d[i] = (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1;
+      }
       return ctx;
     }
 

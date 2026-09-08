@@ -1058,7 +1058,7 @@
 
     // ---------------- CHARACTERS ----------------
     walker: {
-      label: 'Walker · character', cat: 'people', solid: true,
+      label: 'Walker · character', cat: 'people',
       init(r, w, h, density) {
         const keys = CHAR_KEYS;
         return { r, off: 0, step: 0,
@@ -1097,7 +1097,7 @@
     },
 
     crowd: {
-      label: 'Crowd · procession', cat: 'people', solid: true,
+      label: 'Crowd · procession', cat: 'people',
       init(r, w, h, density) {
         const n = Math.round(lerp(4, 16, density));
         return { r, step: 0,
@@ -1124,7 +1124,7 @@
     },
 
     duel: {
-      label: 'Duel · standoff', cat: 'people', solid: true,
+      label: 'Duel · standoff', cat: 'people',
       init(r, w, h, density) {
         const keys = CHAR_KEYS;
         const a = Math.floor(r() * keys.length);
