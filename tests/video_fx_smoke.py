@@ -19,15 +19,16 @@ def setv(page, sel, val):
 
 ORDER = ['glow','glitch','chroma','vignette','curve','zoom','shake']
 def unit_on(page, name):
-    page.locator('.vunit').nth(ORDER.index(name)).locator('.vunit-head').click()
+    page.locator('.vchip').nth(ORDER.index(name)).click()
 def unit_amount(page, name, val):
-    page.evaluate("""([i,v])=>{const u=document.querySelectorAll('.vunit')[i];
-      const r=u.querySelector('.vunit-body input[type=range]'); r.value=v;
-      r.dispatchEvent(new Event('input',{bubbles:true}));}""", [ORDER.index(name), str(val)])
+    page.evaluate("""(v)=>{const r=document.querySelector('#v-rack-params input[type=range]');
+      r.value=v; r.dispatchEvent(new Event('input',{bubbles:true}));}""", str(val))
 def unit_motion(page, name, shape):
-    page.evaluate("""([i,v])=>{const u=document.querySelectorAll('.vunit')[i];
-      const s=u.querySelector('.vunit-body select'); s.value=v;
-      s.dispatchEvent(new Event('change',{bubbles:true}));}""", [ORDER.index(name), shape])
+    page.evaluate("""(v)=>{const s=document.querySelector('#v-rack-params select');
+      s.value=v; s.dispatchEvent(new Event('change',{bubbles:true}));}""", shape)
+
+def pick_scene(page, key):
+    page.evaluate("(k)=>{const s=document.getElementById('v-scene'); s.value=k; s.dispatchEvent(new Event('input',{bubbles:true}));}", key)
 
 with sync_playwright() as p:
     b = p.chromium.launch(headless=True, args=['--autoplay-policy=no-user-gesture-required'])
@@ -41,7 +42,7 @@ with sync_playwright() as p:
     assert len(scenes) == 13, scenes
 
     page.select_option('#v-chip','gameboy'); page.dispatch_event('#v-chip','input')
-    page.select_option('#v-scene','skyline'); page.dispatch_event('#v-scene','input')
+    pick_scene(page, 'skyline')
     page.fill('#v-seed','neojutsu'); page.dispatch_event('#v-seed','input')
     page.click('#v-play'); page.wait_for_timeout(600)
 
@@ -61,8 +62,8 @@ with sync_playwright() as p:
     base = page.evaluate(SAMPLE)
 
     # The rack exposes every unit as a card.
-    assert page.locator('.vunit').count() == len(ORDER), page.locator('.vunit').count()
-    report['rack_units'] = page.locator('.vunit').count()
+    assert page.locator('.vchip').count() == len(ORDER), page.locator('.vchip').count()
+    report['rack_units'] = page.locator('.vchip').count()
 
     # Vignette must actually darken the frame, and stay on palette.
     unit_on(page,'vignette'); unit_amount(page,'vignette',90); page.wait_for_timeout(600)

@@ -106,3 +106,63 @@
 .tl-playhead { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--yellow); pointer-events: none; }
 .tl-editor { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 12px; }
 @media (max-width: 900px) { .tl-editor { grid-template-columns: 1fr; } }
+
+/* ---------- scene picker: a grid of live previews, not a dropdown ---------- */
+.picker-btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 5px;
+  color: var(--text); font-family: var(--mono); font-size: 12px; padding: 9px 10px; cursor: pointer;
+}
+.picker-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+.picker-chevron { color: var(--muted); font-size: 11px; }
+
+.picker {
+  position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column;
+  background: rgba(7,6,12,.97); border-radius: 10px; padding: 14px;
+}
+.picker-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.picker-head .eyebrow { margin: 0; flex: 1; }
+.picker-head input[type=search] {
+  width: 150px; background: var(--bg-3); border: 1px solid var(--line); border-radius: 5px;
+  color: var(--text); font-family: var(--mono); font-size: 11px; padding: 6px 8px;
+}
+.picker-grid {
+  flex: 1; overflow-y: auto; display: grid; gap: 10px; align-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+}
+.picker-tile {
+  border: 1px solid var(--line); border-radius: 8px; background: #0b0913;
+  cursor: pointer; padding: 0; overflow: hidden; display: flex; flex-direction: column;
+}
+.picker-tile:hover { border-color: var(--cyan); }
+.picker-tile.current { border-color: var(--magenta); box-shadow: 0 0 0 1px rgba(255,46,136,.35); }
+.picker-tile canvas { width: 100%; height: auto; display: block; image-rendering: pixelated; background: #05040a; }
+.picker-tile span {
+  font-size: 9px; color: var(--muted); padding: 6px 5px; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.picker-tile.current span { color: var(--magenta); }
+
+/* ---------- look bar: fills the space under the preview ---------- */
+.lookbar { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 14px; }
+.look-grid { display: grid; gap: 0 18px; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); }
+.look-grid .toggle-row { grid-column: 1 / -1; margin-bottom: 6px; }
+.look-grid .hint { grid-column: 1 / -1; margin-top: -4px; }
+
+/* ---------- effects as a chip grid ---------- */
+.vgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 6px; margin-bottom: 14px; }
+.vchip {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 8px; background: #0b0913; padding: 9px 4px 7px; color: var(--muted);
+}
+.vchip:hover { border-color: var(--cyan); color: var(--text); }
+.vchip.on { border-color: var(--magenta); color: var(--text); background: #170f24; }
+.vchip.current { box-shadow: inset 0 0 0 1px rgba(46,242,255,.4); }
+.vchip-k { font-family: var(--kanji); font-weight: 900; font-size: 16px; color: #5b4d7a; line-height: 1; }
+.vchip.on .vchip-k { color: var(--magenta); text-shadow: var(--glow-m); }
+.vchip-label { font-size: 8px; text-transform: uppercase; letter-spacing: .5px; text-align: center; line-height: 1.3; }
+.vparams { border: 1px solid var(--line); border-radius: 8px; padding: 12px 12px 2px; background: #0b0913; margin-bottom: 22px; }
+.vparams .field { margin-bottom: 12px; }
+.vparams-empty { font-size: 11px; color: var(--muted); margin: 0 0 12px; line-height: 1.6; }
+.vparams-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.vparams-head b { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text); flex: 1; }

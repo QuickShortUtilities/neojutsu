@@ -15,6 +15,9 @@ SAMPLE = """() => {
   return {colors:[...seen], sig};
 }"""
 
+def pick_scene(page, key):
+    page.evaluate("(k)=>{const s=document.getElementById('v-scene'); s.value=k; s.dispatchEvent(new Event('input',{bubbles:true}));}", key)
+
 with sync_playwright() as p:
     b = p.chromium.launch(headless=True, args=['--autoplay-policy=no-user-gesture-required'])
     page = b.new_context(viewport={"width":1512,"height":1150}).new_page()
@@ -34,7 +37,7 @@ with sync_playwright() as p:
     # Every scene must render real, palette-locked, non-blank footage.
     per_scene = {}
     for sc in scenes:
-        page.select_option('#v-scene', sc); page.dispatch_event('#v-scene','input')
+        pick_scene(page, sc)
         # Poll rather than guess a render time; under load a fixed wait can
         # sample before the first frame has been drawn.
         got = set()
@@ -51,7 +54,7 @@ with sync_playwright() as p:
     report['scene_colors'] = per_scene
 
     # Motion: the frame must actually change over time.
-    page.select_option('#v-scene','starfield'); page.dispatch_event('#v-scene','input')
+    pick_scene(page, 'starfield')
     page.wait_for_timeout(300)
     a = page.evaluate(SAMPLE)['sig']; moved = False
     for _ in range(20):

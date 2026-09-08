@@ -81,68 +81,85 @@
   }
 
   // ---------- UI ----------
-  function build(host, getState, onChange) {
-    host.innerHTML = '';
+  // A grid of chips rather than a stack of panels: every unit is visible at
+  // once, and only the selected one spends vertical space on its parameters.
+  let current = null;
+
+  function build(grid, params, getState, onChange) {
     const state = normalize(getState());
-    for (const id of ORDER) {
-      const spec = SPEC[id], u = state[id];
-      const card = document.createElement('div');
-      card.className = 'vunit' + (u.on ? ' on' : '');
-
-      const head = document.createElement('button');
-      head.type = 'button'; head.className = 'vunit-head';
-      head.innerHTML = `<span class="vunit-k">${spec.kanji}</span><span class="vunit-label">${spec.label}</span><span class="vunit-led"></span>`;
-      head.addEventListener('click', () => { u.on = !u.on; onChange(state); build(host, () => state, onChange); });
-
-      const body = document.createElement('div');
-      body.className = 'vunit-body'; body.hidden = !u.on;
-
-      const amount = document.createElement('label');
-      amount.className = 'field range';
-      amount.innerHTML = `<span>Amount <b>${u.amount}</b></span>`;
-      const ar = document.createElement('input');
-      ar.type = 'range'; ar.min = 0; ar.max = 100; ar.step = 1; ar.value = u.amount;
-      ar.setAttribute('aria-label', `${spec.label} amount`);
-      ar.addEventListener('input', () => { u.amount = +ar.value; amount.querySelector('b').textContent = ar.value; onChange(state); });
-      amount.append(ar);
-
-      const motion = document.createElement('label');
-      motion.className = 'field';
-      motion.innerHTML = '<span>Motion</span>';
-      const ms = document.createElement('select');
-      for (const [k, label] of Object.entries(SHAPE_LABELS)) {
-        const o = document.createElement('option'); o.value = k; o.textContent = label; ms.append(o);
+    const paint = () => {
+      grid.innerHTML = '';
+      for (const id of ORDER) {
+        const spec = SPEC[id], u = state[id];
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'vchip' + (u.on ? ' on' : '') + (id === current ? ' current' : '');
+        chip.title = spec.label;
+        chip.innerHTML = `<span class="vchip-k">${spec.kanji}</span><span class="vchip-label">${spec.label}</span>`;
+        chip.addEventListener('click', () => {
+          if (id === current && u.on) u.on = false;
+          else { u.on = true; current = id; }
+          onChange(state); paint();
+        });
+        grid.append(chip);
       }
-      ms.value = u.shape;
-      ms.addEventListener('change', () => { u.shape = ms.value; onChange(state); build(host, () => state, onChange); });
-      motion.append(ms);
-
-      body.append(amount, motion);
-
-      if (u.shape !== 'off') {
-        if (!['level','bass','treble'].includes(u.shape)) {
-          const rate = document.createElement('label');
-          rate.className = 'field'; rate.innerHTML = '<span>Rate</span>';
-          const rs = document.createElement('select');
-          for (const r of RATES) { const o = document.createElement('option'); o.value = r.id; o.textContent = r.label; rs.append(o); }
-          rs.value = u.rate;
-          rs.addEventListener('change', () => { u.rate = rs.value; onChange(state); });
-          rate.append(rs); body.append(rate);
-        }
-        const depth = document.createElement('label');
-        depth.className = 'field range';
-        depth.innerHTML = `<span>Depth <b>${u.depth}</b></span>`;
-        const ds = document.createElement('input');
-        ds.type = 'range'; ds.min = 0; ds.max = 100; ds.step = 1; ds.value = u.depth;
-        ds.setAttribute('aria-label', `${spec.label} motion depth`);
-        ds.addEventListener('input', () => { u.depth = +ds.value; depth.querySelector('b').textContent = ds.value; onChange(state); });
-        depth.append(ds); body.append(depth);
-      }
-
-      card.append(head, body); host.append(card);
-    }
-    window.NeoSelect?.refreshAll?.();
+      drawParams(params, state, onChange, paint);
+      window.NeoSelect?.refreshAll?.();
+    };
+    paint();
     return state;
+  }
+
+  function drawParams(host, state, onChange, repaint) {
+    host.innerHTML = '';
+    if (!current || !state[current] || !state[current].on) {
+      const p = document.createElement('p');
+      p.className = 'vparams-empty';
+      p.textContent = 'Pick an effect above to switch it on and set it up. Click it again to switch it off.';
+      host.append(p); return;
+    }
+    const id = current, spec = SPEC[id], u = state[id];
+    const head = document.createElement('div');
+    head.className = 'vparams-head';
+    head.innerHTML = `<span class="vchip-k">${spec.kanji}</span><b>${spec.label}</b>`;
+    host.append(head);
+
+    const slider = (label, value, min, max, onInput) => {
+      const wrap = document.createElement('label');
+      wrap.className = 'field range';
+      wrap.innerHTML = `<span>${label} <b>${value}</b></span>`;
+      const r = document.createElement('input');
+      r.type = 'range'; r.min = min; r.max = max; r.step = 1; r.value = value;
+      r.setAttribute('aria-label', `${spec.label} ${label.toLowerCase()}`);
+      r.addEventListener('input', () => { wrap.querySelector('b').textContent = r.value; onInput(+r.value); onChange(state); });
+      wrap.append(r); host.append(wrap);
+      return wrap;
+    };
+    slider('Amount', u.amount, 0, 100, v => { u.amount = v; });
+
+    const motion = document.createElement('label');
+    motion.className = 'field';
+    motion.innerHTML = '<span>Motion</span>';
+    const ms = document.createElement('select');
+    for (const [k, label] of Object.entries(SHAPE_LABELS)) {
+      const o = document.createElement('option'); o.value = k; o.textContent = label; ms.append(o);
+    }
+    ms.value = u.shape;
+    ms.addEventListener('change', () => { u.shape = ms.value; onChange(state); repaint(); });
+    motion.append(ms); host.append(motion);
+
+    if (u.shape !== 'off') {
+      if (!['level','bass','treble'].includes(u.shape)) {
+        const rate = document.createElement('label');
+        rate.className = 'field'; rate.innerHTML = '<span>Rate</span>';
+        const rs = document.createElement('select');
+        for (const r of RATES) { const o = document.createElement('option'); o.value = r.id; o.textContent = r.label; rs.append(o); }
+        rs.value = u.rate;
+        rs.addEventListener('change', () => { u.rate = rs.value; onChange(state); });
+        rate.append(rs); host.append(rate);
+      }
+      slider('Depth', u.depth, 0, 100, v => { u.depth = v; });
+    }
   }
 
   window.NeoVRack = { SPEC, ORDER, SHAPES, SHAPE_LABELS, RATES, defaults, normalize, evaluate, value, build };

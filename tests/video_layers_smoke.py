@@ -13,6 +13,9 @@ SAMPLE = """() => { const c=document.getElementById('v-canvas');
 def setv(page,sel,val):
     page.evaluate("([s,v])=>{const e=document.querySelector(s);e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));}",[sel,str(val)])
 
+def pick_scene(page, key):
+    page.evaluate("(k)=>{const s=document.getElementById('v-scene'); s.value=k; s.dispatchEvent(new Event('input',{bubbles:true}));}", key)
+
 with sync_playwright() as p:
     b=p.chromium.launch(headless=True,args=['--autoplay-policy=no-user-gesture-required'])
     page=b.new_context(viewport={"width":1512,"height":1150}).new_page()
@@ -24,7 +27,7 @@ with sync_playwright() as p:
 
     assert page.locator('.layer-row').count()==1, 'should open with one layer'
     page.select_option('#v-chip','gameboy'); page.dispatch_event('#v-chip','input')
-    page.select_option('#v-scene','skyline'); page.dispatch_event('#v-scene','input')
+    pick_scene(page, 'skyline')
     page.fill('#v-seed','neojutsu'); page.dispatch_event('#v-seed','input')
     page.click('#v-play'); page.wait_for_timeout(700)
     one = page.evaluate(SAMPLE)

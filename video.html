@@ -75,7 +75,12 @@
       </div>
 
       <div id="v-gen-block">
-        <label class="field"><span>Scene</span><select id="v-scene"></select></label>
+        <label class="field"><span>Scene</span>
+          <button type="button" class="picker-btn" id="v-scene-open" aria-haspopup="dialog">
+            <span id="v-scene-name">Skyline</span><span class="picker-chevron">▦</span>
+          </button>
+        </label>
+        <select id="v-scene" hidden aria-hidden="true" data-neo="skip" tabindex="-1"></select>
         <label class="field">
           <span>Seed</span>
           <div class="seed-row">
@@ -112,7 +117,48 @@
       <label class="field range"><span>Opacity <b id="v-opacity-v">100</b></span>
         <input type="range" id="v-opacity" min="0" max="100" step="1" value="100" aria-label="Layer opacity"></label>
 
-      <h2 class="panel-title"><span class="k">型</span> Look</h2>
+    </aside>
+
+    <!-- ===== centre: preview ===== -->
+    <section class="panel stage" aria-label="Preview">
+      <div class="stage-frame">
+        <canvas id="v-canvas" width="160" height="144" aria-label="8-bit video preview"></canvas>
+        <p class="stage-empty" id="v-empty">No footage loaded</p>
+        <div class="picker" id="v-picker" role="dialog" aria-label="Choose a scene" hidden>
+          <div class="picker-head">
+            <span class="eyebrow">CHOOSE A SCENE</span>
+            <input type="search" id="v-picker-search" placeholder="filter…" aria-label="Filter scenes">
+            <button class="mini" id="v-picker-close" type="button">Close</button>
+          </div>
+          <div class="picker-grid" id="v-picker-grid"></div>
+        </div>
+      </div>
+      <div class="stage-bar">
+        <input type="range" id="v-scrub" min="0" max="1000" step="1" value="0" aria-label="Scrub position" disabled>
+        <button class="mini" id="v-tl-toggle" type="button" aria-pressed="false" title="Sequence the video as a list of shots">Timeline</button>
+        <span class="stage-meta" id="v-meta">—</span>
+      </div>
+
+      <div class="timeline" id="v-timeline" hidden>
+        <div class="tl-head">
+          <span class="eyebrow">SHOT LIST</span>
+          <span class="tl-total" id="v-tl-total">0s</span>
+          <button class="mini" id="v-tl-add" type="button">+ Shot</button>
+          <button class="mini" id="v-tl-del" type="button">✕</button>
+        </div>
+        <div class="tl-track" id="v-tl-track" role="listbox" aria-label="Shots"></div>
+        <div class="tl-editor">
+          <label class="field"><span>Scene</span><select id="v-tl-scene"></select></label>
+          <label class="field range"><span>Hold <b id="v-tl-dur-v">4</b>s</span>
+            <input type="range" id="v-tl-dur" min="1" max="30" step="1" value="4" aria-label="Shot duration"></label>
+          <label class="field"><span>Caption <small>| splits lines</small></span>
+            <input type="text" id="v-tl-text" maxlength="80" spellcheck="false" placeholder="leave blank for the title"></label>
+        </div>
+      </div>
+
+      <div class="lookbar">
+        <h2 class="panel-title"><span class="k">型</span> Look</h2>
+        <div class="look-grid">
 
       <label class="field">
         <span>Hardware</span>
@@ -176,34 +222,6 @@
         <label class="chk"><input type="checkbox" id="v-scanlines"> <span>Scanlines</span></label>
         <label class="chk"><input type="checkbox" id="v-loop" checked> <span>Loop</span></label>
       </div>
-    </aside>
-
-    <!-- ===== centre: preview ===== -->
-    <section class="panel stage" aria-label="Preview">
-      <div class="stage-frame">
-        <canvas id="v-canvas" width="160" height="144" aria-label="8-bit video preview"></canvas>
-        <p class="stage-empty" id="v-empty">No footage loaded</p>
-      </div>
-      <div class="stage-bar">
-        <input type="range" id="v-scrub" min="0" max="1000" step="1" value="0" aria-label="Scrub position" disabled>
-        <button class="mini" id="v-tl-toggle" type="button" aria-pressed="false" title="Sequence the video as a list of shots">Timeline</button>
-        <span class="stage-meta" id="v-meta">—</span>
-      </div>
-
-      <div class="timeline" id="v-timeline" hidden>
-        <div class="tl-head">
-          <span class="eyebrow">SHOT LIST</span>
-          <span class="tl-total" id="v-tl-total">0s</span>
-          <button class="mini" id="v-tl-add" type="button">+ Shot</button>
-          <button class="mini" id="v-tl-del" type="button">✕</button>
-        </div>
-        <div class="tl-track" id="v-tl-track" role="listbox" aria-label="Shots"></div>
-        <div class="tl-editor">
-          <label class="field"><span>Scene</span><select id="v-tl-scene"></select></label>
-          <label class="field range"><span>Hold <b id="v-tl-dur-v">4</b>s</span>
-            <input type="range" id="v-tl-dur" min="1" max="30" step="1" value="4" aria-label="Shot duration"></label>
-          <label class="field"><span>Caption <small>| splits lines</small></span>
-            <input type="text" id="v-tl-text" maxlength="80" spellcheck="false" placeholder="leave blank for the title"></label>
         </div>
       </div>
     </section>
@@ -211,7 +229,8 @@
     <!-- ===== right: audio ===== -->
     <aside class="panel" id="v-inspector">
       <h2 class="panel-title"><span class="k">効</span> Effects</h2>
-      <div class="vrack" id="v-rack"></div>
+      <div class="vgrid" id="v-rack-grid"></div>
+      <div class="vparams" id="v-rack-params"></div>
 
       <h2 class="panel-title"><span class="k">字</span> Title</h2>
       <label class="field">

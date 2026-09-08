@@ -175,34 +175,7 @@
     window.NeoFX.apply(lctx, rw, rh, window.NeoVRack.evaluate(rack, genTime, env), env, genTime);
     window.NeoFX.drawText(lctx, rw, rh, shot && shot.text ? { ...cfg.text, text: shot.text } : cfg.text);
 
-    const frame = lctx.getImageData(0, 0, rw, rh), data = frame.data;
-    const pal = paletteRGB(cfg.chip), levels = pal.length;
-    const contrast = (259 * (cfg.contrast + 255)) / (255 * (259 - cfg.contrast));
-    const bay = BAYER[cfg.dither];
-    const spread = bay ? (255 / levels) * cfg.dithAmt : 0;
-    for (let y = 0; y < rh; y++) {
-      for (let x = 0; x < rw; x++) {
-        const i = (y * rw + x) * 4;
-        let r = data[i], g = data[i + 1], b = data[i + 2];
-        r = contrast * (r - 128) + 128 + cfg.bright;
-        g = contrast * (g - 128) + 128 + cfg.bright;
-        b = contrast * (b - 128) + 128 + cfg.bright;
-        if (bay) {
-          const t = (bay.m[(y % bay.n) * bay.n + (x % bay.n)] / (bay.n * bay.n)) - 0.5;
-          r += t * spread; g += t * spread; b += t * spread;
-        }
-        r = clamp255(r); g = clamp255(g); b = clamp255(b);
-        let best = 0, bestD = Infinity;
-        for (let p = 0; p < levels; p++) {
-          const c = pal[p], dr = r - c[0], dg = g - c[1], db = b - c[2];
-          const d = dr * dr + dg * dg + db * db;
-          if (d < bestD) { bestD = d; best = p; }
-        }
-        const c = pal[best];
-        data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2];
-      }
-    }
-    lctx.putImageData(frame, 0, 0);
+    snap(lctx, rw, rh, cfg);
     dctx.imageSmoothingEnabled = false;
     dctx.drawImage(low, 0, 0, bw, bh);
     if (cfg.scanlines) {
@@ -464,6 +437,7 @@
     $('v-mode').value = L.mode; $('v-scene').value = L.scene; $('v-seed').value = L.seed;
     $('v-speed').value = Math.round(L.speed * 100); $('v-density').value = Math.round(L.density * 100);
     $('v-cut').value = L.cut; $('v-blend').value = L.blend; $('v-opacity').value = Math.round(L.opacity * 100);
+    $('v-scene-name').textContent = ((window.NeoScene.SCENES[L.scene] || {}).label || L.scene).split(' · ')[0];
     $('v-source-note').textContent = L.clipName ? `${L.clipName} · stays on your device` : 'Stays on your device. Nothing is uploaded.';
     window.NeoSelect?.refreshAll?.();
   }
@@ -474,6 +448,91 @@
     L.cut = +$('v-cut').value; L.blend = $('v-blend').value; L.opacity = +$('v-opacity').value / 100;
     L._sig = '';
     renderLayers();
+  }
+
+  // Brightness/contrast, dither, then nearest hardware colour. Shared by the
+  // main render and the picker thumbnails so a preview cannot lie about the look.
+  function snap(ctx, w, h, cfg) {
+    const frame = ctx.getImageData(0, 0, w, h), data = frame.data;
+    const pal = paletteRGB(cfg.chip), levels = pal.length;
+    const contrast = (259 * (cfg.contrast + 255)) / (255 * (259 - cfg.contrast));
+    const bay = BAYER[cfg.dither];
+    const spread = bay ? (255 / levels) * cfg.dithAmt : 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        let r = data[i], g = data[i + 1], b = data[i + 2];
+        r = contrast * (r - 128) + 128 + cfg.bright;
+        g = contrast * (g - 128) + 128 + cfg.bright;
+        b = contrast * (b - 128) + 128 + cfg.bright;
+        if (bay) {
+          const t = (bay.m[(y % bay.n) * bay.n + (x % bay.n)] / (bay.n * bay.n)) - 0.5;
+          r += t * spread; g += t * spread; b += t * spread;
+        }
+        r = clamp255(r); g = clamp255(g); b = clamp255(b);
+        let best = 0, bestD = Infinity;
+        for (let p = 0; p < levels; p++) {
+          const c = pal[p], dr = r - c[0], dg = g - c[1], db = b - c[2];
+          const d = dr * dr + dg * dg + db * db;
+          if (d < bestD) { bestD = d; best = p; }
+        }
+        const c = pal[best];
+        data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2];
+      }
+    }
+    ctx.putImageData(frame, 0, 0);
+  }
+
+  // ---------- scene picker ----------
+  const TILE_W = 104;
+  let pickerOpen = false, pickerTiles = [], pickerRaf = 0, pickerT = 0, pickerLast = 0;
+
+  function buildPicker() {
+    const grid = $('v-picker-grid'); grid.innerHTML = ''; pickerTiles = [];
+    const cfg = look(), L = layers[selected];
+    const [bw, bh] = baseSize(cfg);
+    const th = Math.max(24, Math.round(TILE_W * bh / bw));
+    const filter = $('v-picker-search').value.trim().toLowerCase();
+    for (const [key, def] of Object.entries(window.NeoScene.SCENES)) {
+      if (filter && !def.label.toLowerCase().includes(filter)) continue;
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'picker-tile' + (key === L.scene ? ' current' : '');
+      const c = document.createElement('canvas'); c.width = TILE_W; c.height = th;
+      const label = document.createElement('span'); label.textContent = def.label;
+      tile.append(c, label);
+      tile.addEventListener('click', () => {
+        $('v-scene').value = key; pushLayer(); pullLayer(); syncLabels(); save(); closePicker();
+      });
+      grid.append(tile);
+      pickerTiles.push({ key, ctx: c.getContext('2d', { willReadFrequently: true }), w: TILE_W, h: th,
+                         state: def.init(window.NeoScene.rng(L.seed || 'neojutsu'), TILE_W, th, L.density) });
+    }
+  }
+
+  function pickerLoop(now) {
+    if (!pickerOpen) return;
+    pickerRaf = requestAnimationFrame(pickerLoop);
+    const dt = Math.min(0.1, (now - pickerLast) / 1000 || 0); pickerLast = now;
+    pickerT += dt;
+    const cfg = look(), env = EMPTY;
+    for (const t of pickerTiles) {
+      const def = window.NeoScene.SCENES[t.key];
+      t.ctx.save();
+      def.draw(t.ctx, t.w, t.h, pickerT, env, t.state, { speed: 1, density: layers[selected].density, step: dt });
+      t.ctx.restore();
+      snap(t.ctx, t.w, t.h, cfg);
+    }
+  }
+  function openPicker() {
+    pickerOpen = true; pickerT = 0; pickerLast = 0;
+    $('v-picker').hidden = false;
+    buildPicker();
+    cancelAnimationFrame(pickerRaf); pickerRaf = requestAnimationFrame(pickerLoop);
+  }
+  function closePicker() {
+    pickerOpen = false; cancelAnimationFrame(pickerRaf);
+    $('v-picker').hidden = true; pickerTiles = [];
   }
 
   // ---------- timeline ----------
@@ -590,7 +649,7 @@
     }
     if (!timeline.shots.length) timeline.shots = [newShot(), { ...newShot(), scene: 'grid' }];
     renderTimeline(); pullShot();
-    window.NeoVRack.build($('v-rack'), () => rack, next => { rack = next; save(); });
+    window.NeoVRack.build($('v-rack-grid'), $('v-rack-params'), () => rack, next => { rack = next; save(); });
     syncLabels();
     window.NeoSelect?.refreshAll?.();
 
@@ -628,6 +687,10 @@
       [layers[selected], layers[j]] = [layers[j], layers[selected]];
       selected = j; renderLayers(); pullLayer(); save();
     };
+    $('v-scene-open').addEventListener('click', () => pickerOpen ? closePicker() : openPicker());
+    $('v-picker-close').addEventListener('click', closePicker);
+    $('v-picker-search').addEventListener('input', buildPicker);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && pickerOpen) closePicker(); });
     $('v-tl-toggle').addEventListener('click', () => {
       timeline.on = !timeline.on; genTime = 0; renderTimeline(); pullShot(); syncLen(); save();
     });

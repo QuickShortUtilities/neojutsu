@@ -4,6 +4,8 @@ import tempfile, json, time
 ROOT=Path('/Users/christophercohen/Documents/GitHub/neojutsu')
 ART=Path(tempfile.mkdtemp(prefix='neojutsu-export-'))
 report={}
+def pick_scene(page, key):
+    page.evaluate("(k)=>{const s=document.getElementById('v-scene'); s.value=k; s.dispatchEvent(new Event('input',{bubbles:true}));}", key)
 def setv(page,sel,val):
     page.evaluate("([s,v])=>{const e=document.querySelector(s);e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));}",[sel,str(val)])
 
@@ -21,7 +23,7 @@ with sync_playwright() as p:
     page.goto(ROOT.as_uri()+'/video.html'); page.wait_for_timeout(800)
     assert not errors, errors
     page.select_option('#v-chip','gameboy'); page.dispatch_event('#v-chip','input')
-    page.select_option('#v-scene','grid'); page.dispatch_event('#v-scene','input')
+    pick_scene(page,'grid')
     page.select_option('#v-container','mp4'); page.dispatch_event('#v-container','input')
     setv(page,'#v-fps',24); setv(page,'#v-scale',2); setv(page,'#v-len',5)
     page.wait_for_timeout(300)
