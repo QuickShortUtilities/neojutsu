@@ -421,6 +421,7 @@
   function syncFx() {
     const f = pattern.fx[lane], melodic = lane !== 'no';
     $('fx-lane-name').textContent = LANE_NAME[lane];
+    $('fx-lane-name').style.setProperty('--voice-tint', COLORS[lane]);
     fxVib.value = Math.round((f.vib || 0) * 100); $('fx-vib-v').textContent = fxVib.value;
     fxTrem.value = Math.round((f.trem || 0) * 100); $('fx-trem-v').textContent = fxTrem.value;
     fxInst.value = f.inst || ''; fxEnv.value = f.env || 'hold';

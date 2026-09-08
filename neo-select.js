@@ -1,12 +1,14 @@
 /* ============================================================
-   NEO術 — pixel dropdowns
+   NEO術 — pixel form controls
    The browser's native <select> menu is drawn by the operating
    system and ignores the theme. This replaces the visible part
    with our own listbox while keeping the real <select> in the
    DOM, so every existing script, form behaviour and test that
    reads .value, sets it, or rebuilds .options keeps working.
 
-   Any <select> added later is picked up automatically.
+   Range inputs get a --fill custom property so the filled part of
+   the track can be drawn, and any control added later is picked up
+   automatically.
    ============================================================ */
 (() => {
   'use strict';
@@ -39,7 +41,9 @@
     button.setAttribute('aria-expanded', 'false');
     const aria = select.getAttribute('aria-label');
     if (aria) button.setAttribute('aria-label', aria);
-    button.innerHTML = '<span class="neo-select-value"></span><span class="neo-select-caret" aria-hidden="true">▼</span>';
+    button.innerHTML = '<span class="neo-select-value"></span>' +
+      '<svg class="neo-select-caret" viewBox="0 0 12 8" aria-hidden="true">' +
+      '<path d="M1 1h2v2H1zM3 3h2v2H3zM5 5h2v2H5zM7 3h2v2H7zM9 1h2v2H9z"/></svg>';
     wrap.append(button);
 
     const menu = document.createElement('div');
@@ -159,8 +163,33 @@
     refresh();
   }
 
-  const enhanceAll = (root = document) => root.querySelectorAll('select:not([data-neo])').forEach(enhance);
-  const refreshAll = (root = document) => root.querySelectorAll('select[data-neo]').forEach((s) => s.neoSelect && s.neoSelect.refresh());
+  // ------------------------------------------------------------ sliders
+  // CSS cannot know a range's value, so the filled portion is drawn from
+  // a custom property kept in step here.
+  function paintRange(input) {
+    const min = +input.min || 0, max = +input.max || 100;
+    const t = max === min ? 0 : (+input.value - min) / (max - min);
+    input.style.setProperty('--fill', (t * 100).toFixed(2) + '%');
+  }
+  function enhanceRange(input) {
+    if (input.dataset.neo) return;
+    input.dataset.neo = '1';
+    input.classList.add('neo-range');
+    const paint = () => paintRange(input);
+    input.addEventListener('input', paint);
+    input.addEventListener('change', paint);
+    new MutationObserver(paint).observe(input, { attributes: true, attributeFilter: ['value', 'min', 'max'] });
+    paint();
+  }
+
+  const enhanceAll = (root = document) => {
+    root.querySelectorAll('select:not([data-neo])').forEach(enhance);
+    root.querySelectorAll('input[type=range]:not([data-neo])').forEach(enhanceRange);
+  };
+  const refreshAll = (root = document) => {
+    root.querySelectorAll('select[data-neo]').forEach((s) => s.neoSelect && s.neoSelect.refresh());
+    root.querySelectorAll('input[type=range][data-neo]').forEach(paintRange);
+  };
 
   // close on outside click, scroll or resize
   document.addEventListener('click', () => openOne && openOne.close());
@@ -175,12 +204,14 @@
         for (const node of r.addedNodes) {
           if (node.nodeType !== 1) continue;
           if (node.matches?.('select:not([data-neo])')) enhance(node);
+          if (node.matches?.('input[type=range]:not([data-neo])')) enhanceRange(node);
           node.querySelectorAll?.('select:not([data-neo])').forEach(enhance);
+          node.querySelectorAll?.('input[type=range]:not([data-neo])').forEach(enhanceRange);
         }
       }
     }).observe(document.body, { childList: true, subtree: true });
   }
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', start) : start();
 
-  window.NeoSelect = { enhance, enhanceAll, refreshAll };
+  window.NeoSelect = { enhance, enhanceRange, enhanceAll, refreshAll };
 })();

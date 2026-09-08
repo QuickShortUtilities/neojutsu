@@ -22,8 +22,8 @@
 
 /* fields */
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-size: 12px; color: var(--muted); }
-.field span { text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
-.field span b { color: var(--yellow); text-transform: none; letter-spacing: 0; font-family: var(--mono); }
+.field > span { text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
+.field > span b { color: var(--yellow); text-transform: none; letter-spacing: 0; font-family: var(--mono); }
 .field small { text-transform: none; letter-spacing: 0; opacity: .7; }
 .field select, .field input[type=text], .track-meta input {
   background: var(--bg-3); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
@@ -66,7 +66,7 @@
 /* side */
 .track-meta { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; font-size: 12px; }
 .track-meta > div { display: flex; flex-direction: column; gap: 4px; }
-.track-meta span { color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
+.track-meta .meta-grid > div > span, .track-meta > div > span { color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
 .track-meta b { font-family: var(--mono); font-weight: 500; color: var(--text); }
 .side .btn.wide { margin-top: 8px; font-size: 10px; }
 .side-note { font-size: 12px; color: var(--muted); margin-top: 10px; min-height: 18px; }
@@ -96,7 +96,7 @@
 .fx-master { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
 .fx-sub { font-family: var(--pixel); font-size: 9px; color: var(--muted); letter-spacing: 1px; margin-bottom: 2px; }
 .fx-row { display: grid; grid-template-columns: 82px 1fr 30px; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
-.fx-row span { text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+.fx-row > span { text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
 .fx-row b { font-family: var(--mono); font-weight: 500; color: var(--yellow); text-align: right; }
 .fx-row input[type=range] { accent-color: var(--cyan); width: 100%; }
 .fx-row select {
@@ -199,7 +199,7 @@ button[aria-pressed=true].mini { background: #2ef2ff18; border-color: var(--cyan
 .session-bar .eyebrow { margin-bottom: 0; }
 .session-controls .tempo { display: grid; gap: 5px; }
 .session-controls .tempo input { width: 100%; min-width: 0; margin: 0; }
-.session-controls .tempo span { white-space: nowrap; }
+.session-controls .tempo > span { white-space: nowrap; }
 
 .roll-wrap { overflow-x: auto; overscroll-behavior-x: contain; }
 .roll-wrap .bar-ruler { margin-bottom: 0; }
@@ -449,3 +449,116 @@ button[aria-pressed=true].mini { background: #2ef2ff18; border-color: var(--cyan
 }
 .fx-dock .rack-btn.lit .rack-kanji { color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
 .fx-dock .rack-btn:not(.lit) .rack-kanji { color: var(--muted); text-shadow: none; }
+
+/* ================= v1.2: pixel form controls ================= */
+
+/* ---- chevron ---- */
+.neo-select-caret { width: 12px; height: 8px; flex: none; fill: var(--muted); transition: transform .08s steps(2); }
+.neo-select-btn:hover .neo-select-caret { fill: var(--text); }
+.neo-select.is-open .neo-select-caret { fill: var(--cyan); transform: scaleY(-1); }
+.fx-window .neo-select.is-open .neo-select-caret { fill: var(--accent, var(--cyan)); }
+
+/* ---- sliders ----
+   A notched track with the filled part drawn from --fill, and a chunky
+   square handle. Both engines need their own pseudo-elements. */
+input[type=range].neo-range {
+  --slider: var(--cyan);
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 20px; margin: 0; background: transparent; cursor: pointer;
+}
+input[type=range].neo-range:focus { outline: none; }
+input[type=range].neo-range::-webkit-slider-runnable-track {
+  height: 10px;
+  background:
+    linear-gradient(90deg, var(--slider) 0 var(--fill, 0%), rgba(0,0,0,0) var(--fill, 0%)),
+    repeating-linear-gradient(90deg, #221d33 0 5px, #2b2540 5px 6px);
+  box-shadow: inset 0 0 0 2px #2a2340, inset 2px 2px 0 #00000066;
+}
+input[type=range].neo-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 10px; height: 20px; margin-top: -5px; border: 0; border-radius: 0;
+  background: var(--text);
+  box-shadow: 0 0 0 2px #05040a, inset 0 0 0 2px #ffffff30, 0 0 8px var(--slider);
+}
+input[type=range].neo-range:hover::-webkit-slider-thumb { background: #fff; }
+input[type=range].neo-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--cyan), 0 0 10px var(--cyan); }
+input[type=range].neo-range::-moz-range-track {
+  height: 10px;
+  background: repeating-linear-gradient(90deg, #221d33 0 5px, #2b2540 5px 6px);
+  box-shadow: inset 0 0 0 2px #2a2340;
+}
+input[type=range].neo-range::-moz-range-progress { height: 10px; background: var(--slider); }
+input[type=range].neo-range::-moz-range-thumb {
+  width: 10px; height: 20px; border: 0; border-radius: 0; background: var(--text);
+  box-shadow: 0 0 0 2px #05040a, 0 0 8px var(--slider);
+}
+/* each context tints its own sliders */
+.fx-master .neo-range, #fx-voice .neo-range { --slider: var(--cyan); }
+.motion .neo-range { --slider: var(--yellow); }
+.mixer-strip .neo-range { --slider: var(--voice); }
+.master-level .neo-range { --slider: var(--cyan); }
+.session-controls .neo-range, .gen .neo-range { --slider: var(--magenta); }
+
+/* ---- toggle switch, replacing the tick box ---- */
+.fx-check input[type=checkbox], .export-check input[type=checkbox] {
+  appearance: none; -webkit-appearance: none;
+  position: relative; width: 34px; height: 18px; margin: 0; flex: none; cursor: pointer;
+  background: #16121f; box-shadow: inset 0 0 0 2px #2a2340, inset 2px 2px 0 #00000066;
+}
+.fx-check input[type=checkbox]::after, .export-check input[type=checkbox]::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px;
+  background: #4b4463; transition: transform .08s steps(2), background .08s;
+}
+.fx-check input[type=checkbox]:checked, .export-check input[type=checkbox]:checked {
+  box-shadow: inset 0 0 0 2px var(--cyan), inset 2px 2px 0 #00000044;
+  background: rgba(46,242,255,.10);
+}
+.fx-check input[type=checkbox]:checked::after, .export-check input[type=checkbox]:checked::after {
+  transform: translateX(16px); background: var(--cyan); box-shadow: 0 0 8px var(--cyan);
+}
+.fx-check input[type=checkbox]:focus-visible, .export-check input[type=checkbox]:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.fx-check em { font-style: normal; font-size: 10px; color: var(--muted); line-height: 1.3; }
+
+/* ---- sidebar row rhythm ---- */
+.fx-row { grid-template-columns: 86px minmax(0, 1fr) 30px; gap: 10px; align-items: center; min-height: 30px; }
+.fx-row > span { font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .09em; color: var(--muted); }
+.fx-row b { font-family: var(--mono); font-size: 11px; color: var(--yellow); text-align: right; font-variant-numeric: tabular-nums; }
+.fx-row .neo-select { grid-column: 2 / 4; }
+.fx-check { grid-template-columns: 86px auto minmax(0, 1fr); gap: 10px; }
+.fx { gap: 4px; }
+.fx-master { margin-top: 14px; padding-top: 12px; }
+
+/* the voice tag in the Effects heading takes that voice's colour */
+.fx-lane { font-family: var(--mono); font-weight: 600; font-size: 10px; letter-spacing: .06em; color: var(--voice-tint, var(--cyan)); }
+.panel-title { gap: 10px; }
+
+/* ---- generator + export fields ---- */
+.field > span { font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .09em; }
+.field { gap: 7px; }
+.tempo > span { font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .09em; }
+
+/* ---- final polish: one type system in the sidebar ---- */
+.fx-check em { font-size: 9px; letter-spacing: .04em; line-height: 1.35; }
+
+/* side-panel buttons read better in the mono face than stretched pixel type */
+.side .btn.wide, .export-actions .btn, #x-go {
+  font-family: var(--mono); font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; font-size: 11px; border-radius: 0;
+}
+.side .btn.wide { padding: 11px 14px; }
+.side-note, .saved-item, .track-meta b { font-family: var(--mono); }
+.side-note { font-size: 11px; }
+.track-meta .meta-grid > div > span, .track-meta > div > span { font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .09em; }
+.track-meta b { font-size: 12px; }
+.rack-hint { font-size: 11px; }
+
+/* keep the pixel face for headings only, matched in weight across sections */
+.panel-title { font-size: 12px; letter-spacing: .5px; }
+
+/* the dropdown's own value text, never a row label */
+.neo-select-value {
+  font-family: var(--mono); font-weight: 400; font-size: 12px;
+  letter-spacing: 0; text-transform: none; color: var(--text);
+}
+.fx-window .neo-select-value { font-size: 10px; }
+.motion .neo-select-value { font-size: 9px; }
