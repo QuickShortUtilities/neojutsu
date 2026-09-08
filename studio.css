@@ -207,3 +207,33 @@ button[aria-pressed=true].mini { background: #2ef2ff18; border-color: var(--cyan
 /* ---------- v0.4: import drop target ---------- */
 .roll-wrap.dragover { outline: 2px dashed var(--cyan); outline-offset: -2px; box-shadow: var(--glow-c); }
 .roll-wrap.dragover::after { content: 'drop .mid to import'; position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--pixel); font-size: 12px; color: var(--cyan); background: rgba(7,6,12,.6); pointer-events: none; }
+
+/* ---------- v0.5: six voices, export dialog ---------- */
+.dot.p3 { background: #5eff8f; box-shadow: 0 0 10px rgba(94,255,143,.55); }
+.dot.p4 { background: #ff9f43; box-shadow: 0 0 10px rgba(255,159,67,.55); }
+.k-glyph { font-family: var(--kanji); font-weight: 900; font-size: 1.35em; line-height: 1; }
+.mixer-strips { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.mixer-strip h3 { font-size: 10px; }
+
+.export-dialog {
+  border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(560px, 92vw);
+  background: var(--bg-2); color: var(--text); box-shadow: 0 30px 90px #000a;
+}
+.export-dialog::backdrop { background: rgba(5, 4, 9, .72); backdrop-filter: blur(3px); }
+.export-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+.export-head h2 { font-family: var(--pixel); font-size: 13px; display: flex; align-items: center; gap: 12px; }
+.export-head .k { font-family: var(--kanji); font-weight: 900; font-size: 22px; color: var(--magenta); text-shadow: var(--glow-m); }
+.export-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.export-summary { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 8px; background: var(--bg-3); border: 1px solid var(--line); }
+.export-summary b { font-size: 15px; }
+.export-summary span { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.export-grid .field { margin-bottom: 0; }
+.export-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.export-actions { display: flex; flex-direction: column; gap: 8px; }
+.export-actions .btn.wide { margin-top: 0; }
+#x-go { font-size: 12px; padding: 15px 20px; }
+.export-direct { display: flex; gap: 6px; justify-content: center; opacity: .5; }
+.export-direct .mini { font-size: 10px; padding: 4px 10px; }
+.export-direct:hover { opacity: 1; }
+@media (max-width: 760px) { .export-grid { grid-template-columns: 1fr; } .mixer-strips { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

@@ -8,19 +8,17 @@
 
   // =============== state ===============
   const TIE = NeoChip.TIE;
-  const LANES = ['p1', 'p2', 'tr', 'no'];
-  const COLORS = { p1: '#ff2e88', p2: '#2ef2ff', tr: '#8b5cf6', no: '#ffd23f' };
+  const LANES = NeoChip.VOICES;               // p1 p2 p3 p4 tr no
+  const MELODIC = NeoChip.MELODIC;
+  const COLORS = { p1: '#ff2e88', p2: '#2ef2ff', p3: '#5eff8f', p4: '#ff9f43', tr: '#8b5cf6', no: '#ffd23f' };
   const MIN_MIDI = 36, MAX_MIDI = 84;          // C2..C6
   const DRUMS = ['k', 's', 'h'];
   const DRUM_LABEL = { k: 'kick', s: 'snare', h: 'hat' };
   const ENGINE_LABEL = { kataA: 'kata-A', kataB: 'kata-B', kataC: 'kata-C' };
+  const LANE_NAME = { p1: 'Pulse 1', p2: 'Pulse 2', p3: 'Pulse 3', p4: 'Pulse 4', tr: 'Triangle', no: 'Noise' };
 
-  const defaultFx = () => ({
-    p1: { vib: 0, echo: 0, duty: null, slide: false, arp: null },
-    p2: { vib: 0, echo: 0, duty: null, slide: false, arp: null },
-    tr: { vib: 0, echo: 0, duty: null, slide: false, arp: null },
-    no: { echo: 0 },
-  });
+  const voiceFx = () => ({ vib: 0, trem: 0, echo: 0, duty: null, slide: false, arp: null, env: 'hold', inst: null });
+  const defaultFx = () => Object.fromEntries(LANES.map((l) => [l, l === 'no' ? { echo: 0 } : voiceFx()]));
   const defaultMaster = () => ({ crush: 0, echoDiv: '8d', echoFb: 0.35, volume: 1, swing: 0 });
   // chip-appropriate starting FX, applied on generate
   const CHIP_FX = {
@@ -38,22 +36,30 @@
   let saveTimer, restoredDraft = false;
 
   function blank(steps, bpm, chip) {
-    return { steps, bpm, chip, p1: Array(steps).fill(null), p2: Array(steps).fill(null), tr: Array(steps).fill(null), no: Array(steps).fill(null) };
+    const p = { steps, bpm, chip };
+    for (const l of LANES) p[l] = Array(steps).fill(null);
+    return p;
   }
   function normalize(p) {
-    if (!p || !Number.isInteger(p.steps) || p.steps < 16 || p.steps > 256 || p.steps % 16 || !NeoChip.CHIPS[p.chip]) throw new Error('Invalid pattern');
+    if (!p || !Number.isInteger(p.steps) || p.steps < 16 || p.steps > 512 || p.steps % 16 || !NeoChip.CHIPS[p.chip]) throw new Error('Invalid pattern');
     p = JSON.parse(JSON.stringify(p));
     const bounded = (v, min, max, fallback) => typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fallback;
     p.bpm = bounded(p.bpm, 80, 220, 150);
     const defaults = defaultFx(); p.fx ||= {}; p.mix ||= {};
     for (const l of LANES) {
-      if (!Array.isArray(p[l]) || p[l].length !== p.steps) throw new Error('Invalid voice');
+      if (!Array.isArray(p[l]) || p[l].length !== p.steps) {
+        if (l === 'p3' || l === 'p4') p[l] = Array(p.steps).fill(null);   // added in v0.5
+        else throw new Error('Invalid voice');
+      }
       p[l] = p[l].map(v => l === 'no' ? (DRUMS.includes(v) ? v : null) : (Number.isInteger(v) && v >= -1 && v <= 127 ? v : null));
       p.fx[l] = Object.assign(defaults[l], p.fx[l] || {});
       for (const k of ['vib', 'echo']) p.fx[l][k] = bounded(p.fx[l][k], 0, 1, 0);
       p.fx[l].duty = [.125, .25, .5].includes(p.fx[l].duty) ? p.fx[l].duty : null;
       p.fx[l].slide = !!p.fx[l].slide;
       p.fx[l].arp = NeoChip.ARPS[p.fx[l].arp] ? p.fx[l].arp : null;
+      p.fx[l].trem = bounded(p.fx[l].trem, 0, 1, 0);
+      p.fx[l].env = NeoChip.ENVS[p.fx[l].env] ? p.fx[l].env : 'hold';
+      p.fx[l].inst = NeoChip.INSTRUMENTS[p.fx[l].inst] ? p.fx[l].inst : null;
       const m = p.mix[l] || {};
       p.mix[l] = { volume: bounded(m.volume, 0, 1, 1), pan: bounded(m.pan, -1, 1, 0), mute: !!m.mute, solo: !!m.solo };
     }
@@ -141,6 +147,40 @@
       p.no[s] = d;
     }
   }
+  // p3 = counter-melody under the lead, p4 = sustained pad or sub-octave bass.
+  // Both stay sparse so six voices read as an arrangement, not mud.
+  function layers(p, r, prog, degToMidi, mood, opts) {
+    const steps = p.steps;
+    for (let bar = 0; bar < steps / 16; bar++) {
+      const chord = prog[bar % prog.length], b0 = bar * 16;
+      // counter-melody: answers on the off-beats where the lead doesn't strike.
+      // A held lead note (TIE) is fine to play under; only its attacks are avoided.
+      const answers = [2, 6, 10, 14], tones = [chord + 4, chord + 2, chord + 7, chord + 4];
+      const attacks = (i) => p.p1[i] != null && p.p1[i] !== TIE;
+      answers.forEach((s, i) => {
+        if (attacks(b0 + s)) return;
+        if (r() > .75) return;                        // an occasional rest, so it breathes
+        p.p3[b0 + s] = degToMidi(tones[i], mood.oct - 1);
+        if (s + 1 < 16 && !attacks(b0 + s + 1)) p.p3[b0 + s + 1] = TIE;
+      });
+      // pad: root and fifth held across the bar, or a sub octave on sparse moods
+      if (mood.sustain) {
+        p.p4[b0] = degToMidi(chord, -1 + mood.oct);
+        for (let k = 1; k < 16; k++) p.p4[b0 + k] = TIE;
+      } else if (r() < .6) {
+        p.p4[b0] = degToMidi(chord, -2 + mood.oct);
+        for (let k = 1; k < 8; k++) p.p4[b0 + k] = TIE;
+      }
+    }
+    // give the new voices their own colour
+    p.fx.p3.inst = mood.sustain ? 'fmorgan' : 'pulse25';
+    p.fx.p3.env = 'pluck'; p.fx.p3.echo = Math.max(p.fx.p3.echo, .15);
+    p.fx.p4.inst = mood.sustain ? 'fmorgan' : 'fmbass';
+    p.fx.p4.env = 'pad'; p.fx.p4.trem = mood.sustain ? .2 : 0;
+    p.mix.p3.volume = .55; p.mix.p3.pan = -.35;
+    p.mix.p4.volume = .5;  p.mix.p4.pan = .35;
+  }
+
   function setup(opts) {
     const r = rng(opts.engine + ':' + opts.seed);
     const steps = opts.bars * 16;
@@ -190,6 +230,7 @@
       else if (s % 8 === 0 || (s % 8 === 6 && r() < .5)) p.p2[s] = degToMidi(chord + 2, mood.oct);
     }
     if (mood.sustain) { sustain(p.p1, 4); sustain(p.p2, mood.arp ? 1 : 8); sustain(p.tr, 2); }
+    layers(p, r, prog, degToMidi, mood, opts);
     drums(p, r, KITS[mood.drums], steps);
     return p;
   }
@@ -226,6 +267,7 @@
     for (let k = last + 1; k < steps; k++) p.p1[k] = TIE;
     // kata-B likes slide + vibrato on the lead whatever the chip
     Object.assign(p.fx.p1, { slide: true, vib: Math.max(p.fx.p1.vib, 0.3) });
+    layers(p, r, prog, degToMidi, mood, opts);
     drums(p, r, KITS[mood.drums], steps);
     return p;
   }
@@ -254,6 +296,7 @@
     p.fx.p2.arp = quality(lastChord) === 'pow' ? 'pow' : quality(prog[0]);
     p.fx.p1.echo = Math.max(p.fx.p1.echo, 0.2);
     p.master.swing = mood.drums === 'light' ? 0.25 : 0;
+    layers(p, r, prog, degToMidi, mood, opts);
     drums(p, r, KITS[mood.drums === 'sparse' ? 'light' : mood.drums], steps);
     return p;
   }
@@ -306,7 +349,7 @@
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); restore(e.shiftKey); }
     else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); restore(true); }
     else if (!e.metaKey && !e.ctrlKey && !e.altKey) {
-      if (['1','2','3','4'].includes(e.key)) document.querySelectorAll('.lane')[+e.key - 1].click();
+      if (['1','2','3','4','5','6'].includes(e.key)) document.querySelectorAll('.lane')[+e.key - 1]?.click();
       if (e.key.toLowerCase() === 'l') $('loop-toggle').click();
     }
   });
@@ -319,7 +362,8 @@
   document.querySelector('.lane-tabs').addEventListener('keydown', e => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return; e.preventDefault();
     const tabs = [...document.querySelectorAll('.lane')], current = tabs.indexOf(document.activeElement);
-    const index = e.key === 'Home' ? 0 : e.key === 'End' ? 3 : (current + (e.key === 'ArrowRight' ? 1 : 3)) % 4;
+    const n = tabs.length;
+    const index = e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : (current + (e.key === 'ArrowRight' ? 1 : n - 1)) % n;
     tabs[index].focus(); tabs[index].click();
   });
   $('t-clear').addEventListener('click', () => { snapshot(); pattern[lane].fill(null); });
@@ -351,17 +395,24 @@
   }
 
   // ---- fx panel
-  const fxVib = $('fx-vib'), fxEcho = $('fx-echo'), fxDuty = $('fx-duty'), fxSlide = $('fx-slide'), fxArp = $('fx-arp');
+  const fxVib = $('fx-vib'), fxTrem = $('fx-trem'), fxEcho = $('fx-echo'), fxDuty = $('fx-duty'), fxSlide = $('fx-slide'), fxArp = $('fx-arp');
+  const fxInst = $('fx-inst'), fxEnv = $('fx-env');
   const fxCrush = $('fx-crush'), fxDiv = $('fx-echodiv'), fxFb = $('fx-echofb'), fxSwing = $('fx-swing');
-  const LANE_NAME = { p1: 'Pulse 1', p2: 'Pulse 2', tr: 'Triangle', no: 'Noise' };
+  for (const [id, label] of Object.entries(NeoChip.INSTRUMENTS)) fxInst.add(new Option(label.label, id));
+  for (const [id, label] of Object.entries(NeoChip.ENVS)) fxEnv.add(new Option(label, id));
+
   function syncFx() {
     const f = pattern.fx[lane], melodic = lane !== 'no';
     $('fx-lane-name').textContent = LANE_NAME[lane];
     fxVib.value = Math.round((f.vib || 0) * 100); $('fx-vib-v').textContent = fxVib.value;
+    fxTrem.value = Math.round((f.trem || 0) * 100); $('fx-trem-v').textContent = fxTrem.value;
+    fxInst.value = f.inst || ''; fxEnv.value = f.env || 'hold';
+    $('fx-inst-row').hidden = $('fx-env-row').hidden = $('fx-trem-row').hidden = !melodic;
     fxEcho.value = Math.round((f.echo || 0) * 100); $('fx-echo-v').textContent = fxEcho.value;
     fxDuty.value = f.duty ? String(f.duty) : ''; fxSlide.checked = !!f.slide;
     fxVib.closest('.fx-row').hidden = !melodic;
-    $('fx-duty-row').hidden = !(melodic && NeoChip.CHIPS[pattern.chip][lane].type === 'pulse');
+    const effType = f.inst ? NeoChip.INSTRUMENTS[f.inst].type : NeoChip.voiceCfg(pattern.chip, lane).type;
+    $('fx-duty-row').hidden = !(melodic && effType === 'pulse' && !f.inst);
     $('fx-slide-row').hidden = !melodic;
     $('fx-arp-row').hidden = !melodic; fxArp.value = f.arp || '';
     fxCrush.value = Math.round(pattern.master.crush * 100); $('fx-crush-v').textContent = fxCrush.value;
@@ -369,6 +420,9 @@
     fxSwing.value = Math.round(pattern.master.swing * 100); $('fx-swing-v').textContent = fxSwing.value;
   }
   fxArp.addEventListener('change', () => { pattern.fx[lane].arp = fxArp.value || null; });
+  fxTrem.addEventListener('input', () => { pattern.fx[lane].trem = fxTrem.value / 100; $('fx-trem-v').textContent = fxTrem.value; });
+  fxInst.addEventListener('change', () => { pattern.fx[lane].inst = fxInst.value || null; syncFx(); });
+  fxEnv.addEventListener('change', () => { pattern.fx[lane].env = fxEnv.value; });
   fxSwing.addEventListener('input', () => { pattern.master.swing = fxSwing.value / 100; $('fx-swing-v').textContent = fxSwing.value; });
   fxVib.addEventListener('input', () => { pattern.fx[lane].vib = fxVib.value / 100; $('fx-vib-v').textContent = fxVib.value; });
   fxEcho.addEventListener('input', () => { pattern.fx[lane].echo = fxEcho.value / 100; $('fx-echo-v').textContent = fxEcho.value; engine.setMix(pattern); });
@@ -571,22 +625,25 @@
       { t: 0, bytes: [0xff, 0x51, 0x03, (mpq >> 16) & 255, (mpq >> 8) & 255, mpq & 255] },
       { t: 0, bytes: [0xff, 0x58, 0x04, 4, 2, 24, 8] },
     ]);
-    const prog = { p1: 80, p2: 80, tr: 38 };
-    if (p.chip === 'c64') prog.p1 = 81;
-    if (p.chip === 'genesis') { prog.p1 = 87; prog.p2 = 88; prog.tr = 39; }
+    const prog = { p1: 80, p2: 80, p3: 80, p4: 80, tr: 38 };
+    if (p.chip === 'c64') { prog.p1 = 81; prog.p4 = 81; }
+    if (p.chip === 'genesis') { prog.p1 = 87; prog.p2 = 88; prog.p3 = 98; prog.p4 = 16; prog.tr = 39; }
     const anySolo = LANES.some(l => p.mix[l].solo);
     const midiMix = l => ({ volume: Math.round((p.mix[l].mute || (anySolo && !p.mix[l].solo) ? 0 : p.mix[l].volume * p.master.volume) * 127), pan: Math.round((p.mix[l].pan + 1) * 63.5) });
-    const tracks = [meta, laneTrack(p.p1, 0, prog.p1, 'Pulse 1', p.fx.p1, midiMix('p1')), laneTrack(p.p2, 1, prog.p2, 'Pulse 2', p.fx.p2, midiMix('p2')), laneTrack(p.tr, 2, prog.tr, 'Triangle', p.fx.tr, midiMix('tr')), drumTrack(p.no, midiMix('no'))];
+    // MIDI channel 9 is percussion, so melodic voices use 0-5 and skip it
+    const chan = { p1: 0, p2: 1, p3: 2, p4: 3, tr: 4 };
+    const tracks = [meta, ...MELODIC.map((l) => laneTrack(p[l], chan[l], prog[l], LANE_NAME[l], p.fx[l], midiMix(l))), drumTrack(p.no, midiMix('no'))];
     const header = [...str('MThd'), ...u32(6), ...u16(1), ...u16(tracks.length), ...u16(TPQ)];
     return new Uint8Array([...header, ...tracks.flat()]);
   }
-  $('x-midi').addEventListener('click', () => {
+  function exportMidi() {
     const title = (xTitle.value.trim() || 'neojutsu-track').replace(/[^\w\- ]+/g, '') || 'neojutsu-track';
     const blob = new Blob([toMidi(pattern, title)], { type: 'audio/midi' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${title}.mid`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     flash('MIDI downloaded');
-  });
+  }
+  $('x-midi').addEventListener('click', exportMidi);
 
   // =============== share link + saved ===============
   function encode(p) { return btoa(unescape(encodeURIComponent(JSON.stringify(p)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
@@ -623,11 +680,12 @@
   function syncLength() { xLen.textContent = `${pattern.steps / 16} bars · ${(pattern.steps * 60 / pattern.bpm / 4).toFixed(1)}s`; }
   function syncCopy() {
     const target = $('copy-target');
+    if (!target.options.length) for (const l of MELODIC) target.add(new Option('To ' + LANE_NAME[l], l));
     for (const option of target.options) option.disabled = option.value === lane;
     if (target.value === lane) target.value = [...target.options].find(o => !o.disabled).value;
     target.disabled = $('t-duplicate').disabled = lane === 'no';
     $('t-shift-up').disabled = $('t-shift-dn').disabled = lane === 'no';
-    $('t-double').disabled = pattern.steps >= 256;
+    $('t-double').disabled = pattern.steps >= 512;
   }
   $('t-duplicate').addEventListener('click', () => {
     const target = $('copy-target').value; if (lane === 'no' || target === lane) return;
@@ -635,7 +693,7 @@
     flash(`${LANE_NAME[lane]} copied to ${LANE_NAME[target]} · Undo to restore`);
   });
   $('t-double').addEventListener('click', () => {
-    if (pattern.steps >= 256) return; snapshot();
+    if (pattern.steps >= 512) return; snapshot();
     for (const l of LANES) pattern[l] = [...pattern[l], ...pattern[l]];
     pattern.steps *= 2; pattern.loop.end = pattern.steps / 16; syncUI();
   });
@@ -698,7 +756,7 @@
     $('position').textContent = `${String(Math.floor(step / 16) + 1).padStart(2, '0')} : ${String(Math.floor(step % 16 / 4) + 1).padStart(2, '0')}`;
   }
   // Capture an edit before input handlers mutate state; group slider drags into one undo.
-  const editable = '#bpm, #x-title, #g-chip, #fx-voice input, #fx-voice select, .fx-master input, .fx-master select, .mixer input';
+  const editable = '#bpm, #x-title, #g-chip, #fx-voice input, #fx-voice select, .fx-master input, .fx-master select, .mixer input, .export-body select, .export-body input';
   let activeControl = null, lastControlTime = 0;
   for (const event of ['input', 'change']) document.addEventListener(event, e => {
     if (!e.target.matches(editable)) return;
@@ -730,6 +788,30 @@
   for (const ev of ['dragleave', 'drop']) dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
   dropZone.addEventListener('drop', (e) => { const f = [...e.dataTransfer.files].find((x) => /\.midi?$/i.test(x.name)); if (f) importMidi(f); else flash('Drop a .mid file'); });
 
+  // =============== export dialog ===============
+  const dialog = $('export-dialog'), xFormat = $('x-format'), xRepeat = $('x-repeat');
+  function syncExport() {
+    const fmt = xFormat.value, audio = fmt !== 'midi';
+    $('x-quality-field').hidden = fmt !== 'mp3';
+    $('x-tail-field').hidden = !audio;
+    $('x-repeat-field').hidden = !audio;
+    $('x-go-label').textContent = `Export ${fmt.toUpperCase()}`;
+    const bars = $('x-range').value === 'loop' && pattern.loop.enabled
+      ? pattern.loop.end - pattern.loop.start + 1 : pattern.steps / 16;
+    const reps = audio ? +xRepeat.value : 1;
+    const secs = bars * 16 * 60 / pattern.bpm / 4 * reps;
+    $('export-summary').innerHTML =
+      `<b>${trackTitle || 'neojutsu-track'}</b><span>${NeoChip.CHIPS[pattern.chip].label} · ${bars} bar${bars === 1 ? '' : 's'}` +
+      `${reps > 1 ? ` ×${reps}` : ''} · ${pattern.bpm} BPM · ${secs.toFixed(1)}s</span>`;
+    $('x-note').textContent = fmt === 'midi'
+      ? 'Notes, tempo and controllers only. Arpeggios and crush are not in MIDI; the receiving instrument makes the sound.'
+      : 'Rendered through the same chip synth you hear, effects included.';
+  }
+  $('open-export').addEventListener('click', () => { syncExport(); dialog.showModal(); });
+  for (const id of ['x-format', 'x-range', 'x-repeat']) $(id).addEventListener('change', syncExport);
+  $('x-go').addEventListener('click', () => (xFormat.value === 'midi' ? exportMidi() : exportAudio(xFormat.value)));
+  dialog.addEventListener('close', () => { $('export-progress').hidden = true; });
+
   // =============== audio export ===============
   let exporting = false, downloadURL;
   async function exportAudio(format) {
@@ -739,14 +821,21 @@
     const quality = +$('x-quality').value;
     if ($('x-range').value === 'loop') p.loop.enabled = true;
     const options = { selection: $('x-range').value === 'loop', tail: $('x-tail').checked };
-    $('x-mp3').disabled = $('x-wav').disabled = true;
+    const reps = Math.max(1, +($('x-repeat')?.value || 1));
+    if (reps > 1) {                                    // tile the chosen range, then render it whole
+      const b = NeoChip.loopBounds(options.selection ? p : { ...p, loop: { enabled: false } });
+      for (const l of LANES) { const slice = p[l].slice(b.start, b.end); p[l] = Array.from({ length: reps }, () => slice).flat(); }
+      p.steps = (b.end - b.start) * reps; p.loop = { enabled: false, start: 1, end: p.steps / 16 };
+      options.selection = false;
+    }
+    $('x-go').disabled = $('x-mp3').disabled = $('x-wav').disabled = true;
     $('export-progress').hidden = false; $('x-progress').value = 5; $('export-label').textContent = 'Rendering chip audio…';
-    $('x-mp3').textContent = 'Rendering…';
+    $('x-go-label').textContent = 'Rendering…';
     try {
       await new Promise(resolve => setTimeout(resolve, 30));
       const buffer = await NeoChip.render(p, options);
       $('export-label').textContent = `Encoding ${format.toUpperCase()}…`;
-      const progress = value => { $('x-progress').value = 20 + value * 80; $('x-mp3').textContent = `Exporting ${Math.round(20 + value * 80)}%`; };
+      const progress = value => { $('x-progress').value = 20 + value * 80; $('x-go-label').textContent = `Exporting ${Math.round(20 + value * 80)}%`; };
       const blob = format === 'mp3' ? await NeoExport.mp3(buffer, quality, progress) : NeoExport.wav(buffer);
       if (downloadURL) URL.revokeObjectURL(downloadURL);
       downloadURL = URL.createObjectURL(blob);
@@ -754,7 +843,7 @@
       $('x-progress').value = 100; $('export-label').textContent = `${format.toUpperCase()} ready · ${(blob.size / 1024).toFixed(0)} KB`;
       flash(`${format.toUpperCase()} exported · ${buffer.duration.toFixed(1)}s`);
     } catch (error) { $('export-label').textContent = 'Export failed. Please try again.'; flash(error.message || 'Audio export failed.'); }
-    finally { exporting = false; $('x-mp3').disabled = $('x-wav').disabled = false; $('x-mp3').textContent = '↓ Export MP3'; }
+    finally { exporting = false; $('x-go').disabled = $('x-mp3').disabled = $('x-wav').disabled = false; syncExport(); }
   }
   $('x-mp3').addEventListener('click', () => exportAudio('mp3'));
   $('x-wav').addEventListener('click', () => exportAudio('wav'));

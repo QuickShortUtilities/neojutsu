@@ -1,13 +1,14 @@
 /* ============================================================
    NEO術 — MIDI import
-   Parse a Standard MIDI File and squeeze it onto four chip voices:
-   the three busiest melodic parts become Pulse 1 (highest), Pulse 2,
-   Triangle (lowest); channel 10 becomes Noise. Quantised to 16ths,
-   durations kept as ties, capped at 16 bars.
+   Parse a Standard MIDI File and squeeze it onto the chip voices:
+   the busiest melodic parts fill Pulse 1-4 (highest first) and Triangle
+   (lowest); channel 10 becomes Noise. Quantised to 16ths, durations
+   kept as ties, capped at 32 bars.
    ============================================================ */
 (() => {
   'use strict';
-  const TIE = -1, MIN_MIDI = 36, MAX_MIDI = 84, MAX_BARS = 16;
+  const TIE = -1, MIN_MIDI = 36, MAX_MIDI = 84, MAX_BARS = 32;
+  const VOICES = ['p1', 'p2', 'p3', 'p4', 'tr', 'no'];
 
   function parse(bytes) {
     const d = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -62,16 +63,16 @@
     // group by track+channel, rank by note count, keep the three busiest
     const groups = {};
     for (const n of melodic) (groups[`${n.track}:${n.ch}`] ||= []).push(n);
-    const ranked = Object.values(groups).sort((a, b) => b.length - a.length).slice(0, 3);
+    const ranked = Object.values(groups).sort((a, b) => b.length - a.length).slice(0, 5);
     ranked.sort((a, b) => avg(b) - avg(a));      // highest part first
     const lastStep = Math.max(...all.map((n) => n.s + n.len));
     const bars = Math.max(1, Math.min(MAX_BARS, Math.ceil(lastStep / 16)));
     const steps = bars * 16;
-    const lane = () => Array(steps).fill(null);
-    const p = { steps, bpm: Math.max(80, Math.min(220, parsed.bpm)), chip: opts.chip || 'nes', p1: lane(), p2: lane(), tr: lane(), no: lane() };
-    const names = ['p1', 'p2', 'tr'];
-    // With fewer than three parts, put the lowest in the triangle anyway
-    const slots = ranked.length === 1 ? ['p1'] : ranked.length === 2 ? ['p1', 'tr'] : names;
+    const p = { steps, bpm: Math.max(80, Math.min(220, parsed.bpm)), chip: opts.chip || 'nes' };
+    for (const v of VOICES) p[v] = Array(steps).fill(null);
+    // The lowest part always goes to the triangle bass; the rest fill the pulses top-down.
+    const SLOTS = { 1: ['p1'], 2: ['p1', 'tr'], 3: ['p1', 'p2', 'tr'], 4: ['p1', 'p2', 'p3', 'tr'], 5: ['p1', 'p2', 'p3', 'p4', 'tr'] };
+    const slots = SLOTS[ranked.length] || SLOTS[5];
     ranked.forEach((g, i) => fill(p[slots[i]], g, slots[i] === 'tr' ? 'low' : 'high', steps));
     for (const n of drumsIn) { if (n.s >= steps) continue; const k = drumKind(n.pitch); if (k && (!p.no[n.s] || k === 'k')) p.no[n.s] = k; }
     return { pattern: p, parts: ranked.length, drums: drumsIn.length > 0, truncated: lastStep > steps };

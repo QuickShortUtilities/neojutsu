@@ -39,7 +39,7 @@
         <label class="tempo"><span>BPM <b id="bpm-val">150</b></span><input type="range" id="bpm" min="80" max="220" value="150" aria-label="Playback tempo"></label>
         <output id="position" aria-label="Playback position">01 : 01</output>
       </div>
-      <div class="session-actions"><button class="mini" id="toggle-inspector" aria-expanded="true" aria-controls="inspector" type="button">Effects &amp; files</button><button class="btn btn-export" id="x-mp3" type="button">↓ Export MP3</button></div>
+      <div class="session-actions"><button class="mini" id="toggle-inspector" aria-expanded="true" aria-controls="inspector" type="button">Effects &amp; files</button><button class="btn btn-export" id="open-export" type="button"><span class="k-glyph">出</span> Export</button></div>
     </section>
     <!-- ===== left: generate ===== -->
     <aside class="panel gen">
@@ -100,7 +100,7 @@
         <label class="field">
           <span>Bars</span>
           <select id="g-bars">
-            <option value="2">2</option><option value="4" selected>4</option><option value="8">8</option><option value="16">16</option>
+            <option value="2">2</option><option value="4" selected>4</option><option value="8">8</option><option value="16">16</option><option value="32">32</option>
           </select>
         </label>
         <label class="field">
@@ -130,6 +130,8 @@
         <div class="lane-tabs" role="tablist" aria-label="Channel to edit">
           <button class="lane active" data-lane="p1" role="tab" aria-selected="true"><span class="dot p1"></span>Pulse 1</button>
           <button class="lane" data-lane="p2" role="tab" aria-selected="false"><span class="dot p2"></span>Pulse 2</button>
+          <button class="lane" data-lane="p3" role="tab" aria-selected="false"><span class="dot p3"></span>Pulse 3</button>
+          <button class="lane" data-lane="p4" role="tab" aria-selected="false"><span class="dot p4"></span>Pulse 4</button>
           <button class="lane" data-lane="tr" role="tab" aria-selected="false"><span class="dot tr"></span>Triangle</button>
           <button class="lane" data-lane="no" role="tab" aria-selected="false"><span class="dot no"></span>Noise</button>
         </div>
@@ -145,8 +147,8 @@
 
       <div class="edit-options">
         <div class="loop-controls"><button class="mini" id="loop-toggle" type="button" aria-pressed="false" title="Toggle selected loop (L)">↻ Loop</button><label>From bar <select id="loop-start" aria-label="Loop start bar"></select></label><label>to <select id="loop-end" aria-label="Loop end bar"></select></label></div>
-        <div class="copy-controls"><label class="sr-only" for="copy-target">Duplicate notes to voice</label><select id="copy-target"><option value="p2">To Pulse 2</option><option value="p1">To Pulse 1</option><option value="tr">To Triangle</option></select><button class="mini" id="t-duplicate" type="button" title="Replace the target voice with a copy of the selected voice; undo is available">Copy voice</button></div>
-        <button class="mini" id="t-double" type="button" title="Repeat the full pattern, up to 16 bars">Double pattern</button>
+        <div class="copy-controls"><label class="sr-only" for="copy-target">Duplicate notes to voice</label><select id="copy-target"></select><button class="mini" id="t-duplicate" type="button" title="Replace the target voice with a copy of the selected voice; undo is available">Copy voice</button></div>
+        <button class="mini" id="t-double" type="button" title="Repeat the full pattern, up to 32 bars">Double pattern</button>
         <button class="mini" id="t-import" type="button" title="Load a .mid file onto the four chip voices (or drop one on the roll)">⇪ Import MIDI</button>
         <input type="file" id="midi-file" accept=".mid,.midi,audio/midi" hidden>
       </div>
@@ -157,7 +159,7 @@
       <p class="roll-help">
         <b>Click</b> places a note. <b>Drag right from a note</b> holds it (a sustained note).
         <b>Drag</b> across empty cells to paint. <b>Right-click</b> or <b>shift-click</b> erases.
-        <b>Space</b> plays · <b>1–4</b> select a voice · <b>L</b> toggles the loop · <b>⌘/Ctrl Z</b> undoes.
+        <b>Space</b> plays · <b>1–6</b> select a voice · <b>L</b> toggles the loop · <b>⌘/Ctrl Z</b> undoes.
         <b>Drop any .mid</b> on the roll to hear it on the chips.
       </p>
       <section class="mixer" aria-label="Track mixer"><div class="mixer-heading"><h2>Mix your sound</h2><span>Volume · pan · mute · solo</span></div><div class="mixer-strips" id="mixer-strips"></div><label class="master-level">Master <input type="range" id="mix-master" min="0" max="100" value="100"><output id="mix-master-value">100%</output></label></section>
@@ -168,7 +170,14 @@
     <aside class="panel side" id="inspector">
       <h2 class="panel-title"><span class="k">効</span> Effects <small id="fx-lane-name" class="fx-lane">Pulse 1</small></h2>
       <div class="fx" id="fx-voice">
+        <label class="fx-row" id="fx-inst-row"><span>Instrument</span>
+          <select id="fx-inst"><option value="">chip default</option></select>
+        </label>
+        <label class="fx-row" id="fx-env-row"><span>Envelope</span>
+          <select id="fx-env"></select>
+        </label>
         <label class="fx-row"><span>Vibrato</span><input type="range" id="fx-vib" min="0" max="100" value="0"><b id="fx-vib-v">0</b></label>
+        <label class="fx-row" id="fx-trem-row"><span>Tremolo</span><input type="range" id="fx-trem" min="0" max="100" value="0"><b id="fx-trem-v">0</b></label>
         <label class="fx-row"><span>Echo send</span><input type="range" id="fx-echo" min="0" max="100" value="0"><b id="fx-echo-v">0</b></label>
         <label class="fx-row" id="fx-duty-row"><span>Duty</span>
           <select id="fx-duty">
@@ -207,9 +216,8 @@
         <label class="fx-row"><span>Swing</span><input type="range" id="fx-swing" min="0" max="100" value="0"><b id="fx-swing-v">0</b></label>
       </div>
 
-      <h2 class="panel-title mt"><span class="k">出</span> Export</h2>
+      <h2 class="panel-title mt"><span class="k">札</span> Track</h2>
       <div class="track-meta">
-
         <div class="meta-grid">
           <div><span>Chip</span><b id="x-chip">NES · 2A03</b></div>
           <div><span>Length</span><b id="x-len">4 bars</b></div>
@@ -217,20 +225,50 @@
           <div><span>Model</span><b id="x-engine">kata-A</b></div>
         </div>
       </div>
-      <label class="field"><span>MP3 quality</span><select id="x-quality"><option value="128">128 kbps · compact</option><option value="192" selected>192 kbps · balanced</option><option value="320">320 kbps · highest</option></select></label>
-      <label class="field"><span>Audio range</span><select id="x-range"><option value="full">Full pattern</option><option value="loop">Selected bars</option></select></label>
-      <label class="export-check"><input id="x-tail" type="checkbox" checked> Include effects tail</label>
-      <div class="export-progress" id="export-progress" hidden><label for="x-progress" id="export-label">Preparing audio…</label><progress id="x-progress" max="100" value="0"></progress></div>
-      <a id="x-download" class="btn btn-ghost wide" hidden>Download again</a>
-      <button class="btn btn-ghost wide" id="x-wav" type="button">↓ Download WAV</button>
-      <button class="btn btn-ghost wide" id="x-midi" type="button">⬇ Download MIDI</button>
-      <button class="btn btn-ghost wide" id="x-link" type="button">⧉ Copy share link</button>
       <p class="side-note" id="x-status" role="status" aria-live="polite"></p>
 
       <h2 class="panel-title mt"><span class="k">庫</span> Saved</h2>
       <div class="saved" id="saved-list"><p class="side-note">Nothing saved yet.</p></div>
       <button class="btn btn-ghost wide" id="x-save" type="button">＋ Save to browser</button>
     </aside>
+
+    <dialog class="export-dialog" id="export-dialog" aria-labelledby="export-title">
+      <form method="dialog" class="export-head">
+        <h2 id="export-title"><span class="k">出</span> Export</h2>
+        <button class="mini" value="close" aria-label="Close export">✕</button>
+      </form>
+      <div class="export-body">
+        <div class="export-summary" id="export-summary"></div>
+        <div class="export-grid">
+          <label class="field"><span>Format</span>
+            <select id="x-format">
+              <option value="mp3">MP3 · plays anywhere</option>
+              <option value="wav">WAV · lossless</option>
+              <option value="midi">MIDI · notes only</option>
+            </select>
+          </label>
+          <label class="field" id="x-quality-field"><span>MP3 quality</span>
+            <select id="x-quality"><option value="128">128 kbps · compact</option><option value="192" selected>192 kbps · balanced</option><option value="320">320 kbps · highest</option></select>
+          </label>
+          <label class="field"><span>Range</span>
+            <select id="x-range"><option value="full">Full pattern</option><option value="loop">Selected bars</option></select>
+          </label>
+          <label class="field" id="x-repeat-field"><span>Repeats</span>
+            <select id="x-repeat"><option value="1">×1</option><option value="2">×2</option><option value="4">×4</option><option value="8">×8</option></select>
+          </label>
+        </div>
+        <label class="export-check" id="x-tail-field"><input id="x-tail" type="checkbox" checked> Include effects tail</label>
+        <p class="export-note" id="x-note"></p>
+        <div class="export-progress" id="export-progress" hidden><label for="x-progress" id="export-label">Preparing audio…</label><progress id="x-progress" max="100" value="0"></progress></div>
+        <div class="export-actions">
+          <button class="btn btn-export wide" id="x-go" type="button"><span class="k-glyph">出</span> <span id="x-go-label">Export MP3</span></button>
+          <a id="x-download" class="btn btn-ghost wide" hidden>Download again</a>
+          <button class="btn btn-ghost wide" id="x-link" type="button">⧉ Copy share link</button>
+        </div>
+        <!-- kept for direct access and tests -->
+        <div class="export-direct"><button class="mini" id="x-mp3" type="button">MP3</button><button class="mini" id="x-wav" type="button">WAV</button><button class="mini" id="x-midi" type="button">MIDI</button></div>
+      </div>
+    </dialog>
   </main>
 
   <footer class="footer studio-footer">

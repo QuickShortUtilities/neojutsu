@@ -14,7 +14,7 @@ with sync_playwright() as p:
  page.on('pageerror',lambda e: errors.append(str(e)))
  page.goto(ROOT.as_uri()+'/studio.html'); page.wait_for_timeout(700)
  assert not errors, errors
- assert page.locator('#mixer-strips .mixer-strip').count()==4
+ assert page.locator('#mixer-strips .mixer-strip').count()==6
  page.screenshot(path=str(ARTIFACTS/'neojutsu-studio-desktop.png'),full_page=True)
  def draft():
   page.wait_for_timeout(500)
@@ -49,6 +49,9 @@ with sync_playwright() as p:
  page.locator('#t-undo').click(); assert draft()['pattern']['fx']['p1']['vib']==0
  page.locator('#toggle-inspector').click(); assert not page.locator('#inspector').is_visible()
  page.locator('#toggle-inspector').click()
+ page.locator('#open-export').click(); page.wait_for_timeout(150)
+ assert page.locator('#export-dialog').is_visible()
+ assert '出' in page.locator('#open-export').inner_text()
  page.locator('#x-range').select_option('loop'); page.locator('#x-tail').uncheck()
  with page.expect_download(timeout=60000) as dl: page.locator('#x-mp3').click()
  download=dl.value; download.save_as(str(ARTIFACTS/'neojutsu-test.mp3'))
@@ -98,7 +101,8 @@ with sync_playwright() as p:
  assert result['left']>1e-5 and result['right']<1e-10,result
  assert abs(result['solo']-result['left'])<1e-6,result
  assert abs(result['decoded']-result['duration'])<.1 and result['channels']==2 and result['decodedEnergy']>1e-5,result
- page.locator('body').click(position={'x':5,'y':5}); page.keyboard.press('Digit3'); assert page.locator('.lane.active').get_attribute('data-lane')=='tr'
+ page.locator('body').click(position={'x':5,'y':5}); page.keyboard.press('Digit3'); assert page.locator('.lane.active').get_attribute('data-lane')=='p3'
+ page.keyboard.press('Digit5'); assert page.locator('.lane.active').get_attribute('data-lane')=='tr'
  page.set_viewport_size({'width':390,'height':844}); page.screenshot(path=str(ARTIFACTS/'neojutsu-studio-mobile.png'),full_page=True)
  assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'mobile page overflow'
  assert page.evaluate("document.querySelector('#roll').clientWidth >= 684"), 'notes too narrow on mobile'

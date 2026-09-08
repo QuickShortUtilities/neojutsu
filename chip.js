@@ -16,10 +16,30 @@
   const TIE = -1;
 
   const CHIPS = {
-    nes:     { label: 'NES · 2A03',          p1: { type: 'pulse', duty: .125, gain: .16 }, p2: { type: 'pulse', duty: .5, gain: .11 }, tr: { type: 'tri', gain: .30 }, noise: 'lofi' },
-    gameboy: { label: 'Game Boy · LR35902',  p1: { type: 'pulse', duty: .25,  gain: .15 }, p2: { type: 'pulse', duty: .5, gain: .11 }, tr: { type: 'wave', gain: .22 }, noise: 'lofi' },
-    genesis: { label: 'Genesis · YM2612',    p1: { type: 'fm', ratio: 2, index: 3.2, gain: .17 }, p2: { type: 'fm', ratio: 3, index: 1.6, gain: .11 }, tr: { type: 'fm', ratio: 1, index: .9, gain: .26 }, noise: 'hifi' },
-    c64:     { label: 'C64 · SID',           p1: { type: 'saw', cutoff: 1400, gain: .14 }, p2: { type: 'pulse', duty: .3, gain: .10 }, tr: { type: 'tri', gain: .26 }, noise: 'lofi' },
+    nes: {
+      label: 'NES · 2A03',
+      p1: { type: 'pulse', duty: .125, gain: .16 }, p2: { type: 'pulse', duty: .5, gain: .11 },
+      p3: { type: 'pulse', duty: .25, gain: .10 },  p4: { type: 'pulse', duty: .5, gain: .09 },
+      tr: { type: 'tri', gain: .30 }, noise: 'lofi',
+    },
+    gameboy: {
+      label: 'Game Boy · LR35902',
+      p1: { type: 'pulse', duty: .25, gain: .15 },  p2: { type: 'pulse', duty: .5, gain: .11 },
+      p3: { type: 'pulse', duty: .125, gain: .10 }, p4: { type: 'wave', gain: .10 },
+      tr: { type: 'wave', gain: .22 }, noise: 'lofi',
+    },
+    genesis: {
+      label: 'Genesis · YM2612',
+      p1: { type: 'fm', ratio: 2, index: 3.2, gain: .17 }, p2: { type: 'fm', ratio: 3, index: 1.6, gain: .11 },
+      p3: { type: 'fm', ratio: 3.5, index: 2.2, gain: .10 }, p4: { type: 'fm', ratio: 1, index: .35, gain: .09 },
+      tr: { type: 'fm', ratio: 1, index: .9, gain: .26 }, noise: 'hifi',
+    },
+    c64: {
+      label: 'C64 · SID',
+      p1: { type: 'saw', cutoff: 1400, gain: .14 }, p2: { type: 'pulse', duty: .3, gain: .10 },
+      p3: { type: 'pulse', duty: .125, gain: .10 }, p4: { type: 'saw', cutoff: 900, gain: .08 },
+      tr: { type: 'tri', gain: .26 }, noise: 'lofi',
+    },
   };
 
   const midiToHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -28,6 +48,25 @@
   // for faking chords on a one-note voice.
   const ARPS = { maj: [0, 4, 7], min: [0, 3, 7], oct: [0, 12], pow: [0, 7, 12], sus: [0, 5, 7], dim: [0, 3, 6], maj7: [0, 4, 7, 11] };
   const ARP_FRAME = 1 / 60;
+
+  // Voices: four pulse-style melodic voices, a triangle bass, a noise channel.
+  const VOICES = ['p1', 'p2', 'p3', 'p4', 'tr', 'no'];
+  const MELODIC = ['p1', 'p2', 'p3', 'p4', 'tr'];
+  // Instrument overrides a voice can use on any chip
+  const INSTRUMENTS = {
+    pulse12: { label: 'Pulse 12.5%',  type: 'pulse', duty: .125 },
+    pulse25: { label: 'Pulse 25%',    type: 'pulse', duty: .25 },
+    pulse50: { label: 'Square 50%',   type: 'pulse', duty: .5 },
+    tri:     { label: 'Triangle',     type: 'tri' },
+    wave:    { label: 'GB wave 4-bit', type: 'wave' },
+    saw:     { label: 'SID saw',      type: 'saw', cutoff: 1400 },
+    fmlead:  { label: 'FM lead',      type: 'fm', ratio: 2, index: 3.2 },
+    fmbass:  { label: 'FM bass',      type: 'fm', ratio: 1, index: .9 },
+    fmbell:  { label: 'FM bell',      type: 'fm', ratio: 3.5, index: 2.2 },
+    fmorgan: { label: 'FM organ',     type: 'fm', ratio: 1, index: .35 },
+  };
+  const ENVS = { hold: 'Hold', pluck: 'Pluck', pad: 'Pad', stab: 'Stab' };
+  const voiceCfg = (chip, ch) => CHIPS[chip][ch] || CHIPS[chip].p2;
 
   function create(context = null) {
     let ctx = null, master = null, analyser = null, noiseBuf = null, shaper = null;
@@ -63,7 +102,7 @@
       const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 3200;
       delay.connect(tone).connect(fbGain).connect(delay);
       tone.connect(wetGain).connect(master);
-      for (const ch of ['p1', 'p2', 'tr', 'no']) {
+      for (const ch of VOICES) {
         const gain = ctx.createGain(), pan = ctx.createStereoPanner(), meter = ctx.createAnalyser(), send = ctx.createGain();
         meter.fftSize = 256; send.gain.value = 0;
         gain.connect(pan).connect(meter).connect(master);
@@ -112,13 +151,26 @@
     // fx: { vib: 0..1, echo: 0..1, duty: number|null, slide: bool }, prevMidi: for slide
     function note(chipName, ch, midi, t, dur, fx = {}, prevMidi = null) {
       if (midi == null || midi < 0) return;
-      const cfg = CHIPS[chipName][ch];
+      const base = voiceCfg(chipName, ch);
+      const cfg = fx.inst && INSTRUMENTS[fx.inst] ? { ...base, ...INSTRUMENTS[fx.inst], gain: base.gain } : base;
       const hz = midiToHz(midi);
       const g = ctx.createGain();
+      const peak = cfg.gain;
+      // envelope shapes, all short like chip envelopes
+      const env = fx.env || 'hold';
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(cfg.gain, t + 0.004);
-      g.gain.setTargetAtTime(cfg.gain * 0.7, t + 0.03, 0.05);
+      if (env === 'pad') { g.gain.linearRampToValueAtTime(peak, t + Math.min(0.12, dur * 0.4)); }
+      else { g.gain.linearRampToValueAtTime(peak, t + 0.004); }
+      if (env === 'pluck') { g.gain.setTargetAtTime(peak * 0.25, t + 0.02, 0.06); }
+      else if (env === 'stab') { g.gain.setTargetAtTime(0, t + 0.05, 0.03); }
+      else { g.gain.setTargetAtTime(peak * 0.7, t + 0.03, 0.05); }
       g.gain.setTargetAtTime(0, t + dur - 0.02, 0.012);
+      // tremolo: volume LFO
+      if (fx.trem > 0) {
+        const lfo = trackSource(ctx.createOscillator()), depth = ctx.createGain();
+        lfo.frequency.value = 6; depth.gain.value = peak * 0.5 * fx.trem;
+        lfo.connect(depth).connect(g.gain); lfo.start(t); lfo.stop(t + dur + 0.05);
+      }
       output(g, ch);
 
       const stopAt = t + dur + 0.05;
@@ -244,7 +296,7 @@
   function sequencer(engine, getPattern, onStep) {
     let playing = false, step = 0, nextTime = 0, timer = null;
     const lookahead = 0.12, interval = 25;
-    const prev = { p1: null, p2: null, tr: null };
+    const prev = {};
     function applyMaster(p) {
       engine.setMix(p);
       const m = p.master || {};
@@ -261,7 +313,8 @@
       while (nextTime < engine.now + lookahead) {
         const i = step;
         const t = nextTime + swingOffset(p, i, spb);
-        for (const ch of ['p1', 'p2', 'tr']) {
+        for (const ch of MELODIC) {
+          if (!p[ch]) continue;
           const { v, len } = noteInRange(p[ch], i, bounds);
           if (v == null || v === TIE) continue;
           const dur = len > 1 ? len * spb * 0.97 : spb * (ch === 'p2' ? 0.55 : ch === 'tr' ? 0.8 : 0.9);
@@ -275,7 +328,7 @@
       }
     }
     return {
-      start() { if (playing) return; engine.ensure(); playing = true; step = loopBounds(getPattern()).start; nextTime = engine.now + 0.05; prev.p1 = prev.p2 = prev.tr = null; timer = setInterval(schedule, interval); },
+      start() { if (playing) return; engine.ensure(); playing = true; step = loopBounds(getPattern()).start; nextTime = engine.now + 0.05; for (const ch of MELODIC) prev[ch] = null; timer = setInterval(schedule, interval); },
       stop() { playing = false; clearInterval(timer); engine.silence(); },
       get playing() { return playing; },
       get step() { return step; },
@@ -304,10 +357,11 @@
     const offline = new OfflineAudioContext(2, Math.ceil((duration + release) * 44100), 44100);
     const synth = create(offline); synth.ensure(); synth.setMix(p, true);
     synth.setCrush(p.master?.crush || 0); synth.setEcho(echo, feedback);
-    const prev = { p1: null, p2: null, tr: null };
+    const prev = {};
     for (let i = bounds.start; i < bounds.end; i++) {
       const t = (i - bounds.start) * stepTime + swingOffset(p, i, stepTime);
-      for (const ch of ['p1', 'p2', 'tr']) {
+      for (const ch of MELODIC) {
+        if (!p[ch]) continue;
         const { v, len } = noteInRange(p[ch], i, bounds); if (v == null || v === TIE) continue;
         const dur = len > 1 ? len * stepTime * .97 : stepTime * (ch === 'p2' ? .55 : ch === 'tr' ? .8 : .9);
         synth.note(p.chip, ch, v, t, dur, p.fx?.[ch] || {}, prev[ch]); prev[ch] = v;
@@ -317,5 +371,5 @@
     return offline.startRendering();
   }
 
-  window.NeoChip = { CHIPS, TIE, ARPS, create, sequencer, midiToHz, noteLength, echoSeconds, loopBounds, swingOffset, render };
+  window.NeoChip = { CHIPS, TIE, ARPS, VOICES, MELODIC, INSTRUMENTS, ENVS, voiceCfg, create, sequencer, midiToHz, noteLength, echoSeconds, loopBounds, swingOffset, render };
 })();

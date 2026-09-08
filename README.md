@@ -38,16 +38,16 @@ The model is trained separately and is not in this repo yet.
 
 Open `studio.html` directly or serve the repository with a static host. The studio includes:
 
-- A session bar with title, playback, tempo and MP3 export.
+- A session bar with title, playback, tempo and an 出 Export dialog (format, quality, range, repeats, with a live summary of what you'll get).
 - MP3 at 128, 192 or 320 kbps, stereo WAV, and MIDI downloads. MP3/WAV render the same chip synth and effects used for playback, with full-pattern or selected-bar export and optional effects tails. MIDI includes volume/pan controllers; the receiving instrument determines its sound.
-- Four hardware voices with volume, pan, mute, solo, measured level meters and master volume.
-- Selected-bar looping, copying a melodic voice into another voice, and doubling patterns up to 16 bars. Copying replaces the target notes and effects and can be undone.
+- **Six voices** (Pulse 1-4, Triangle, Noise) with volume, pan, mute, solo, level meters and master volume.
+- Selected-bar looping, copying a melodic voice into another voice, and doubling patterns up to 32 bars. Copying replaces the target notes and effects and can be undone.
 - Undo/redo for notes, generation, title, mixer and effects. Space plays/stops, 1–4 select voices, L toggles looping, and Cmd/Ctrl Z / Shift Z undo/redo. Arrow keys navigate voice tabs.
 - Browser autosave and named saves. A valid share link takes precedence over a draft. Storage failures are shown in the UI.
 - A collapsible effects/file panel and a responsive layout.
-- **MIDI import**: drop any `.mid` on the roll (or use Import MIDI). The three busiest melodic parts map to Pulse 1 (highest), Pulse 2 and Triangle (lowest); channel 10 becomes Noise. Quantised to 16ths, durations kept as held notes, first 16 bars. `midi-import.js` is dependency-free.
-- **Arpeggio** per voice (major, minor, power, sus4, dim, maj7, octave), stepped at 60 Hz like the hardware trick. **Swing** on the master.
-- Three rule engines: 型 kata-A (motif & variation), kata-B (chords & sustain), kata-C (arcade arps). The trained model plugs in as another engine.
+- **MIDI import**: drop any `.mid` on the roll (or use Import MIDI). The busiest melodic parts map to Pulse 1-4 (highest first) and Triangle (lowest); channel 10 becomes Noise. Quantised to 16ths, durations kept as held notes, first 32 bars. `midi-import.js` is dependency-free.
+- Per-voice **instrument** (10: pulse widths, triangle, GB wave, SID saw, FM lead/bass/bell/organ), **envelope** (hold, pluck, pad, stab), **vibrato**, **tremolo**, **slide**, **arpeggio** (stepped at 60 Hz like the hardware trick) and **echo send**. **Swing** and **bit-crush** on the master.
+- Three rule engines: 型 kata-A (motif & variation), kata-B (chords & sustain), kata-C (arcade arps). Each arranges across all six voices, adding a counter-melody and a pad. The trained model plugs in as another engine.
 
 Audio stays in the browser. `audio-export.js` loads the bundled, unmodified `vendor/lame-1.2.1.min.js` on the first MP3 export; no encoding service is used. See `vendor/README.md` and the included LAME license files.
 
