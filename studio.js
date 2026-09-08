@@ -413,7 +413,25 @@
 
   // ---- fx panel
   const fxVib = $('fx-vib'), fxTrem = $('fx-trem'), fxEcho = $('fx-echo'), fxDuty = $('fx-duty'), fxSlide = $('fx-slide'), fxArp = $('fx-arp');
-  const fxInst = $('fx-inst'), fxEnv = $('fx-env');
+  const fxInst = $('fx-inst'), fxEnv = $('fx-env'), fxPreset = $('fx-preset');
+  // Presets are grouped by hardware family so the list stays readable.
+  {
+    fxPreset.add(new Option('— custom —', ''));
+    for (const g of NeoPresets.GROUPS) {
+      const grp = document.createElement('optgroup'); grp.label = g.label;
+      for (const [id, p] of Object.entries(g.presets)) {
+        const o = new Option(p.name, id); o.title = p.blurb; grp.append(o);
+      }
+      fxPreset.append(grp);
+    }
+  }
+  fxPreset.addEventListener('change', () => {
+    const id = fxPreset.value; if (!id) return;
+    snapshot();
+    NeoPresets.apply(pattern.fx[lane], id);
+    syncFx(); queueSave();
+    flash(`${NeoPresets.ALL[id].name} → ${LANE_NAME[lane]}`);
+  });
   const fxSwing = $('fx-swing');
   for (const [id, label] of Object.entries(NeoChip.INSTRUMENTS)) fxInst.add(new Option(label.label, id));
   for (const [id, label] of Object.entries(NeoChip.ENVS)) fxEnv.add(new Option(label, id));
@@ -426,6 +444,9 @@
     fxTrem.value = Math.round((f.trem || 0) * 100); $('fx-trem-v').textContent = fxTrem.value;
     fxInst.value = f.inst || ''; fxEnv.value = f.env || 'hold';
     $('fx-inst-row').hidden = $('fx-env-row').hidden = $('fx-trem-row').hidden = !melodic;
+    $('fx-preset-row').hidden = !melodic;
+    if (melodic) fxPreset.value = NeoPresets.match(f);      // empty selects "custom"
+    if (window.NeoSelect) NeoSelect.refreshAll($('fx-voice'));
     fxEcho.value = Math.round((f.echo || 0) * 100); $('fx-echo-v').textContent = fxEcho.value;
     fxDuty.value = f.duty ? String(f.duty) : ''; fxSlide.checked = !!f.slide;
     fxVib.closest('.fx-row').hidden = !melodic;

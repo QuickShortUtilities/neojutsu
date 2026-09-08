@@ -5,6 +5,8 @@
 .studio-body { overflow-x: hidden; }
 .brand-sub { font-family: var(--pixel); font-size: 9px; color: var(--cyan); margin-left: 10px; letter-spacing: 2px; align-self: center; }
 .engine-badge { font-family: var(--mono); font-size: 11px; color: var(--yellow); border: 1px dashed rgba(255,210,63,.4); padding: 4px 8px; border-radius: 4px; }
+.nav-soon { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 14px; font-weight: 500; cursor: default; }
+.nav-soon i { font-family: var(--pixel); font-style: normal; font-size: 7px; letter-spacing: 1px; text-transform: uppercase; color: var(--yellow); border: 1px dashed rgba(255,210,63,.4); padding: 3px 5px; border-radius: 3px; }
 
 .studio {
   position: relative; z-index: 1;
@@ -115,6 +117,7 @@
 .studio-body { --bg-2: #100f19; --bg-3: #181622; }
 .studio-body .scanlines { opacity: .16; pointer-events: none; }
 .studio-body .nav { padding-top: 16px; padding-bottom: 16px; }
+.studio-body .nav-links { gap: 16px; }
 .studio { max-width: 1680px; grid-template-columns: 238px minmax(0, 1fr) 270px; gap: 14px; align-items: start; }
 .panel { border-color: #292536; box-shadow: 0 12px 40px #0002; border-radius: 14px; }
 .session-bar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 18px 22px; background: linear-gradient(110deg, #1d142b, #10141e); }
@@ -192,6 +195,7 @@ button[aria-pressed=true].mini { background: #2ef2ff18; border-color: var(--cyan
   .studio-body .nav-links .nav-gh { display: none; }
   .engine-badge { font-size: 9px; }
   .studio-body .brand-sub { display: none; }
+  .nav-soon { display: none; }
   .bar-ruler span { font-size: 9px; padding-left: 1px; }
 }
 @media (prefers-reduced-motion: reduce) { .studio * { transition: none !important; } }
@@ -562,3 +566,12 @@ input[type=range].neo-range::-moz-range-thumb {
 }
 .fx-window .neo-select-value { font-size: 10px; }
 .motion .neo-select-value { font-size: 9px; }
+
+/* grouped menus */
+.neo-group {
+  font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--cyan); padding: 9px 10px 5px 8px;
+  border-top: 1px solid #ffffff10; margin-top: 3px;
+}
+.neo-group:first-child { border-top: 0; margin-top: 0; }
+.neo-select-menu { max-height: 52vh; }

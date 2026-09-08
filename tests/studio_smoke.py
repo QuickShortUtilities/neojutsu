@@ -72,6 +72,26 @@ with sync_playwright() as p:
  window_rate_default=page.evaluate("NeoRack.SPEC.phaser.params.rate.def")
  # --- effects rack: dock, windows, dials, motion ---
  assert page.locator('#fx-dock .rack-btn').count()==8
+ # --- voice presets ---
+ assert page.locator('#fx-preset-row').is_visible()
+ groups=page.evaluate("[...document.querySelectorAll('#fx-preset optgroup')].map(g=>g.label)")
+ assert len(groups)==5, groups
+ page.locator('.neo-select:has(#fx-preset) .neo-select-btn').click(); page.wait_for_timeout(120)
+ assert page.locator('.neo-select-menu:not([hidden]) .neo-group').count()==5, 'menu should show family headings'
+ page.locator('.neo-select-menu:not([hidden]) .neo-option', has_text='SAGA-01 FM Lead').click()
+ page.wait_for_timeout(150)
+ fx=draft()['pattern']['fx']['p1']
+ assert fx['inst']=='fmlead' and fx['slide'] is True and fx['vib']==0.5, fx
+ assert page.locator('.neo-select:has(#fx-preset) .neo-select-value').inner_text()=='SAGA-01 FM Lead'
+ # nudging a dial away from the preset shows custom again
+ page.locator('#fx-vib').fill('12'); page.locator('#fx-vib').dispatch_event('input'); page.wait_for_timeout(150)
+ page.locator('.lane[data-lane=p2]').click(); page.locator('.lane[data-lane=p1]').click()
+ assert page.locator('.neo-select:has(#fx-preset) .neo-select-value').inner_text()=='— custom —'
+ # presets do not apply to the noise voice
+ page.locator('.lane[data-lane=no]').click()
+ assert not page.locator('#fx-preset-row').is_visible()
+ page.locator('.lane[data-lane=p1]').click()
+ page.locator('#t-undo').click(); page.locator('#t-undo').click()
  # a lit unit is shown by its outline alone, in its own colour, with no LED
  assert page.locator('#fx-dock .rack-led').count()==0
  echo_ring=page.evaluate("getComputedStyle(document.querySelector('.rack-btn[data-fx=echo]')).boxShadow")

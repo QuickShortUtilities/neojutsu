@@ -22,6 +22,10 @@
       <span class="brand-sub">STUDIO</span>
     </a>
     <nav class="nav-links">
+      <a class="nav-studio" href="studio.html" aria-current="page">Audio Studio</a>
+      <span class="nav-soon" title="Music videos from your track — in development">Video Studio<i>soon</i></span>
+      <span class="nav-soon" title="Playable chip games scored by your track — in development">Game Studio<i>soon</i></span>
+      <span class="nav-soon" title="Chain the studios into repeatable runs — in development">Automation Studio<i>soon</i></span>
       <span class="engine-badge" id="engine-badge" title="The generator currently running">engine: 型 kata-A</span>
       <a href="index.html#how">About</a>
     </nav>
@@ -181,6 +185,9 @@
     <aside class="panel side" id="inspector">
       <h2 class="panel-title"><span class="k">効</span> Effects <small id="fx-lane-name" class="fx-lane">Pulse 1</small></h2>
       <div class="fx" id="fx-voice">
+        <label class="fx-row" id="fx-preset-row"><span>Preset</span>
+          <select id="fx-preset" aria-label="Voice preset"></select>
+        </label>
         <label class="fx-row" id="fx-inst-row"><span>Instrument</span>
           <select id="fx-inst"><option value="">chip default</option></select>
         </label>
@@ -281,6 +288,7 @@
   </footer>
 
   <script src="neo-select.js"></script>
+  <script src="voice-presets.js"></script>
   <script src="fx-rack.js"></script>
   <script src="chip.js"></script>
   <script src="audio-export.js"></script>

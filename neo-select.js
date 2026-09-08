@@ -72,24 +72,40 @@
     function buildMenu() {
       menu.replaceChildren();
       state.items = [];
-      [...select.options].forEach((opt, i) => {
+      // state.items is indexed by option, matching select.options, while
+      // optgroup headings are rendered between them as plain labels.
+      const addOption = (opt) => {
+        const i = [...select.options].indexOf(opt);
         const item = document.createElement('div');
         item.className = 'neo-option';
         item.setAttribute('role', 'option');
         item.setAttribute('aria-selected', String(i === select.selectedIndex));
         item.textContent = opt.textContent;
+        if (opt.title) item.title = opt.title;
         if (opt.disabled) { item.classList.add('is-disabled'); item.setAttribute('aria-disabled', 'true'); }
         if (i === select.selectedIndex) item.classList.add('is-selected');
         item.addEventListener('click', () => { if (!opt.disabled) choose(i); });
         item.addEventListener('pointerenter', () => highlight(i));
         menu.append(item);
-        state.items.push(item);
-      });
+        state.items[i] = item;
+      };
+      for (const node of select.children) {
+        if (node.tagName === 'OPTGROUP') {
+          const head = document.createElement('div');
+          head.className = 'neo-group';
+          head.setAttribute('role', 'presentation');
+          head.textContent = node.label;
+          menu.append(head);
+          [...node.children].forEach(addOption);
+        } else if (node.tagName === 'OPTION') {
+          addOption(node);
+        }
+      }
     }
     let active = -1;
     function highlight(i) {
-      if (i < 0 || i >= state.items.length) return;
-      state.items.forEach((el, n) => el.classList.toggle('is-active', n === i));
+      if (i < 0 || i >= state.items.length || !state.items[i]) return;
+      state.items.forEach((el, n) => el && el.classList.toggle('is-active', n === i));
       active = i;
       state.items[i].scrollIntoView({ block: 'nearest' });
     }
