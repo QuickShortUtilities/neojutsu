@@ -39,7 +39,7 @@
         return { r, stars: Array.from({ length: n }, () => ({ x: r() * 2 - 1, y: r() * 2 - 1, z: r(), c: r() })) };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h); }
         const cx = w / 2, cy = h / 2, warp = o.speed * (0.35 + env.level * 1.8);
         for (const st of s.stars) {
           st.z -= warp * o.step * 0.5; if (st.z <= 0.02) { st.z = 1; st.x = s.r() * 2 - 1; st.y = s.r() * 2 - 1; }
@@ -53,7 +53,7 @@
     },
 
     skyline: {
-      label: 'Skyline · parallax city', cat: 'cyber',
+      label: 'Skyline · parallax city', cat: 'cyber', solid: true,
       init(r, w, h, density) {
         const layers = [];
         for (let l = 0; l < 3; l++) {
@@ -69,7 +69,7 @@
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#0a0420'); sky.addColorStop(.32, '#5a1050');
         sky.addColorStop(.52, '#ff2e88'); sky.addColorStop(.70, '#ffd23f'); sky.addColorStop(1, '#ffd23f');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         g.fillStyle = '#ffffff';
         for (const st of s.stars) g.fillRect((st.x * w) | 0, (st.y * h) | 0, 1, 1);
         const moonR = 8 + env.bass * 9;
@@ -107,12 +107,14 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h * 0.55);
         sky.addColorStop(0, '#12002a'); sky.addColorStop(1, '#ff2e88');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h * 0.55);
-        g.fillStyle = '#07030f'; g.fillRect(0, h * 0.55, w, h * 0.45);
         const sunR = h * 0.16 + env.bass * h * 0.05;
-        g.fillStyle = '#ffd23f'; g.beginPath(); g.arc(w / 2, h * 0.5, sunR, 0, 7); g.fill();
-        g.fillStyle = '#07030f';
-        for (let i = 0; i < 6; i++) g.fillRect(0, h * 0.42 + i * (sunR / 3.4), w, Math.max(1, sunR / 12));
+        if (o.bg !== false) {
+          g.fillStyle = sky; g.fillRect(0, 0, w, h * 0.55);
+          g.fillStyle = '#07030f'; g.fillRect(0, h * 0.55, w, h * 0.45);
+          g.fillStyle = '#ffd23f'; g.beginPath(); g.arc(w / 2, h * 0.5, sunR, 0, 7); g.fill();
+          g.fillStyle = '#07030f';
+          for (let i = 0; i < 6; i++) g.fillRect(0, h * 0.42 + i * (sunR / 3.4), w, Math.max(1, sunR / 12));
+        }
 
         s.z = (s.z + o.speed * (0.4 + env.level * 1.2) * o.step * 1.8) % 1;
         const hz = h * 0.55;
@@ -134,7 +136,7 @@
       label: 'Scope · waveform', cat: 'abstract',
       init(r, w, h) { return { phase: r() * 6.28 }; },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h); }
         g.strokeStyle = '#1b1430'; g.lineWidth = 1;
         for (let x = 0; x < w; x += 16) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
         for (let y = 0; y < h; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
@@ -160,7 +162,7 @@
       label: 'Bars · spectrum', cat: 'abstract',
       init(r, w, h, density) { return { n: Math.round(lerp(8, 40, density)) }; },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h); }
         const n = s.n, bw = w / n, f = env.freq;
         for (let i = 0; i < n; i++) {
           const v = f.length ? f[Math.floor((i / n) * f.length * 0.7)] / 255 : Math.abs(Math.sin(t * 2 + i));
@@ -179,7 +181,7 @@
       label: 'Tunnel · rings', cat: 'abstract',
       init(r, w, h) { return { z: 0, spin: r() * 6.28 }; },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h); }
         s.z += o.speed * (0.4 + env.bass * 1.6) * o.step * 1.2;
         s.spin += o.speed * o.step * 0.24;
         const cx = w / 2 + Math.sin(t * 0.6) * w * 0.06, cy = h / 2 + Math.cos(t * 0.5) * h * 0.06;
@@ -199,7 +201,7 @@
     },
 
     plasma: {
-      label: 'Plasma · field', cat: 'abstract',
+      label: 'Plasma · field', cat: 'abstract', solid: true,
       init(r, w, h) { return { a: r() * 10, b: r() * 10 }; },
       draw(g, w, h, t, env, s, o) {
         const img = g.getImageData(0, 0, w, h), d = img.data;
@@ -223,7 +225,7 @@
         return { r, drops: Array.from({ length: n }, () => ({ x: r(), y: r(), v: 0.3 + r() * 1.2, len: 3 + Math.floor(r() * 9) })) };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = 'rgba(5,4,10,.35)'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = 'rgba(5,4,10,.35)'; g.fillRect(0, 0, w, h); }
         for (const d of s.drops) {
           d.y += d.v * o.speed * (0.4 + env.level * 1.4) * o.step * 0.6;
           if (d.y > 1.2) { d.y = -0.2; d.x = s.r(); }
@@ -246,7 +248,7 @@
         return { n, seeds: Array.from({ length: n }, () => r() * 6.28), spin: r() * 6.28 };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h); }
         const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2;
         s.spin += o.speed * o.step * 0.35;
         const inner = R * 0.4, f = env.freq;
@@ -279,7 +281,7 @@
         return { r, w, h, motes: Array.from({ length: n }, () => make(true)), make };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h); }
         const lift = 1 + env.level * 2.2;
         for (const m of s.motes) {
           m.x += m.vx * o.step * o.speed; m.y += m.vy * o.step * o.speed * lift;
@@ -304,7 +306,7 @@
                  shapes: Array.from({ length: 7 }, () => ({ d: .1 + r() * .8, a: r() * 1.2, s: .04 + r() * .14, c: r() })) };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h); }
         s.spin += o.speed * o.step * 0.5;
         const cx = w / 2, cy = h / 2, R = Math.max(w, h) * .7;
         const cols = ['#ff2e88', '#2ef2ff', '#ffd23f', '#8b5cf6'];
@@ -324,7 +326,7 @@
     },
 
     fire: {
-      label: 'Fire · demoscene', cat: 'abstract',
+      label: 'Fire · demoscene', cat: 'abstract', solid: true,
       // The classic heat-buffer fire: seed the bottom row, average upward.
       init(r, w, h) { return { r, heat: new Uint8Array(w * h), w, h, acc: 0 }; },
       draw(g, w, h, t, env, s, o) {
@@ -357,7 +359,7 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#0a0420'); sky.addColorStop(1, '#2a0f3a');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         const cols = ['#ff2e88', '#2ef2ff', '#ffd23f', '#8b5cf6'];
         s.lines.forEach((L, i) => {
           const mid = h * (i + 1) / (s.lines.length + 1);
@@ -376,7 +378,7 @@
 
     // ---------------- RPG ----------------
     village: {
-      label: 'Village · rooftops', cat: 'rpg',
+      label: 'Village · rooftops', cat: 'rpg', solid: true,
       init(r, w, h, density) {
         const n = Math.round(lerp(5, 16, density));
         return { r, off: 0,
@@ -386,7 +388,7 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#1a1040'); sky.addColorStop(.55, '#c94f7c'); sky.addColorStop(1, '#ffd23f');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         g.fillStyle = '#fff6d8'; g.beginPath(); g.arc(w * .2, h * .3, 9 + env.bass * 6, 0, 7); g.fill();
         s.off += o.speed * o.step * 16 * (1 + env.level * .6);
         const base = h * .78;
@@ -423,7 +425,7 @@
     },
 
     overworld: {
-      label: 'Overworld · map', cat: 'rpg',
+      label: 'Overworld · map', cat: 'rpg', solid: true,
       init(r, w, h, density) {
         const N = 48, tiles = new Uint8Array(N * N);
         // Seeded clumps rather than pure noise, so terrain reads as regions.
@@ -471,7 +473,7 @@
       label: 'Dungeon · corridor', cat: 'rpg',
       init(r, w, h) { return { r, z: 0, flick: 0 }; },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#070509'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#070509'; g.fillRect(0, 0, w, h); }
         s.z += o.speed * o.step * .45 * (1 + env.level);
         const cx = w / 2, cy = h / 2;
         for (let i = 9; i >= 1; i--) {
@@ -508,8 +510,10 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h * .5);
         sky.addColorStop(0, '#0d1b45'); sky.addColorStop(1, '#ff8c42');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h * .5);
-        g.fillStyle = '#1d3a1a'; g.fillRect(0, h * .5, w, h * .5);
+        if (o.bg !== false) {
+          g.fillStyle = sky; g.fillRect(0, 0, w, h * .5);
+          g.fillStyle = '#1d3a1a'; g.fillRect(0, h * .5, w, h * .5);
+        }
         s.z += o.speed * o.step * (1.6 + env.level * 2.2);
         s.curve = Math.sin(t * .35 + s.phase) * .5;
         const hz = h * .5, road = (y) => {
@@ -550,7 +554,7 @@
           bands: Array.from({ length: 7 }, () => ({ y: r(), t: .04 + r() * .12 })) };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#05040f'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#05040f'; g.fillRect(0, 0, w, h); }
         for (const st of s.stars) {
           const tw = .5 + Math.sin(t * 2 + st.b * 9) * .5;
           g.fillStyle = `rgba(255,255,255,${.25 + tw * .75 * (env.treble + .5)})`;
@@ -580,7 +584,7 @@
       label: 'Corridor · ship', cat: 'scifi',
       init(r, w, h) { return { r, z: 0 }; },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#04060a'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#04060a'; g.fillRect(0, 0, w, h); }
         s.z += o.speed * o.step * .55 * (1 + env.level * 1.4);
         const cx = w / 2, cy = h / 2;
         for (let i = 10; i >= 1; i--) {
@@ -605,7 +609,7 @@
 
     // ---------------- MONSTER ----------------
     kaiju: {
-      label: 'Kaiju · city stomp', cat: 'monster',
+      label: 'Kaiju · city stomp', cat: 'monster', solid: true,
       init(r, w, h, density) {
         const n = Math.round(lerp(8, 22, density));
         return { r, off: 0, step: 0,
@@ -617,7 +621,7 @@
         // collapses to one tone once the palette snaps.
         sky.addColorStop(0, '#12021c'); sky.addColorStop(.3, '#a3204e');
         sky.addColorStop(.55, '#ff5b2e'); sky.addColorStop(1, '#ffd23f');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         s.off += o.speed * o.step * 10 * (1 + env.level);
         const base = h * .88;
         const span = s.blocks.reduce((a, b) => a + b.w + 4, 0);
@@ -671,7 +675,7 @@
           x: r(), y: .2 + r() * .7, z: .3 + r() * .7, blink: r() * 6, gap: .5 + r() * .8 })) };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#04030a'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#04030a'; g.fillRect(0, 0, w, h); }
         for (const p of s.pairs) {
           p.z += o.speed * o.step * .05 * (1 + env.level);
           if (p.z > 1.4) { p.z = .25; p.x = s.r(); p.y = .2 + s.r() * .7; }
@@ -692,7 +696,7 @@
 
     // ---------------- PLATFORMER ----------------
     hills: {
-      label: 'Hills · side-scroll', cat: 'platform',
+      label: 'Hills · side-scroll', cat: 'platform', solid: true,
       init(r, w, h, density) {
         const n = Math.round(lerp(3, 10, density));
         return { r, off: 0,
@@ -702,7 +706,7 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#3aa6ff'); sky.addColorStop(1, '#bfe9ff');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         s.off += o.speed * o.step * 26 * (1 + env.level * .8);
         for (const c of s.clouds) {
           const cx = ((c.x * w - s.off * .12) % (w + 40) + w + 40) % (w + 40) - 20;
@@ -740,7 +744,7 @@
           gems: Array.from({ length: Math.round(n / 2) }, () => ({ x: r() * 2, y: .3 + r() * .4, p: r() * 6 })) };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#0d0a14'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#0d0a14'; g.fillRect(0, 0, w, h); }
         s.off += o.speed * o.step * 22 * (1 + env.level);
         g.fillStyle = '#1c1526';
         for (const sp of s.spikes) {
@@ -776,7 +780,7 @@
           shots: [] };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#04030c'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#04030c'; g.fillRect(0, 0, w, h); }
         for (const st of s.stars) {
           st.y += st.v * o.speed * o.step * .6 * (1 + env.level);
           if (st.y > 1) { st.y = 0; st.x = s.r(); }
@@ -810,7 +814,7 @@
 
     // ---------------- CYBERPUNK ----------------
     alley: {
-      label: 'Alley · neon', cat: 'cyber',
+      label: 'Alley · neon', cat: 'cyber', solid: true,
       init(r, w, h, density) {
         const n = Math.round(lerp(4, 14, density));
         return { r, z: 0,
@@ -818,7 +822,7 @@
           drops: Array.from({ length: 50 }, () => ({ x: r(), y: r(), v: .6 + r() })) };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#06040d'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#06040d'; g.fillRect(0, 0, w, h); }
         s.z += o.speed * o.step * .22 * (1 + env.level);
         const cx = w / 2, cy = h * .46;
         const cols = ['#ff2e88', '#2ef2ff', '#ffd23f', '#8b5cf6'];
@@ -856,7 +860,7 @@
       label: 'Hologram · wireframe', cat: 'cyber',
       init(r, w, h) { return { r, ry: r() * 6.28, rx: 0 }; },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#03060a'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#03060a'; g.fillRect(0, 0, w, h); }
         s.ry += o.speed * o.step * .7; s.rx = Math.sin(t * .4) * .5;
         const R = Math.min(w, h) * .28 * (1 + env.bass * .18), cx = w / 2, cy = h * .46;
         const V = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
@@ -885,7 +889,7 @@
 
     // ---------------- STRATEGY ----------------
     isomap: {
-      label: 'Iso map · tactics', cat: 'strategy',
+      label: 'Iso map · tactics', cat: 'strategy', solid: true,
       init(r, w, h, density) {
         const N = 14, tiles = new Float32Array(N * N);
         for (let i = 0; i < N * N; i++) tiles[i] = r();
@@ -893,7 +897,7 @@
           () => ({ i: Math.floor(r() * N), j: Math.floor(r() * N), p: r() * 6, c: r() > .5 })) };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#080b12'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#080b12'; g.fillRect(0, 0, w, h); }
         s.ox += o.speed * o.step * 6 * (1 + env.level * .5);
         const TW = 16, TH = 8, N = s.N;
         const ox = w / 2 - s.ox % (TW * 2), oy = h * .28;
@@ -929,7 +933,7 @@
         return { r, cols, stack: new Array(cols).fill(0), y: -1, x: Math.floor(r() * cols), col: Math.floor(r() * 4), flash: 0 };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#07060e'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#07060e'; g.fillRect(0, 0, w, h); }
         const CW = w / s.cols, rows = Math.floor(h / CW);
         g.strokeStyle = 'rgba(255,255,255,.05)';
         for (let i = 0; i <= s.cols; i++) { g.beginPath(); g.moveTo(i * CW, 0); g.lineTo(i * CW, h); g.stroke(); }
@@ -958,7 +962,7 @@
 
     // ---------------- CHARACTERS ----------------
     walker: {
-      label: 'Walker · character', cat: 'people',
+      label: 'Walker · character', cat: 'people', solid: true,
       init(r, w, h, density) {
         return { r, off: 0, step: 0,
           hills: Array.from({ length: 5 }, () => ({ x: r(), s: .5 + r() })),
@@ -967,7 +971,7 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#241844'); sky.addColorStop(1, '#8a4a6a');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         s.off += o.speed * o.step * 24 * (1 + env.level * .6);
         g.fillStyle = '#160f28';
         for (const hl of s.hills) {
@@ -1019,7 +1023,7 @@
           ships: Array.from({ length: n }, () => ({ x: r() * 1.6, y: .15 + r() * .7, s: .5 + r() * 1.1, v: .5 + r() * .9, k: r() })) };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#04030c'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#04030c'; g.fillRect(0, 0, w, h); }
         for (const st of s.stars) {
           g.fillStyle = `rgba(210,230,255,${.2 + st.b * .6})`;
           g.fillRect((st.x * w) | 0, (st.y * h) | 0, 1, 1);
@@ -1059,7 +1063,7 @@
           ships: Array.from({ length: n }, () => ({ p: r() * 6.28, sp: .4 + r() * .8, rad: .18 + r() * .3, foe: r() > .5 })) };
       },
       draw(g, w, h, t, env, s, o) {
-        g.fillStyle = '#05040e'; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = '#05040e'; g.fillRect(0, 0, w, h); }
         g.fillStyle = 'rgba(200,220,255,.6)';
         for (const st of s.stars) g.fillRect((st.x * w) | 0, (st.y * h) | 0, 1, 1);
         const pos = sh => {
@@ -1095,7 +1099,7 @@
 
     // ---------------- BIOMES ----------------
     desert: {
-      label: 'Desert · dunes', cat: 'biome',
+      label: 'Desert · dunes', cat: 'biome', solid: true,
       init(r, w, h, density) {
         const n = Math.round(lerp(3, 7, density));
         return { r, off: 0, dunes: Array.from({ length: n }, (_, i) => ({ k: .012 + r() * .02, a: .04 + r() * .07, p: r() * 6.28, y: .5 + i * .09 })) };
@@ -1103,7 +1107,7 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#3d1f5c'); sky.addColorStop(.45, '#ff8c42'); sky.addColorStop(.72, '#ffd9a0');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         g.fillStyle = '#fff3c4';
         g.beginPath(); g.arc(w * .5, h * .52, 16 + env.bass * 8, 0, 7); g.fill();
         s.off += o.speed * o.step * 8 * (1 + env.level * .5);
@@ -1121,7 +1125,7 @@
     },
 
     pyramids: {
-      label: 'Pyramids · valley', cat: 'biome',
+      label: 'Pyramids · valley', cat: 'biome', solid: true,
       init(r, w, h, density) {
         const n = Math.round(lerp(2, 6, density));
         return { r, off: 0,
@@ -1132,7 +1136,7 @@
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#0e0a2e'); sky.addColorStop(.4, '#5b2a6e');
         sky.addColorStop(.62, '#ff9351'); sky.addColorStop(1, '#e0b070');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         g.fillStyle = '#fff';
         for (const st of s.stars) g.fillRect((st.x * w) | 0, (st.y * h) | 0, 1, 1);
         g.fillStyle = '#fff0c0';
@@ -1155,7 +1159,7 @@
     },
 
     jungle: {
-      label: 'Jungle · canopy', cat: 'biome',
+      label: 'Jungle · canopy', cat: 'biome', solid: true,
       init(r, w, h, density) {
         const n = Math.round(lerp(8, 26, density));
         return { r, off: 0,
@@ -1165,7 +1169,7 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#a7e06b'); sky.addColorStop(.5, '#3d8a3a'); sky.addColorStop(1, '#0e2b16');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         // shafts of light through the canopy
         g.fillStyle = 'rgba(230,255,170,.10)';
         for (let i = 0; i < 4; i++) {
@@ -1200,7 +1204,7 @@
     },
 
     tundra: {
-      label: 'Tundra · aurora', cat: 'biome',
+      label: 'Tundra · aurora', cat: 'biome', solid: true,
       init(r, w, h, density) {
         const n = Math.round(lerp(30, 150, density));
         return { r,
@@ -1211,7 +1215,7 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#050a24'); sky.addColorStop(1, '#1b3a5c');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         s.bands.forEach((b, i) => {
           g.strokeStyle = `rgba(${i % 2 ? 46 : 140},${i % 2 ? 242 : 255},${i % 2 ? 200 : 150},${.28 + env.level * .5})`;
           g.lineWidth = 3 + env.mid * 5;
@@ -1243,7 +1247,7 @@
     },
 
     volcano: {
-      label: 'Volcano · ash', cat: 'biome',
+      label: 'Volcano · ash', cat: 'biome', solid: true,
       init(r, w, h, density) {
         const n = Math.round(lerp(14, 60, density));
         return { r, glow: 0,
@@ -1252,7 +1256,7 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#1a0508'); sky.addColorStop(.55, '#5c1410'); sky.addColorStop(1, '#0d0406');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         const base = h * .8, cx = w * .5, ph = h * .46;
         s.glow += o.step * 2;
         const pulse = .6 + Math.sin(s.glow) * .2 + env.bass * .4;
@@ -1294,11 +1298,13 @@
         sky.addColorStop(0, '#20124a'); sky.addColorStop(.6, '#e0576b'); sky.addColorStop(1, '#ffb463');
         g.fillStyle = sky; g.fillRect(0, 0, w, h * .5);
         const hz = h * .5;
-        g.fillStyle = '#ffe9a8';
-        g.beginPath(); g.arc(w * .5, hz - 4, 14 + env.bass * 7, 0, 7); g.fill();
+        if (o.bg !== false) {
+          g.fillStyle = '#ffe9a8';
+          g.beginPath(); g.arc(w * .5, hz - 4, 14 + env.bass * 7, 0, 7); g.fill();
+        }
         const sea = g.createLinearGradient(0, hz, 0, h);
         sea.addColorStop(0, '#1b3f77'); sea.addColorStop(1, '#071a38');
-        g.fillStyle = sea; g.fillRect(0, hz, w, h - hz);
+        if (o.bg !== false) { g.fillStyle = sea; g.fillRect(0, hz, w, h - hz); }
         s.rows.forEach((row, i) => {
           const f = (i + 1) / s.rows.length;
           const y = hz + f * f * (h - hz);
@@ -1324,10 +1330,10 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h * .52);
         sky.addColorStop(0, '#08061c'); sky.addColorStop(1, '#3b1050');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h * .52);
         const hz = h * .52;
+        if (o.bg !== false) g.fillStyle = sky, g.fillRect(0, 0, w, hz);
         let cx0 = 0;
-        for (const b of s.city) {
+        for (const b of (o.bg !== false ? s.city : [])) {
           const bh = b.h * h;
           g.fillStyle = '#120a20'; g.fillRect(cx0, hz - bh, b.w, bh);
           if (b.lit > .5) {
@@ -1337,7 +1343,7 @@
           cx0 += b.w + 2;
           if (cx0 > w) break;
         }
-        g.fillStyle = '#0a0812'; g.fillRect(0, hz, w, h - hz);
+        if (o.bg !== false) { g.fillStyle = '#0a0812'; g.fillRect(0, hz, w, h - hz); }
         s.z += o.speed * o.step * (1.4 + env.level * 2);
         for (let y = hz; y < h; y++) {
           const f = (y - hz) / (h - hz);
@@ -1359,7 +1365,7 @@
     },
 
     oasis: {
-      label: 'Oasis · palms', cat: 'biome',
+      label: 'Oasis · palms', cat: 'biome', solid: true,
       init(r, w, h, density) {
         const n = Math.round(lerp(2, 7, density));
         return { r, off: 0, palms: Array.from({ length: n }, () => ({ x: r() * 1.4, s: .6 + r() * .8, lean: (r() - .5) * .5, d: .4 + r() * .6 })) };
@@ -1367,7 +1373,7 @@
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#1e3d8f'); sky.addColorStop(.5, '#7fc4e8'); sky.addColorStop(.72, '#ffe0a8');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         g.fillStyle = '#fff8d0';
         g.beginPath(); g.arc(w * .72, h * .22, 11 + env.bass * 6, 0, 7); g.fill();
         const base = h * .74;

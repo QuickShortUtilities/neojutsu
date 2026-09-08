@@ -40,7 +40,7 @@
 
   const newLayer = (over = {}) => Object.assign({
     on: true, mode: 'generate', scene: 'skyline', seed: window.NeoScene.randomSeed(),
-    speed: 1, density: .5, cut: 0, blend: 'source-over', opacity: 1, clipName: '',
+    speed: 1, density: .5, cut: 0, blend: 'source-over', opacity: 1, clipName: '', bg: true,
   }, over);
 
   // Runtime-only fields hang off the layer with a leading underscore and are
@@ -158,9 +158,14 @@
         ensureScene(L, key, rw, rh);
         topScene = key;
         sctx.save();
-        window.NeoScene.SCENES[L._key].draw(sctx, rw, rh, genTime, env, L._scene, { speed: L.speed, density: L.density, step });
+        // The first layer that draws is the backdrop and always paints one; the
+        // rest only do so if asked, otherwise they would erase what is beneath.
+        sctx.clearRect(0, 0, rw, rh);
+        window.NeoScene.SCENES[L._key].draw(sctx, rw, rh, genTime, env, L._scene,
+          { speed: L.speed, density: L.density, step, bg: drew === 0 ? true : L.bg !== false });
         sctx.restore();
       } else if (L._ready) {
+        sctx.clearRect(0, 0, rw, rh);
         sctx.imageSmoothingEnabled = true;
         sctx.drawImage(L._video, 0, 0, rw, rh);
       } else continue;
@@ -445,6 +450,7 @@
     $('v-mode').value = L.mode; $('v-scene').value = L.scene; $('v-seed').value = L.seed;
     $('v-speed').value = Math.round(L.speed * 100); $('v-density').value = Math.round(L.density * 100);
     $('v-cut').value = L.cut; $('v-blend').value = L.blend; $('v-opacity').value = Math.round(L.opacity * 100);
+    $('v-layer-bg').checked = L.bg !== false;
     $('v-scene-name').textContent = ((window.NeoScene.SCENES[L.scene] || {}).label || L.scene).split(' · ')[0];
     $('v-source-note').textContent = L.clipName ? `${L.clipName} · stays on your device` : 'Stays on your device. Nothing is uploaded.';
     window.NeoSelect?.refreshAll?.();
@@ -454,6 +460,7 @@
     L.mode = $('v-mode').value; L.scene = $('v-scene').value; L.seed = $('v-seed').value.trim();
     L.speed = +$('v-speed').value / 100; L.density = +$('v-density').value / 100;
     L.cut = +$('v-cut').value; L.blend = $('v-blend').value; L.opacity = +$('v-opacity').value / 100;
+    L.bg = $('v-layer-bg').checked;
     L._sig = '';
     renderLayers();
   }
@@ -673,6 +680,20 @@
     const L = layers[selected];
     $('v-import-block').hidden = L.mode !== 'import';
     $('v-gen-block').hidden = L.mode !== 'generate';
+    // Tell the user when a layer is quietly hiding everything below it - the
+    // commonest way a stack looks broken.
+    const first = layers.findIndex(x => x.on && (x.mode === 'generate' || x._ready));
+    const def = window.NeoScene.SCENES[L.scene] || {};
+    const covering = selected !== first && L.on && L.mode === 'generate'
+      && L.blend === 'source-over' && L.opacity > .92 && (def.solid || L.bg !== false);
+    const warn = $('v-layer-warn');
+    warn.hidden = !covering;
+    if (covering) {
+      warn.textContent = def.solid
+        ? `${(def.label || '').split(' · ')[0]} fills the whole frame, so it hides the layers below. Try the Add or Screen blend, or drop the opacity.`
+        : 'This layer is painting its own background over the ones below. Switch off Paint background, or change the blend.';
+    }
+    $('v-layer-bg').disabled = selected === first;
     $('v-empty').hidden = ready();
     $('v-scrub').disabled = !ready();
     if (gain) gain.gain.value = l.vol;
@@ -714,7 +735,7 @@
     });
     $('v-layer-add').addEventListener('click', () => {
       if (layers.length >= MAX_LAYERS) return;
-      layers.splice(selected + 1, 0, newLayer({ scene: 'motes', blend: 'lighter', opacity: .8 }));
+      layers.splice(selected + 1, 0, newLayer({ scene: 'motes', blend: 'lighter', opacity: .8, bg: false }));
       selected++; renderLayers(); pullLayer(); syncLabels(); save();
     });
     $('v-layer-del').addEventListener('click', () => {
@@ -771,6 +792,7 @@
     for (const id of GLOBAL_FIELDS) $(id).addEventListener('input', () => { syncLabels(); save(); });
     for (const id of LAYER_FIELDS) $(id).addEventListener('input', () => { pushLayer(); syncLabels(); save(); });
     for (const id of ['v-scanlines','v-loop','v-text-shadow']) $(id).addEventListener('change', save);
+    $('v-layer-bg').addEventListener('change', () => { pushLayer(); syncLabels(); save(); });
 
     document.addEventListener('keydown', e => {
       if (e.code === 'Space' && !/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName)) { e.preventDefault(); toggle(); }

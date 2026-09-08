@@ -212,3 +212,8 @@
 .picker-grid { grid-auto-rows: max-content; }
 .picker-tile { align-self: start; }
 .picker-tile canvas { flex: none; }
+
+.layer-warn {
+  font-size: 10px; line-height: 1.55; color: var(--yellow); margin: 4px 0 16px;
+  border-left: 2px solid var(--yellow); padding: 6px 0 6px 8px; background: rgba(255,210,63,.06);
+}

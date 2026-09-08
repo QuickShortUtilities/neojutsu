@@ -64,6 +64,36 @@ with sync_playwright() as p:
     assert page.evaluate(SAMPLE)['sig'] != before, 'opacity had no effect'
     report['opacity_works']=True
 
+    # Layers must genuinely compose: a scene stacked over another has to let
+    # the one below show through, not repaint the frame.
+    STRIP = ("(frac)=>{const c=document.getElementById('v-canvas');"
+             "const H=Math.round(c.height*frac);"
+             "const d=c.getContext('2d').getImageData(0,0,c.width,H).data;"
+             "let sig=0; for(let i=0;i<d.length;i+=4) sig=(sig*31+d[i]+d[i+1]*3+d[i+2]*7)|0; return sig;}")
+    while page.locator('.layer-row').count() > 1:
+        page.click('#v-layer-del'); page.wait_for_timeout(200)
+    pick_scene(page,'skyline'); page.wait_for_timeout(800)
+    sky_top = page.evaluate(STRIP, 0.35); sky_all = page.evaluate(STRIP, 1.0)
+    page.click('#v-layer-add'); page.wait_for_timeout(400)
+    pick_scene(page,'road')
+    page.evaluate("()=>{const b=document.getElementById('v-layer-bg'); if(b.checked){b.checked=false;b.dispatchEvent(new Event('change',{bubbles:true}));}}")
+    page.evaluate("()=>{const s=document.getElementById('v-blend');s.value='source-over';s.dispatchEvent(new Event('input',{bubbles:true}));}")
+    page.evaluate("()=>{const o=document.getElementById('v-opacity');o.value=100;o.dispatchEvent(new Event('input',{bubbles:true}));}")
+    page.wait_for_timeout(1000)
+    comp_top = page.evaluate(STRIP, 0.35); comp_all = page.evaluate(STRIP, 1.0)
+    assert comp_all != sky_all, 'stacked scene made no difference'
+    assert comp_top == sky_top, 'upper layer repainted the sky instead of composing'
+    report['composes']=True
+    assert page.locator('#v-layer-warn').is_hidden(), 'warned about a stack that is fine'
+    # Turning the background back on must hide the base, and say so.
+    page.evaluate("()=>{const b=document.getElementById('v-layer-bg'); b.checked=true; b.dispatchEvent(new Event('change',{bubbles:true}));}")
+    page.wait_for_timeout(800)
+    assert page.evaluate(STRIP, 0.35) != sky_top, 'background flag had no effect'
+    assert not page.locator('#v-layer-warn').is_hidden(), 'no warning when a layer hides the stack'
+    report['warns_when_covering']=True
+    page.evaluate("()=>{const b=document.getElementById('v-layer-bg'); b.checked=false; b.dispatchEvent(new Event('change',{bubbles:true}));}")
+    page.wait_for_timeout(300)
+
     # Cap at four, and removal works.
     for _ in range(6):
         if page.eval_on_selector('#v-layer-add','e=>e.disabled'): break
