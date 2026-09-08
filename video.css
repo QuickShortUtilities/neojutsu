@@ -189,3 +189,26 @@
 .picker-cat .pc-k { font-family: var(--kanji); font-weight: 900; font-size: 12px; color: #6b5b8f; line-height: 1; }
 .picker-cat.current .pc-k { color: var(--magenta); }
 .picker-cat i { font-family: var(--mono); font-style: normal; font-size: 9px; color: var(--muted); opacity: .8; }
+
+/* picker stays inside the stage: the grid scrolls, the page never grows */
+.picker-body { position: relative; flex: 1; min-height: 0; display: flex; }
+.picker-body::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 34px;
+  background: linear-gradient(to top, rgba(7,6,12,.98), transparent);
+  pointer-events: none; opacity: 0; transition: opacity .15s;
+}
+.picker-body.more::after { opacity: 1; }
+.picker-more {
+  position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+  width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+  background: var(--bg-3); border: 1px solid var(--magenta); color: var(--magenta);
+  font-size: 12px; line-height: 1; padding: 0; z-index: 2;
+}
+.picker-more:hover { background: var(--magenta); color: #07060c; }
+.picker-count { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+/* Tiles must keep their natural height so the grid actually overflows and
+   scrolls; without this the canvases flex-shrink and the rows collapse. */
+.picker-grid { grid-auto-rows: max-content; }
+.picker-tile { align-self: start; }
+.picker-tile canvas { flex: none; }

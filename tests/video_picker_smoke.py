@@ -19,7 +19,8 @@ with sync_playwright() as p:
     assert page.locator('#v-picker').is_visible(), 'picker did not open'
     tiles = page.locator('.picker-tile').count()
     report['tiles']=tiles
-    assert tiles==29, tiles
+    total = page.evaluate('()=>Object.keys(window.NeoScene.SCENES).length')
+    assert tiles==total, (tiles, total)
 
     # Every thumbnail must render real, on-palette footage - a preview that
     # lies about the look is worse than no preview.
@@ -42,6 +43,22 @@ with sync_playwright() as p:
     report['thumb_size']=[stats[0]['w'],stats[0]['h']]
     report['all_thumbs_live']=True
 
+    # The grid must scroll inside the stage rather than growing the page.
+    page_h = page.evaluate("()=>document.documentElement.scrollHeight")
+    geo = page.evaluate("()=>{const g=document.getElementById('v-picker-grid');"
+                        "const t=document.querySelector('.picker-tile').getBoundingClientRect();"
+                        "return {tileH:Math.round(t.height),clientH:g.clientHeight,scrollH:g.scrollHeight,"
+                        "chevron:!document.getElementById('v-picker-more').hidden};}")
+    assert geo['tileH'] > 60, f"tiles are being clipped: {geo['tileH']}px"
+    assert geo['scrollH'] > geo['clientH'], 'grid is not scrolling with a full library'
+    assert geo['chevron'], 'no scroll affordance when there is more below'
+    report['picker_geometry'] = geo
+    page.click('#v-picker-more'); page.wait_for_timeout(800)
+    assert page.evaluate("()=>document.getElementById('v-picker-grid').scrollTop") > 0, 'chevron did not scroll'
+    page.evaluate("()=>{const g=document.getElementById('v-picker-grid');g.scrollTop=0;}")
+    page.wait_for_timeout(300)
+    assert page.evaluate("()=>document.documentElement.scrollHeight") == page_h, 'picker changed the page height'
+
     # Category tabs narrow the grid to a genre.
     cats = page.locator('.picker-cat').count()
     report['categories']=cats
@@ -50,10 +67,10 @@ with sync_playwright() as p:
     page.wait_for_timeout(700)
     rpg = page.locator('.picker-tile').count()
     report['rpg_tiles']=rpg
-    assert 1 <= rpg < 29, f'RPG tab showed {rpg} tiles'
+    assert 1 <= rpg < total, f'RPG tab showed {rpg} tiles'
     page.evaluate("()=>[...document.querySelectorAll('.picker-cat')].find(b=>b.textContent.includes('All')).click()")
     page.wait_for_timeout(500)
-    assert page.locator('.picker-tile').count()==29, 'All tab did not restore the full grid'
+    assert page.locator('.picker-tile').count()==total, 'All tab did not restore the full grid'
 
     # Filter narrows the grid.
     page.fill('#v-picker-search','fire'); page.wait_for_timeout(500)

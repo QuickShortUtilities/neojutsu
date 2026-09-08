@@ -127,11 +127,15 @@
         <div class="picker" id="v-picker" role="dialog" aria-label="Choose a scene" hidden>
           <div class="picker-head">
             <span class="eyebrow" id="v-picker-title">CHOOSE A SCENE</span>
+            <span class="picker-count" id="v-picker-count"></span>
             <input type="search" id="v-picker-search" placeholder="filter…" aria-label="Filter scenes">
             <button class="mini" id="v-picker-close" type="button">Close</button>
           </div>
           <div class="picker-cats" id="v-picker-cats" role="tablist" aria-label="Scene categories"></div>
-          <div class="picker-grid" id="v-picker-grid"></div>
+          <div class="picker-body">
+            <div class="picker-grid" id="v-picker-grid"></div>
+            <button class="picker-more" id="v-picker-more" type="button" aria-label="Scroll for more scenes" hidden>▾</button>
+          </div>
         </div>
       </div>
       <div class="stage-bar">

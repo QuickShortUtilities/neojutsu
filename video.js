@@ -517,6 +517,17 @@
       pickerTiles.push({ key, ctx: c.getContext('2d', { willReadFrequently: true }), w: TILE_W, h: th,
                          state: def.init(window.NeoScene.rng(L.seed || 'neojutsu'), TILE_W, th, L.density) });
     }
+    $('v-picker-count').textContent = `${pickerTiles.length} of ${Object.keys(window.NeoScene.SCENES).length}`;
+    requestAnimationFrame(syncPickerScroll);
+  }
+
+  // The grid scrolls inside the stage rather than growing the page; the fade and
+  // chevron only appear when there is actually more below.
+  function syncPickerScroll() {
+    const grid = $('v-picker-grid'), body = grid.parentElement;
+    const more = grid.scrollHeight - grid.clientHeight - grid.scrollTop > 4;
+    body.classList.toggle('more', more);
+    $('v-picker-more').hidden = !more;
   }
 
   function pickerLoop(now) {
@@ -722,6 +733,12 @@
     $('v-scene-open').addEventListener('click', () => pickerOpen ? closePicker() : openPicker());
     $('v-picker-close').addEventListener('click', closePicker);
     $('v-picker-search').addEventListener('input', buildPicker);
+    $('v-picker-grid').addEventListener('scroll', syncPickerScroll);
+    $('v-picker-more').addEventListener('click', () => {
+      const grid = $('v-picker-grid');
+      grid.scrollBy({ top: grid.clientHeight * .8, behavior: 'smooth' });
+    });
+    window.addEventListener('resize', () => { if (pickerOpen) syncPickerScroll(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && pickerOpen) closePicker(); });
     $('v-tl-toggle').addEventListener('click', () => {
       timeline.on = !timeline.on; genTime = 0; renderTimeline(); pullShot(); syncLen(); save();
