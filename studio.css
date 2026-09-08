@@ -262,10 +262,6 @@ button[aria-pressed=true].mini { background: #2ef2ff18; border-color: var(--cyan
 .rack-btn:hover { color: var(--text); box-shadow: 0 0 0 2px var(--cyan), inset 2px 2px 0 #ffffff12, inset -2px -2px 0 #00000055; }
 .rack-kanji { font-family: var(--kanji); font-weight: 900; font-size: 16px; line-height: 1; color: var(--muted); }
 .rack-name { font-family: var(--pixel); font-size: 8px; letter-spacing: .5px; }
-.rack-led { width: 8px; height: 8px; background: #211c33; box-shadow: inset 2px 2px 0 #00000088; }
-.rack-btn.lit { color: var(--text); box-shadow: 0 0 0 2px #5eff8f66, inset 2px 2px 0 #ffffff12, inset -2px -2px 0 #00000055; }
-.rack-btn.lit .rack-kanji { color: #5eff8f; text-shadow: 0 0 10px rgba(94,255,143,.6); }
-.rack-btn.lit .rack-led { background: #5eff8f; box-shadow: 0 0 8px #5eff8f; }
 
 /* ---- windows: a plastic console shell, hard pixel edges ---- */
 .fx-window {
@@ -438,6 +434,18 @@ button[aria-pressed=true].mini { background: #2ef2ff18; border-color: var(--cyan
 .fx-sub { font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
 
 /* the Stereo window is a metering tool, so give its screen more room */
-.theme-width { width: min(430px, calc(100vw - 16px)); }
-.theme-width .fx-screen { aspect-ratio: 384 / 150; }
-.theme-width .fx-dials { gap: 4px; }
+.fx-window.theme-width { width: min(430px, calc(100vw - 16px)); }
+.fx-window.theme-width .fx-screen { aspect-ratio: 384 / 150; }
+.fx-window.theme-width .fx-dials { gap: 4px; }
+
+/* ================= v1.1: dock buttons =================
+   On/off reads from the outline alone. Each unit keeps its own colour so
+   the dock stays legible instead of turning into a wall of identical green. */
+.fx-dock .rack-btn { grid-template-columns: auto 1fr; }
+.fx-dock .rack-btn.lit,
+.fx-dock .rack-btn.lit:hover {
+  color: var(--text);
+  box-shadow: 0 0 0 2px var(--accent), inset 2px 2px 0 #ffffff10, inset -2px -2px 0 #00000055;
+}
+.fx-dock .rack-btn.lit .rack-kanji { color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
+.fx-dock .rack-btn:not(.lit) .rack-kanji { color: var(--muted); text-shadow: none; }

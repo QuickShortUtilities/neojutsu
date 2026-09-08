@@ -219,7 +219,7 @@
       const gr = probe ? Math.abs(probe.reduction()) : 0;
       const segs = 14, lit = Math.min(segs, Math.round(gr / 24 * segs));
       const x0 = w - 34;
-      g.font = '7px monospace'; g.textAlign = 'left'; g.textBaseline = 'top';
+      g.font = '8px monospace'; g.textAlign = 'left'; g.textBaseline = 'top';
       g.fillStyle = 'rgba(154,146,179,.9)'; g.fillText('GR', x0, 2);
       for (let i = 0; i < segs; i++) {
         const on = fx.on && i < lit;
@@ -320,9 +320,9 @@
       g.moveTo(cx - r, cy - r); g.lineTo(cx + r, cy + r);
       g.moveTo(cx + r, cy - r); g.lineTo(cx - r, cy + r);
       g.stroke();
-      g.font = '7px monospace'; g.fillStyle = 'rgba(154,146,179,.85)';
+      g.font = '8px monospace'; g.fillStyle = 'rgba(154,146,179,.85)';
       g.textAlign = 'left'; g.textBaseline = 'top'; g.fillText('L', 3, 3);
-      g.textAlign = 'right'; g.fillText('R', gw - 3, 3);
+      g.textAlign = 'right'; g.fillText('R', gw - 10, 3);
       g.textAlign = 'center'; g.fillText('M', cx, 3);
 
       if (!size) return;
@@ -353,7 +353,7 @@
           g.fillStyle = on ? (i > bars - 3 ? '#ff2e88' : i > bars - 6 ? '#ffd23f' : '#5eff8f') : 'rgba(255,255,255,.07)';
           g.fillRect(x, 12 + (bars - 1 - i) * ((gh - 16) / bars), meterW / 2 - 3, (gh - 16) / bars - 2);
         }
-        g.fillStyle = 'rgba(154,146,179,.9)'; g.font = '7px monospace';
+        g.fillStyle = 'rgba(154,146,179,.9)'; g.font = '8px monospace';
         g.textAlign = 'left'; g.textBaseline = 'top'; g.fillText(name, x, 2);
       });
 
@@ -366,7 +366,7 @@
       g.fillStyle = corr < 0 ? '#ff2e88' : corr < 0.35 ? '#ffd23f' : '#5eff8f';
       g.fillRect(Math.min(px, mid), y0, Math.max(2, Math.abs(px - mid)), 8);
       g.fillStyle = 'rgba(255,255,255,.3)'; g.fillRect(Math.round(mid), y0 - 2, 1, 12);
-      g.font = '7px monospace'; g.textBaseline = 'top';
+      g.font = '8px monospace'; g.textBaseline = 'top';
       g.fillStyle = 'rgba(154,146,179,.9)'; g.textAlign = 'left'; g.fillText('-1', 0, y0 + 9);
       g.textAlign = 'right'; g.fillStyle = 'rgba(236,232,245,.95)';
       g.fillText('CORR ' + corr.toFixed(2), w - 2, y0 + 9);
@@ -553,9 +553,9 @@
       for (const id of window.NeoRack.ORDER) {
         const spec = SPEC()[id];
         const b = document.createElement('button');
-        b.type = 'button'; b.className = 'rack-btn'; b.dataset.fx = id;
+        b.type = 'button'; b.className = `rack-btn theme-${spec.theme}`; b.dataset.fx = id;
         b.setAttribute('aria-expanded', 'false');
-        b.innerHTML = `<span class="rack-kanji">${spec.kanji}</span><span class="rack-name">${spec.label}</span><span class="rack-led"></span>`;
+        b.innerHTML = `<span class="rack-kanji">${spec.kanji}</span><span class="rack-name">${spec.label}</span>`;
         b.addEventListener('click', () => toggleWindow(id));
         dock.append(b);
       }

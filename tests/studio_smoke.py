@@ -72,6 +72,14 @@ with sync_playwright() as p:
  window_rate_default=page.evaluate("NeoRack.SPEC.phaser.params.rate.def")
  # --- effects rack: dock, windows, dials, motion ---
  assert page.locator('#fx-dock .rack-btn').count()==8
+ # a lit unit is shown by its outline alone, in its own colour, with no LED
+ assert page.locator('#fx-dock .rack-led').count()==0
+ echo_ring=page.evaluate("getComputedStyle(document.querySelector('.rack-btn[data-fx=echo]')).boxShadow")
+ stereo_ring=page.evaluate("getComputedStyle(document.querySelector('.rack-btn[data-fx=width]')).boxShadow")
+ assert page.locator('.rack-btn[data-fx=echo].lit').count()==1, 'echo is on by default'
+ assert page.locator('.rack-btn[data-fx=width].lit').count()==0, 'stereo is off by default'
+ assert echo_ring!=stereo_ring, 'on and off should differ in the outline'
+ assert 'rgb(255, 46, 136)' in echo_ring, f'echo outline should use its own accent, got {echo_ring}'
  # every dropdown is our own listbox, never the operating system's
  assert page.evaluate("[...document.querySelectorAll('.studio select, .export-dialog select, .fx-window select')].every(s=>s.dataset.neo==='1')"), 'a select was left unstyled'
  assert page.evaluate("getComputedStyle(document.querySelector('#g-mood')).opacity")=='0'
