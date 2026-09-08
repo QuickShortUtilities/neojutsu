@@ -44,7 +44,8 @@
 
 /* small shared bits */
 .hint { font-size: 11px; color: var(--muted); line-height: 1.6; margin: 0 0 14px; }
-.toggle-row { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 4px; }
+/* breathing room before whatever section follows */
+.toggle-row { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0 22px; }
 /* The switch itself comes from studio.css, shared with the Audio Studio. */
 .chk { display: inline-flex; align-items: center; gap: 9px; font-size: 11px; color: var(--muted); cursor: pointer; text-transform: uppercase; letter-spacing: 1px; }
 .chk:hover { color: var(--text); }
@@ -154,7 +155,7 @@
 /* ---------- look bar: fills the space under the preview ---------- */
 .lookbar { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 14px; }
 .look-grid { display: grid; gap: 0 18px; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); }
-.look-grid .toggle-row { grid-column: 1 / -1; margin-bottom: 6px; }
+.look-grid .toggle-row { grid-column: 1 / -1; margin: 4px 0 8px; }
 .look-grid .hint { grid-column: 1 / -1; margin-top: -4px; }
 
 /* ---------- effects as a chip grid ---------- */

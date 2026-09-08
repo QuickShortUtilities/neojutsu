@@ -24,15 +24,16 @@ with sync_playwright() as p:
     assert not errors, errors
     page.select_option('#v-chip','gameboy'); page.dispatch_event('#v-chip','input')
     pick_scene(page,'grid')
-    page.select_option('#v-container','mp4'); page.dispatch_event('#v-container','input')
+    setv(page,'#v-container','mp4')
     setv(page,'#v-fps',24); setv(page,'#v-scale',2); setv(page,'#v-len',5)
     page.wait_for_timeout(300)
 
     # --- silent MP4 ---
     t0=time.time()
     with page.expect_download(timeout=180000) as dl:
-        page.click('#v-open-export')
+        page.click('#v-open-export'); page.wait_for_timeout(350); page.click('#v-x-go')
     path=ART/'silent.mp4'; dl.value.save_as(str(path))
+    page.evaluate("()=>document.getElementById('v-export-dialog').close()"); page.wait_for_timeout(200)
     elapsed=time.time()-t0
     data=path.read_bytes()
     assert data[4:8]==b'ftyp', f'not an MP4: {data[:12]!r}'
@@ -48,8 +49,9 @@ with sync_playwright() as p:
     length=page.text_content('#v-len-v')
     t0=time.time()
     with page.expect_download(timeout=300000) as dl2:
-        page.click('#v-open-export')
+        page.click('#v-open-export'); page.wait_for_timeout(350); page.click('#v-x-go')
     path2=ART/'scored.mp4'; dl2.value.save_as(str(path2))
+    page.evaluate("()=>document.getElementById('v-export-dialog').close()"); page.wait_for_timeout(200)
     elapsed2=time.time()-t0
     d2=path2.read_bytes()
     assert d2[4:8]==b'ftyp', 'scored export is not an MP4'
@@ -67,8 +69,9 @@ with sync_playwright() as p:
     outs=[]
     for i in range(2):
         with page.expect_download(timeout=300000) as d:
-            page.click('#v-open-export')
+            page.click('#v-open-export'); page.wait_for_timeout(350); page.click('#v-x-go')
         f=ART/f'repeat{i}.mp4'; d.value.save_as(str(f)); outs.append(f.read_bytes())
+        page.evaluate("()=>document.getElementById('v-export-dialog').close()"); page.wait_for_timeout(200)
     a, c = outs
     assert len(a) == len(c), f'silent export lengths differ: {len(a)} vs {len(c)}'
     diffs = [i for i, (x, y) in enumerate(zip(a, c)) if x != y]

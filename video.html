@@ -325,29 +325,51 @@
         <input type="range" id="v-vol" min="0" max="100" step="1" value="80" aria-label="Soundtrack volume">
       </label>
 
-      <h2 class="panel-title"><span class="k">出</span> Export</h2>
-      <label class="field">
-        <span>File</span>
-        <select id="v-container">
-          <option value="mp4" selected>MP4 · H.264 · shareable</option>
-          <option value="webm">WebM · VP9</option>
-        </select>
-      </label>
-      <label class="field">
-        <span>Frame rate</span>
-        <select id="v-fps">
-          <option value="30" selected>30 fps</option>
-          <option value="24">24 fps</option>
-          <option value="60">60 fps</option>
-        </select>
-      </label>
-      <label class="field range">
-        <span>Upscale <b id="v-scale-v">4</b>×</span>
-        <input type="range" id="v-scale" min="1" max="8" step="1" value="4" aria-label="Export upscale">
-      </label>
-      <p class="hint" id="v-export-note">MP4 renders frame by frame, faster than the clip runs. WebM records live.</p>
-      <p class="hint" id="v-status" role="status"></p>
     </aside>
+
+    <dialog class="export-dialog" id="v-export-dialog" aria-labelledby="v-export-title">
+      <form method="dialog" class="export-head">
+        <h2 id="v-export-title"><span class="k">出</span> Export</h2>
+        <button class="mini" value="close" aria-label="Close export">✕</button>
+      </form>
+      <div class="export-body">
+        <div class="export-summary" id="v-export-summary"></div>
+        <div class="export-grid">
+          <label class="field"><span>File</span>
+            <select id="v-container">
+              <option value="mp4" selected>MP4 · H.264 · shareable</option>
+              <option value="webm">WebM · VP9</option>
+            </select>
+          </label>
+          <label class="field"><span>Frame rate</span>
+            <select id="v-fps">
+              <option value="30" selected>30 fps</option>
+              <option value="24">24 fps · filmic</option>
+              <option value="60">60 fps · smooth</option>
+            </select>
+          </label>
+          <label class="field"><span>Size</span>
+            <select id="v-scale">
+              <option value="1">1× · native</option>
+              <option value="2">2×</option>
+              <option value="4" selected>4×</option>
+              <option value="6">6×</option>
+              <option value="8">8× · largest</option>
+            </select>
+          </label>
+        </div>
+        <p class="export-note" id="v-export-note"></p>
+        <div class="export-progress" id="v-export-progress" hidden>
+          <label for="v-progress" id="v-progress-label">Preparing…</label>
+          <progress id="v-progress" max="100" value="0"></progress>
+        </div>
+        <p class="export-note" id="v-status" role="status"></p>
+        <div class="export-actions">
+          <button class="btn btn-export wide" id="v-x-go" type="button"><span class="k-glyph">出</span> <span id="v-x-go-label">Export MP4</span></button>
+          <a id="v-download" class="btn btn-ghost wide" hidden>Download again</a>
+        </div>
+      </div>
+    </dialog>
   </main>
 
   <script src="chip.js"></script>

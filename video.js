@@ -353,7 +353,12 @@
   function download(blob, name) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = name; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    // Keep the URL alive so "Download again" costs nothing to re-offer.
+    if (lastExport) URL.revokeObjectURL(lastExport.url);
+    lastExport = { url: a.href, name };
+    const again = $('v-download');
+    again.href = a.href; again.download = name; again.hidden = false;
+    again.textContent = `Download ${name} again`;
     status(`Exported ${name} · ${(blob.size / 1048576).toFixed(1)} MB`);
   }
   const seekTo = (v, t) => new Promise(res => {
@@ -363,20 +368,53 @@
     try { v.currentTime = t; } catch { done(); }
   });
 
-  let exporting = false;
-  function exportUI(on, label) {
-    const btn = $('v-open-export');
-    btn.disabled = on;
-    btn.classList.toggle('busy', on);
-    btn.innerHTML = on ? `<span class="k-glyph">出</span> ${label}`
-                       : '<span class="k-glyph">出</span> Export';
+  let exporting = false, lastExport = null;
+
+  function exportUI(on, label, pct) {
+    const go = $('v-x-go');
+    go.disabled = on;
+    go.classList.toggle('busy', on);
+    $('v-x-go-label').textContent = on ? label : `Export ${look().container.toUpperCase()}`;
+    const wrap = $('v-export-progress');
+    wrap.hidden = !on;
+    if (on) {
+      $('v-progress-label').textContent = label;
+      const bar = $('v-progress');
+      if (pct == null) bar.removeAttribute('value'); else bar.value = pct;
+    }
+  }
+
+  // What the user is about to get, before they commit to rendering it.
+  function refreshExportSummary() {
+    const cfg = look();
+    const [bw, bh] = baseSize(cfg);
+    const total = duration(cfg) || cfg.len;
+    const frames = Math.round(total * cfg.fps);
+    const px = `${bw * cfg.scale} × ${bh * cfg.scale}`;
+    $('v-export-summary').innerHTML =
+      `<b>${px}</b><span>${Math.round(total)}s · ${frames} frames · ${cfg.fps} fps</span>` +
+      `<span>${liveLayers().length} layer${liveLayers().length === 1 ? '' : 's'}` +
+      `${buffer ? ' · scored' : ' · silent'}${cfg.text.text ? ' · titled' : ''}</span>`;
+    $('v-export-note').textContent = cfg.container === 'mp4'
+      ? 'MP4 renders frame by frame, so it finishes faster than the video is long, and plays on phones and social.'
+      : 'WebM records in real time, so it takes as long as the video runs. Useful if MP4 is unavailable.';
+    $('v-x-go-label').textContent = `Export ${cfg.container.toUpperCase()}`;
+  }
+
+  function openExport() {
+    if (!ready()) { status('Nothing to export yet.'); return; }
+    refreshExportSummary();
+    $('v-export-progress').hidden = true;
+    $('v-download').hidden = !lastExport;
+    const dlg = $('v-export-dialog');
+    dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', '');
   }
 
   async function exportVideo() {
     const cfg = look();
     if (exporting) return;                       // a second click must not start a second render
     if (!ready()) { status('Nothing to export yet.'); return; }
-    exporting = true; exportUI(true, 'Starting…');
+    exporting = true; exportUI(true, 'Preparing…', 0);
     try {
       await runExport(cfg);
     } catch (e) {
@@ -418,7 +456,7 @@
     const bitrate = Math.min(40e6, Math.max(1.2e7, Math.round(out.width * out.height * fps * 0.9)));
     const blob = await window.NeoVideoExport.encode({
       width: out.width, height: out.height, fps, total, buffer, quality: bitrate,
-      onProgress: p => { const n = Math.round(p * 100); status(`Rendering MP4 · ${n}%`); exportUI(true, `${n}%`); },
+      onProgress: p => { const n = Math.round(p * 100); status(`Rendering MP4 · ${n}%`); exportUI(true, `Rendering · ${n}%`, n); },
       onFrame: async f => {
         genTime = f / fps;
         offlineEnv = envs ? envs[Math.min(f, envs.length - 1)] : EMPTY;
@@ -451,7 +489,7 @@
     for (const L of layers) if (L._ready && L.on) { try { await L._video.play(); } catch {} }
     setPlaying(true); startAudio(cfg);
     status(`Recording ${Math.round(total)}s… this runs in real time.`);
-    exportUI(true, `Recording ${Math.round(total)}s`);
+    exportUI(true, `Recording ${Math.round(total)}s in real time…`, null);
     await new Promise(res => setTimeout(res, total * 1000));
     running = false; rec.stop(); stop(); await stopped;
     download(new Blob(chunks, { type: type || 'video/webm' }), `${safeName(cfg.title)}.webm`);
@@ -721,7 +759,7 @@
   }
 
   // ---------- settings ----------
-  const status = msg => { $('v-status').textContent = msg; };
+  const status = msg => { const el = $('v-status'); if (el) el.textContent = msg; };
   const GLOBAL_FIELDS = ['v-chip','v-res','v-format','v-pix','v-dither','v-dith','v-bright','v-contrast','v-react','v-len','v-fps','v-scale','v-vol','v-title','v-container','v-text','v-text-pos','v-text-col','v-text-size'];
   const LAYER_FIELDS = ['v-mode','v-scene','v-seed','v-speed','v-density','v-cut','v-blend','v-opacity','v-lx','v-ly','v-lscale','v-lrot'];
 
@@ -761,7 +799,7 @@
     const l = look();
     $('v-pix-v').textContent = l.pix; $('v-dith-v').textContent = Math.round(l.dithAmt * 100);
     $('v-bright-v').textContent = l.bright; $('v-contrast-v').textContent = l.contrast;
-    $('v-scale-v').textContent = l.scale; $('v-vol-v').textContent = Math.round(l.vol * 100);
+    $('v-vol-v').textContent = Math.round(l.vol * 100);
     $('v-react-v').textContent = Math.round(l.react * 100);
     $('v-speed-v').textContent = $('v-speed').value; $('v-density-v').textContent = $('v-density').value;
     $('v-opacity-v').textContent = $('v-opacity').value;
@@ -820,7 +858,9 @@
     drop.addEventListener('drop', e => openFile(e.dataTransfer.files[0]));
 
     $('v-play').addEventListener('click', toggle);
-    $('v-open-export').addEventListener('click', exportVideo);
+    $('v-open-export').addEventListener('click', openExport);
+    $('v-x-go').addEventListener('click', exportVideo);
+    for (const id of ['v-container','v-fps','v-scale']) $(id).addEventListener('input', refreshExportSummary);
     $('v-audio-refresh').addEventListener('click', fillTracks);
     $('v-dice').addEventListener('click', () => { $('v-seed').value = window.NeoScene.randomSeed(); pushLayer(); save(); });
     $('v-mutate').addEventListener('click', () => {
