@@ -36,6 +36,7 @@
   let audio = null, gain = null, analyser = null, trackNode = null, recorderDest = null;
   let buffer = null, savedTracks = [], freqData = null, waveData = null;
   let layers = [], selected = 0, rack = null;
+  let timeline = { on: false, shots: [] }, shotSel = 0;
 
   const newLayer = (over = {}) => Object.assign({
     on: true, mode: 'generate', scene: 'skyline', seed: window.NeoScene.randomSeed(),
@@ -71,7 +72,18 @@
   const liveLayers = () => layers.filter(L => L.on && (L.mode === 'generate' || L._ready));
   const ready = () => liveLayers().length > 0;
   const clipDuration = () => Math.max(0, ...layers.filter(L => L._ready).map(L => L._video.duration || 0));
+  const tlTotal = () => timeline.shots.reduce((a, s) => a + s.dur, 0);
+  // Which shot is on screen, and how far into it we are.
+  function shotAt(t) {
+    let acc = 0;
+    for (let i = 0; i < timeline.shots.length; i++) {
+      acc += timeline.shots[i].dur;
+      if (t < acc) return i;
+    }
+    return timeline.shots.length - 1;
+  }
   function duration(cfg) {
+    if (timeline.on && timeline.shots.length) return tlTotal();
     if (buffer) return buffer.duration;
     const c = clipDuration();
     return c || cfg.len;
@@ -133,11 +145,16 @@
     lctx.globalCompositeOperation = 'source-over'; lctx.globalAlpha = 1;
     lctx.fillStyle = '#000000'; lctx.fillRect(0, 0, rw, rh);
 
+    // A shot overrides the scene on the lowest generate layer only, so overlay
+    // layers carry across the cut instead of restarting with it.
+    const shot = timeline.on && timeline.shots.length ? timeline.shots[shotAt(genTime)] : null;
+    let baseTaken = false;
     let drew = 0, topScene = '';
     for (const L of layers) {
       if (!L.on) continue;
       if (L.mode === 'generate') {
-        const key = activeScene(L);
+        let key = activeScene(L);
+        if (shot && !baseTaken) { key = shot.scene; baseTaken = true; }
         ensureScene(L, key, rw, rh);
         topScene = key;
         sctx.save();
@@ -156,7 +173,7 @@
     if (!drew) return;
 
     window.NeoFX.apply(lctx, rw, rh, window.NeoVRack.evaluate(rack, genTime, env), env, genTime);
-    window.NeoFX.drawText(lctx, rw, rh, cfg.text);
+    window.NeoFX.drawText(lctx, rw, rh, shot && shot.text ? { ...cfg.text, text: shot.text } : cfg.text);
 
     const frame = lctx.getImageData(0, 0, rw, rh), data = frame.data;
     const pal = paletteRGB(cfg.chip), levels = pal.length;
@@ -212,6 +229,13 @@
     processFrame(cfg, playing ? dt : 0);
     const d = duration(cfg);
     if (d) { $('v-scrub').value = Math.round((genTime / d) * 1000); $('v-position').textContent = clock(genTime); }
+    if (timeline.on && timeline.shots.length) {
+      const ph = $('v-tl-playhead');
+      if (ph) ph.style.left = `${Math.min(100, (genTime / (tlTotal() || 1)) * 100)}%`;
+      const cur = shotAt(genTime);
+      const shots = $('v-tl-track').children;
+      for (let i = 0; i < shots.length; i++) shots[i].classList?.toggle('playing', i === cur);
+    }
   }
 
   // ---------- audio ----------
@@ -452,6 +476,49 @@
     renderLayers();
   }
 
+  // ---------- timeline ----------
+  const newShot = () => ({ dur: 4, scene: Object.keys(window.NeoScene.SCENES)[0], text: '' });
+
+  function renderTimeline() {
+    $('v-timeline').hidden = !timeline.on;
+    $('v-tl-toggle').setAttribute('aria-pressed', String(timeline.on));
+    $('v-tl-toggle').classList.toggle('on', timeline.on);
+    if (!timeline.on) return;
+    const track = $('v-tl-track'); track.innerHTML = '';
+    const total = tlTotal() || 1;
+    timeline.shots.forEach((sh, i) => {
+      const el = document.createElement('div');
+      el.className = 'tl-shot' + (i === shotSel ? ' current' : '');
+      // Explicit share of the track: a shot's width is its share of the running
+      // time, so the strip reads as a duration rather than a list.
+      el.style.flexBasis = `${(sh.dur / total) * 100}%`;
+      el.setAttribute('role', 'option');
+      el.setAttribute('aria-selected', String(i === shotSel));
+      const label = (window.NeoScene.SCENES[sh.scene] || {}).label || sh.scene;
+      el.innerHTML = `<span class="tl-name">${sh.text ? sh.text.split('|')[0].trim() : label.split(' · ')[0]}</span><span class="tl-dur">${sh.dur}s</span>`;
+      el.addEventListener('click', () => { shotSel = i; renderTimeline(); pullShot(); });
+      track.append(el);
+    });
+    const head = document.createElement('div');
+    head.className = 'tl-playhead'; head.id = 'v-tl-playhead';
+    head.style.left = `${Math.min(100, (genTime / total) * 100)}%`;
+    track.append(head);
+    $('v-tl-total').textContent = `${Math.round(tlTotal())}s`;
+    $('v-tl-del').disabled = timeline.shots.length < 2;
+  }
+  function pullShot() {
+    const sh = timeline.shots[shotSel]; if (!sh) return;
+    $('v-tl-scene').value = sh.scene; $('v-tl-dur').value = sh.dur;
+    $('v-tl-dur-v').textContent = sh.dur; $('v-tl-text').value = sh.text;
+    window.NeoSelect?.refreshAll?.();
+  }
+  function pushShot() {
+    const sh = timeline.shots[shotSel]; if (!sh) return;
+    sh.scene = $('v-tl-scene').value; sh.dur = +$('v-tl-dur').value; sh.text = $('v-tl-text').value.trim();
+    $('v-tl-dur-v').textContent = sh.dur;
+    renderTimeline(); syncLen(); save();
+  }
+
   // ---------- settings ----------
   const status = msg => { $('v-status').textContent = msg; };
   const GLOBAL_FIELDS = ['v-chip','v-res','v-format','v-pix','v-dither','v-dith','v-bright','v-contrast','v-react','v-len','v-fps','v-scale','v-vol','v-title','v-container','v-text','v-text-pos','v-text-col','v-text-size'];
@@ -459,7 +526,7 @@
 
   function save() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ look: look(), layers: layers.map(persistable), selected, rack }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ look: look(), layers: layers.map(persistable), selected, rack, timeline }));
       $('v-autosave').textContent = 'Autosaved on this browser';
     } catch { $('v-autosave').textContent = 'Autosave unavailable'; }
   }
@@ -467,6 +534,7 @@
     let d = null;
     try { d = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); } catch {}
     rack = window.NeoVRack.normalize(d && d.rack);
+    timeline = (d && d.timeline && Array.isArray(d.timeline.shots)) ? d.timeline : { on: false, shots: [] };
     layers = (d && Array.isArray(d.layers) && d.layers.length ? d.layers : [newLayer()]).slice(0, MAX_LAYERS).map(L => newLayer(L));
     selected = Math.min(d && d.selected || 0, layers.length - 1);
     const l = d && d.look; if (!l) return;
@@ -517,6 +585,11 @@
       const o = document.createElement('option'); o.value = key; o.textContent = def.label; sel.append(o);
     }
     restore(); fillTracks(); renderLayers(); pullLayer();
+    for (const [key, def] of Object.entries(window.NeoScene.SCENES)) {
+      const o = document.createElement('option'); o.value = key; o.textContent = def.label; $('v-tl-scene').append(o);
+    }
+    if (!timeline.shots.length) timeline.shots = [newShot(), { ...newShot(), scene: 'grid' }];
+    renderTimeline(); pullShot();
     window.NeoVRack.build($('v-rack'), () => rack, next => { rack = next; save(); });
     syncLabels();
     window.NeoSelect?.refreshAll?.();
@@ -555,6 +628,19 @@
       [layers[selected], layers[j]] = [layers[j], layers[selected]];
       selected = j; renderLayers(); pullLayer(); save();
     };
+    $('v-tl-toggle').addEventListener('click', () => {
+      timeline.on = !timeline.on; genTime = 0; renderTimeline(); pullShot(); syncLen(); save();
+    });
+    $('v-tl-add').addEventListener('click', () => {
+      timeline.shots.splice(shotSel + 1, 0, newShot()); shotSel++;
+      renderTimeline(); pullShot(); syncLen(); save();
+    });
+    $('v-tl-del').addEventListener('click', () => {
+      if (timeline.shots.length < 2) return;
+      timeline.shots.splice(shotSel, 1); shotSel = Math.max(0, shotSel - 1);
+      renderTimeline(); pullShot(); syncLen(); save();
+    });
+    for (const id of ['v-tl-scene','v-tl-dur','v-tl-text']) $(id).addEventListener('input', pushShot);
     $('v-layer-up').addEventListener('click', () => move(-1));
     $('v-layer-down').addEventListener('click', () => move(1));
 

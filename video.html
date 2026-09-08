@@ -186,7 +186,25 @@
       </div>
       <div class="stage-bar">
         <input type="range" id="v-scrub" min="0" max="1000" step="1" value="0" aria-label="Scrub position" disabled>
+        <button class="mini" id="v-tl-toggle" type="button" aria-pressed="false" title="Sequence the video as a list of shots">Timeline</button>
         <span class="stage-meta" id="v-meta">—</span>
+      </div>
+
+      <div class="timeline" id="v-timeline" hidden>
+        <div class="tl-head">
+          <span class="eyebrow">SHOT LIST</span>
+          <span class="tl-total" id="v-tl-total">0s</span>
+          <button class="mini" id="v-tl-add" type="button">+ Shot</button>
+          <button class="mini" id="v-tl-del" type="button">✕</button>
+        </div>
+        <div class="tl-track" id="v-tl-track" role="listbox" aria-label="Shots"></div>
+        <div class="tl-editor">
+          <label class="field"><span>Scene</span><select id="v-tl-scene"></select></label>
+          <label class="field range"><span>Hold <b id="v-tl-dur-v">4</b>s</span>
+            <input type="range" id="v-tl-dur" min="1" max="30" step="1" value="4" aria-label="Shot duration"></label>
+          <label class="field"><span>Caption <small>| splits lines</small></span>
+            <input type="text" id="v-tl-text" maxlength="80" spellcheck="false" placeholder="leave blank for the title"></label>
+        </div>
       </div>
     </section>
 
