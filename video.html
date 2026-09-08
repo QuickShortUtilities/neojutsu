@@ -193,16 +193,7 @@
     <!-- ===== right: audio ===== -->
     <aside class="panel" id="v-inspector">
       <h2 class="panel-title"><span class="k">効</span> Effects</h2>
-      <label class="field range"><span>Glow <b id="v-bloom-v">0</b></span>
-        <input type="range" id="v-bloom" min="0" max="100" step="1" value="0" aria-label="Glow"></label>
-      <label class="field range"><span>Glitch <b id="v-glitch-v">0</b></span>
-        <input type="range" id="v-glitch" min="0" max="100" step="1" value="0" aria-label="Glitch"></label>
-      <label class="field range"><span>Colour split <b id="v-chroma-v">0</b></span>
-        <input type="range" id="v-chroma" min="0" max="100" step="1" value="0" aria-label="Colour split"></label>
-      <label class="field range"><span>Vignette <b id="v-vig-v">0</b></span>
-        <input type="range" id="v-vig" min="0" max="100" step="1" value="0" aria-label="Vignette"></label>
-      <label class="field range"><span>Tube curve <b id="v-curve-v">0</b></span>
-        <input type="range" id="v-curve" min="0" max="100" step="1" value="0" aria-label="Tube curve"></label>
+      <div class="vrack" id="v-rack"></div>
 
       <h2 class="panel-title"><span class="k">字</span> Title</h2>
       <label class="field">
@@ -281,6 +272,7 @@
   <script src="chip.js"></script>
   <script src="video-gen.js"></script>
   <script src="video-fx.js"></script>
+  <script src="video-rack.js"></script>
   <script src="vendor/mp4-muxer-5.2.1.min.js"></script>
   <script src="video-export.js"></script>
   <script src="neo-select.js"></script>

@@ -17,6 +17,18 @@ SAMPLE = """() => {
 def setv(page, sel, val):
     page.evaluate("([s,v])=>{const e=document.querySelector(s); e.value=v; e.dispatchEvent(new Event('input',{bubbles:true}));}", [sel, str(val)])
 
+ORDER = ['glow','glitch','chroma','vignette','curve','zoom','shake']
+def unit_on(page, name):
+    page.locator('.vunit').nth(ORDER.index(name)).locator('.vunit-head').click()
+def unit_amount(page, name, val):
+    page.evaluate("""([i,v])=>{const u=document.querySelectorAll('.vunit')[i];
+      const r=u.querySelector('.vunit-body input[type=range]'); r.value=v;
+      r.dispatchEvent(new Event('input',{bubbles:true}));}""", [ORDER.index(name), str(val)])
+def unit_motion(page, name, shape):
+    page.evaluate("""([i,v])=>{const u=document.querySelectorAll('.vunit')[i];
+      const s=u.querySelector('.vunit-body select'); s.value=v;
+      s.dispatchEvent(new Event('change',{bubbles:true}));}""", [ORDER.index(name), shape])
+
 with sync_playwright() as p:
     b = p.chromium.launch(headless=True, args=['--autoplay-policy=no-user-gesture-required'])
     page = b.new_context(viewport={"width":1512,"height":1150}).new_page()
@@ -48,26 +60,42 @@ with sync_playwright() as p:
     page.wait_for_timeout(300)
     base = page.evaluate(SAMPLE)
 
+    # The rack exposes every unit as a card.
+    assert page.locator('.vunit').count() == len(ORDER), page.locator('.vunit').count()
+    report['rack_units'] = page.locator('.vunit').count()
+
     # Vignette must actually darken the frame, and stay on palette.
-    setv(page,'#v-vig',90); page.wait_for_timeout(500)
+    unit_on(page,'vignette'); unit_amount(page,'vignette',90); page.wait_for_timeout(600)
     vig = page.evaluate(SAMPLE)
     assert vig['dark'] > base['dark'], f"vignette did not darken: {base['dark']} -> {vig['dark']}"
     assert not ({tuple(int(n) for n in k.split(',')) for k in vig['colors']} - GB), 'vignette broke the palette'
     report['vignette_dark_px'] = [base['dark'], vig['dark']]
-    setv(page,'#v-vig',0); page.wait_for_timeout(300)
+    unit_on(page,'vignette'); page.wait_for_timeout(300)
 
     # Every effect must change the picture and none may leave the palette.
     fx_effect={}
-    for sel,name in [('#v-bloom','glow'),('#v-glitch','glitch'),('#v-chroma','chroma'),('#v-curve','curve')]:
+    for name in ['glow','glitch','chroma','curve','zoom','shake']:
         before = page.evaluate(SAMPLE)['sig']
-        setv(page,sel,80); page.wait_for_timeout(500)
+        unit_on(page,name); unit_amount(page,name,80); page.wait_for_timeout(600)
         after = page.evaluate(SAMPLE)
         stray = {tuple(int(n) for n in k.split(',')) for k in after['colors']} - GB
         assert not stray, f'{name} left the palette: {stray}'
         fx_effect[name] = before != after['sig']
-        setv(page,sel,0); page.wait_for_timeout(250)
+        unit_on(page,name); page.wait_for_timeout(250)
     report['fx_changed_frame']=fx_effect
     assert all(fx_effect.values()), fx_effect
+
+    # Motion drives a parameter over time without touching a control.
+    unit_on(page,'zoom'); unit_amount(page,'zoom',10); unit_motion(page,'zoom','sine')
+    unit_amount(page,'zoom',10)
+    page.wait_for_timeout(400)
+    a = page.evaluate(SAMPLE)['sig']; moved=False
+    for _ in range(24):
+        page.wait_for_timeout(200)
+        if page.evaluate(SAMPLE)['sig'] != a: moved=True; break
+    assert moved, 'rack motion did not animate the parameter'
+    report['motion_animates']=True
+    unit_on(page,'zoom'); page.wait_for_timeout(250)
 
     # Title overlay renders.
     page.wait_for_timeout(300); before = page.evaluate(SAMPLE)['sig']

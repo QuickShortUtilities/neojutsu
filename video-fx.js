@@ -87,11 +87,27 @@
     }
   }
 
+  // Geometric pass: zoom about the centre plus a pixel shake offset. Sampled,
+  // not smoothed, so the pixel grid survives.
+  function transform(d, w, h, zoom, dx, dy) {
+    const copy = d.slice(), cx = w / 2, cy = h / 2, k = 1 / Math.max(.05, zoom);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const sx = Math.round(cx + (x - cx) * k - dx), sy = Math.round(cy + (y - cy) * k - dy);
+      const p = (y * w + x) * 4;
+      if (sx < 0 || sy < 0 || sx >= w || sy >= h) { d[p] = d[p+1] = d[p+2] = 0; continue; }
+      const q = (sy * w + sx) * 4;
+      d[p] = copy[q]; d[p+1] = copy[q+1]; d[p+2] = copy[q+2];
+    }
+  }
+
   function apply(ctx, w, h, fx, env, t) {
     const react = env.level || 0;
-    const on = fx.bloom > 0 || fx.chroma > 0 || fx.glitch > 0 || fx.vignette > 0 || fx.curve > 0;
+    const zoom = fx.zoom || 1, dx = fx.shakeX || 0, dy = fx.shakeY || 0;
+    const moved = Math.abs(zoom - 1) > .002 || dx || dy;
+    const on = moved || fx.bloom > 0 || fx.chroma > 0 || fx.glitch > 0 || fx.vignette > 0 || fx.curve > 0;
     if (!on) return;
     const img = ctx.getImageData(0, 0, w, h), d = img.data;
+    if (moved) transform(d, w, h, zoom, dx, dy);
     if (fx.bloom > 0) bloom(d, w, h, fx.bloom * 1.6, 0.62);
     if (fx.chroma > 0) chroma(d, w, h, Math.round(fx.chroma * 3));
     if (fx.glitch > 0) glitch(d, w, h, Math.min(1, fx.glitch * (0.35 + react * 1.3)), t);

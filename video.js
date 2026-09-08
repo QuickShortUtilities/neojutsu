@@ -35,7 +35,7 @@
   let playing = false, lastFrame = 0, genTime = 0, metaScene = '';
   let audio = null, gain = null, analyser = null, trackNode = null, recorderDest = null;
   let buffer = null, savedTracks = [], freqData = null, waveData = null;
-  let layers = [], selected = 0;
+  let layers = [], selected = 0, rack = null;
 
   const newLayer = (over = {}) => Object.assign({
     on: true, mode: 'generate', scene: 'skyline', seed: window.NeoScene.randomSeed(),
@@ -55,11 +55,6 @@
     audioSrc: $('v-audio-src').value, vol: +$('v-vol').value / 100,
     fps: +$('v-fps').value, scale: +$('v-scale').value, title: $('v-title').value,
     container: $('v-container').value,
-    fx: {
-      bloom: +$('v-bloom').value / 100, glitch: +$('v-glitch').value / 100,
-      chroma: +$('v-chroma').value / 100, vignette: +$('v-vig').value / 100,
-      curve: +$('v-curve').value / 100,
-    },
     text: {
       text: $('v-text').value.trim(), pos: $('v-text-pos').value, color: $('v-text-col').value,
       size: +$('v-text-size').value / 100, shadow: $('v-text-shadow').checked,
@@ -160,7 +155,7 @@
     lctx.globalAlpha = 1; lctx.globalCompositeOperation = 'source-over';
     if (!drew) return;
 
-    window.NeoFX.apply(lctx, rw, rh, cfg.fx, env, genTime);
+    window.NeoFX.apply(lctx, rw, rh, window.NeoVRack.evaluate(rack, genTime, env), env, genTime);
     window.NeoFX.drawText(lctx, rw, rh, cfg.text);
 
     const frame = lctx.getImageData(0, 0, rw, rh), data = frame.data;
@@ -459,18 +454,19 @@
 
   // ---------- settings ----------
   const status = msg => { $('v-status').textContent = msg; };
-  const GLOBAL_FIELDS = ['v-chip','v-res','v-format','v-pix','v-dither','v-dith','v-bright','v-contrast','v-react','v-len','v-fps','v-scale','v-vol','v-title','v-container','v-bloom','v-glitch','v-chroma','v-vig','v-curve','v-text','v-text-pos','v-text-col','v-text-size'];
+  const GLOBAL_FIELDS = ['v-chip','v-res','v-format','v-pix','v-dither','v-dith','v-bright','v-contrast','v-react','v-len','v-fps','v-scale','v-vol','v-title','v-container','v-text','v-text-pos','v-text-col','v-text-size'];
   const LAYER_FIELDS = ['v-mode','v-scene','v-seed','v-speed','v-density','v-cut','v-blend','v-opacity'];
 
   function save() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ look: look(), layers: layers.map(persistable), selected }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ look: look(), layers: layers.map(persistable), selected, rack }));
       $('v-autosave').textContent = 'Autosaved on this browser';
     } catch { $('v-autosave').textContent = 'Autosave unavailable'; }
   }
   function restore() {
     let d = null;
     try { d = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); } catch {}
+    rack = window.NeoVRack.normalize(d && d.rack);
     layers = (d && Array.isArray(d.layers) && d.layers.length ? d.layers : [newLayer()]).slice(0, MAX_LAYERS).map(L => newLayer(L));
     selected = Math.min(d && d.selected || 0, layers.length - 1);
     const l = d && d.look; if (!l) return;
@@ -481,8 +477,6 @@
     set('v-vol', l.vol != null ? Math.round(l.vol * 100) : null);
     set('v-react', l.react != null ? Math.round(l.react * 100) : null);
     set('v-len', l.len); set('v-title', l.title); set('v-container', l.container);
-    if (l.fx) { set('v-bloom', Math.round(l.fx.bloom*100)); set('v-glitch', Math.round(l.fx.glitch*100));
-      set('v-chroma', Math.round(l.fx.chroma*100)); set('v-vig', Math.round(l.fx.vignette*100)); set('v-curve', Math.round(l.fx.curve*100)); }
     if (l.text) { set('v-text', l.text.text); set('v-text-pos', l.text.pos); set('v-text-col', l.text.color);
       set('v-text-size', Math.round(l.text.size*100)); $('v-text-shadow').checked = l.text.shadow !== false; }
     $('v-scanlines').checked = !!l.scanlines; $('v-loop').checked = l.loop !== false;
@@ -502,9 +496,7 @@
     $('v-react-v').textContent = Math.round(l.react * 100);
     $('v-speed-v').textContent = $('v-speed').value; $('v-density-v').textContent = $('v-density').value;
     $('v-opacity-v').textContent = $('v-opacity').value;
-    $('v-bloom-v').textContent = Math.round(l.fx.bloom * 100); $('v-glitch-v').textContent = Math.round(l.fx.glitch * 100);
-    $('v-chroma-v').textContent = Math.round(l.fx.chroma * 100); $('v-vig-v').textContent = Math.round(l.fx.vignette * 100);
-    $('v-curve-v').textContent = Math.round(l.fx.curve * 100); $('v-text-size-v').textContent = Math.round(l.text.size * 100);
+    $('v-text-size-v').textContent = Math.round(l.text.size * 100);
     $('v-badge').textContent = `out: 型 ${(PALETTES[l.chip] || PALETTES.gameboy).label.split(' · ')[0]}`;
     const [bw, bh] = baseSize(l);
     if (!ready()) { display.width = bw; display.height = bh; }
@@ -524,7 +516,9 @@
     for (const [key, def] of Object.entries(window.NeoScene.SCENES)) {
       const o = document.createElement('option'); o.value = key; o.textContent = def.label; sel.append(o);
     }
-    restore(); fillTracks(); renderLayers(); pullLayer(); syncLabels();
+    restore(); fillTracks(); renderLayers(); pullLayer();
+    window.NeoVRack.build($('v-rack'), () => rack, next => { rack = next; save(); });
+    syncLabels();
     window.NeoSelect?.refreshAll?.();
 
     $('v-pick').addEventListener('click', () => $('v-file').click());

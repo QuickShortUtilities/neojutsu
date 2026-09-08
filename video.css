@@ -66,3 +66,20 @@
 .layer-actions { display: flex; gap: 6px; margin-bottom: 22px; }
 .layer-actions .mini { flex: 1; padding-left: 0; padding-right: 0; }
 .layer-actions .mini:disabled { opacity: .35; cursor: default; border-color: var(--line); color: var(--muted); }
+
+/* effects rack */
+.vrack { display: flex; flex-direction: column; gap: 6px; margin-bottom: 22px; }
+.vunit { border: 1px solid var(--line); border-radius: 8px; background: #0b0913; overflow: hidden; }
+.vunit.on { border-color: #4a3b6b; }
+.vunit-head {
+  display: flex; align-items: center; gap: 9px; width: 100%; cursor: pointer;
+  background: none; border: 0; padding: 9px 10px; color: var(--muted); text-align: left;
+}
+.vunit-head:hover { color: var(--text); }
+.vunit-k { font-family: var(--kanji); font-weight: 900; font-size: 15px; color: #5b4d7a; }
+.vunit.on .vunit-k { color: var(--magenta); text-shadow: var(--glow-m); }
+.vunit-label { flex: 1; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+.vunit-led { width: 7px; height: 7px; border-radius: 50%; border: 1px solid #3a3252; }
+.vunit.on .vunit-led { background: var(--cyan); border-color: var(--cyan); box-shadow: var(--glow-c); }
+.vunit-body { padding: 4px 10px 2px; border-top: 1px solid var(--line); }
+.vunit-body .field { margin-bottom: 10px; }
