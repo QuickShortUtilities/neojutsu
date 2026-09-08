@@ -47,8 +47,16 @@
 
     <!-- ===== left: source + look ===== -->
     <aside class="panel gen">
-      <h2 class="panel-title"><span class="k">映</span> Source</h2>
+      <h2 class="panel-title"><span class="k">層</span> Layers</h2>
+      <div class="layer-list" id="v-layers" role="listbox" aria-label="Layers"></div>
+      <div class="layer-actions">
+        <button class="mini" id="v-layer-add" type="button" title="Add a layer above">+ Layer</button>
+        <button class="mini" id="v-layer-up" type="button" title="Move up">↑</button>
+        <button class="mini" id="v-layer-down" type="button" title="Move down">↓</button>
+        <button class="mini" id="v-layer-del" type="button" title="Remove this layer">✕</button>
+      </div>
 
+      <h2 class="panel-title"><span class="k">映</span> Layer</h2>
       <label class="field">
         <span>Footage</span>
         <select id="v-mode">
@@ -67,11 +75,7 @@
       </div>
 
       <div id="v-gen-block">
-        <label class="field">
-          <span>Scene</span>
-          <select id="v-scene"></select>
-        </label>
-
+        <label class="field"><span>Scene</span><select id="v-scene"></select></label>
         <label class="field">
           <span>Seed</span>
           <div class="seed-row">
@@ -80,40 +84,33 @@
             <button type="button" class="mini" id="v-mutate" title="Small variation of this seed">変</button>
           </div>
         </label>
-
-        <label class="field range">
-          <span>Speed <b id="v-speed-v">100</b></span>
-          <input type="range" id="v-speed" min="10" max="300" step="5" value="100" aria-label="Scene speed">
-        </label>
-
-        <label class="field range">
-          <span>Density <b id="v-density-v">50</b></span>
-          <input type="range" id="v-density" min="0" max="100" step="1" value="50" aria-label="Scene density">
-        </label>
-
-        <label class="field range">
-          <span>Reacts to audio <b id="v-react-v">70</b></span>
-          <input type="range" id="v-react" min="0" max="100" step="1" value="70" aria-label="Audio reactivity">
-        </label>
-
-        <label class="field range">
-          <span>Length <b id="v-len-v">30</b>s</span>
-          <input type="range" id="v-len" min="5" max="300" step="5" value="30" aria-label="Generated length in seconds">
-        </label>
-        <p class="hint" id="v-len-note">A soundtrack sets the length automatically.</p>
-
+        <label class="field range"><span>Speed <b id="v-speed-v">100</b></span>
+          <input type="range" id="v-speed" min="10" max="300" step="5" value="100" aria-label="Scene speed"></label>
+        <label class="field range"><span>Density <b id="v-density-v">50</b></span>
+          <input type="range" id="v-density" min="0" max="100" step="1" value="50" aria-label="Scene density"></label>
         <label class="field">
           <span>Auto-cut</span>
           <select id="v-cut">
             <option value="0" selected>Off · one scene</option>
-            <option value="2">Every 2s</option>
-            <option value="4">Every 4s</option>
-            <option value="8">Every 8s</option>
-            <option value="16">Every 16s</option>
+            <option value="2">Every 2s</option><option value="4">Every 4s</option>
+            <option value="8">Every 8s</option><option value="16">Every 16s</option>
           </select>
         </label>
-        <p class="hint">Cuts between scenes as the track plays, seeded so the running order repeats.</p>
       </div>
+
+      <label class="field">
+        <span>Blend</span>
+        <select id="v-blend">
+          <option value="source-over" selected>Normal · stack</option>
+          <option value="lighter">Add · glow</option>
+          <option value="screen">Screen</option>
+          <option value="multiply">Multiply</option>
+          <option value="difference">Difference</option>
+          <option value="overlay">Overlay</option>
+        </select>
+      </label>
+      <label class="field range"><span>Opacity <b id="v-opacity-v">100</b></span>
+        <input type="range" id="v-opacity" min="0" max="100" step="1" value="100" aria-label="Layer opacity"></label>
 
       <h2 class="panel-title"><span class="k">型</span> Look</h2>
 
@@ -151,10 +148,8 @@
         </select>
       </label>
 
-      <label class="field range">
-        <span>Pixel size <b id="v-pix-v">1</b></span>
-        <input type="range" id="v-pix" min="1" max="8" step="1" value="1" aria-label="Pixel block size">
-      </label>
+      <label class="field range"><span>Pixel size <b id="v-pix-v">1</b></span>
+        <input type="range" id="v-pix" min="1" max="8" step="1" value="1" aria-label="Pixel block size"></label>
 
       <label class="field">
         <span>Dither</span>
@@ -165,20 +160,17 @@
         </select>
       </label>
 
-      <label class="field range">
-        <span>Dither amount <b id="v-dith-v">60</b></span>
-        <input type="range" id="v-dith" min="0" max="100" step="1" value="60" aria-label="Dither amount">
-      </label>
-
-      <label class="field range">
-        <span>Brightness <b id="v-bright-v">0</b></span>
-        <input type="range" id="v-bright" min="-60" max="60" step="1" value="0" aria-label="Brightness">
-      </label>
-
-      <label class="field range">
-        <span>Contrast <b id="v-contrast-v">15</b></span>
-        <input type="range" id="v-contrast" min="-50" max="90" step="1" value="15" aria-label="Contrast">
-      </label>
+      <label class="field range"><span>Dither amount <b id="v-dith-v">60</b></span>
+        <input type="range" id="v-dith" min="0" max="100" step="1" value="60" aria-label="Dither amount"></label>
+      <label class="field range"><span>Brightness <b id="v-bright-v">0</b></span>
+        <input type="range" id="v-bright" min="-60" max="60" step="1" value="0" aria-label="Brightness"></label>
+      <label class="field range"><span>Contrast <b id="v-contrast-v">15</b></span>
+        <input type="range" id="v-contrast" min="-50" max="90" step="1" value="15" aria-label="Contrast"></label>
+      <label class="field range"><span>Reacts to audio <b id="v-react-v">70</b></span>
+        <input type="range" id="v-react" min="0" max="100" step="1" value="70" aria-label="Audio reactivity"></label>
+      <label class="field range"><span>Length <b id="v-len-v">30</b>s</span>
+        <input type="range" id="v-len" min="5" max="300" step="5" value="30" aria-label="Generated length in seconds"></label>
+      <p class="hint" id="v-len-note">A soundtrack sets the length automatically.</p>
 
       <div class="toggle-row">
         <label class="chk"><input type="checkbox" id="v-scanlines"> <span>Scanlines</span></label>

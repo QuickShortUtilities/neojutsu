@@ -50,3 +50,19 @@
 /* two controls sharing a row in the inspector */
 .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .two-up .field { margin-bottom: 14px; }
+
+/* layer stack */
+.layer-list { display: flex; flex-direction: column-reverse; gap: 4px; margin-bottom: 10px; }
+.layer-row {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: #0b0913;
+}
+.layer-row.current { border-color: var(--magenta); box-shadow: inset 0 0 0 1px rgba(255,46,136,.25); }
+.layer-row:hover { border-color: var(--cyan); }
+.layer-eye { background: none; border: 0; cursor: pointer; color: #4b4368; font-size: 12px; padding: 0; line-height: 1; }
+.layer-eye.on { color: var(--cyan); }
+.layer-name { flex: 1; font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-meta { font-family: var(--mono); font-size: 9px; color: var(--muted); text-transform: uppercase; }
+.layer-actions { display: flex; gap: 6px; margin-bottom: 22px; }
+.layer-actions .mini { flex: 1; padding-left: 0; padding-right: 0; }
+.layer-actions .mini:disabled { opacity: .35; cursor: default; border-color: var(--line); color: var(--muted); }

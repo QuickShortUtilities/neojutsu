@@ -1,11 +1,12 @@
-/* NeoJutsu Video Studio: generate 8-bit footage from a seed, or bring your own
-   clip, then score it with a track made in the Audio Studio. Runs on device. */
+/* NeoJutsu Video Studio: stack generated scenes and your own footage in layers,
+   treat the result as one machine, and score it from the Audio Studio. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const SETTINGS_KEY = 'neojutsu.video.v1';
+  const SETTINGS_KEY = 'neojutsu.video.v2';
   const SAVED_KEY = 'neojutsu.saved';
   const DRAFT_KEY = 'neojutsu.draft.v1';
+  const MAX_LAYERS = 4;
 
   const PALETTES = {
     gameboy: { label: 'Game Boy · DMG', size: [160, 144], colors: ['#0f380f','#306230','#8bac0f','#9bbc0f'] },
@@ -19,6 +20,7 @@
     bayer2: { n: 2, m: [0,2, 3,1] },
     none: null,
   };
+  const AR = { '16:9': 16/9, '1:1': 1, '9:16': 9/16, '4:3': 4/3 };
 
   const rgb = hex => [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
   const paletteRGB = key => (PALETTES[key] || PALETTES.gameboy).colors.map(rgb);
@@ -27,70 +29,59 @@
   const clock = s => `${two(s / 60)} : ${two(s % 60)}`;
 
   // ---------- state ----------
-  const video = document.createElement('video');
-  video.playsInline = true; video.muted = true; video.crossOrigin = 'anonymous';
   const display = $('v-canvas'), dctx = display.getContext('2d');
   const low = document.createElement('canvas'), lctx = low.getContext('2d', { willReadFrequently: true });
-  let clipReady = false, objectURL = '', playing = false, lastFrame = 0;
-  let audio = null, gain = null, analyser = null, trackNode = null, elementNode = null, recorderDest = null;
+  const scratch = document.createElement('canvas'), sctx = scratch.getContext('2d');
+  let playing = false, lastFrame = 0, genTime = 0, metaScene = '';
+  let audio = null, gain = null, analyser = null, trackNode = null, recorderDest = null;
   let buffer = null, savedTracks = [], freqData = null, waveData = null;
-  let scene = null, sceneKey = '', sceneSig = '', genTime = 0, metaScene = '';
+  let layers = [], selected = 0;
+
+  const newLayer = (over = {}) => Object.assign({
+    on: true, mode: 'generate', scene: 'skyline', seed: window.NeoScene.randomSeed(),
+    speed: 1, density: .5, cut: 0, blend: 'source-over', opacity: 1, clipName: '',
+  }, over);
+
+  // Runtime-only fields hang off the layer with a leading underscore and are
+  // stripped before saving, so a project stays plain JSON.
+  const persistable = L => Object.fromEntries(Object.entries(L).filter(([k]) => k[0] !== '_'));
 
   const look = () => ({
-    mode: $('v-mode').value,
-    chip: $('v-chip').value,
-    res: $('v-res').value,
-    format: $('v-format').value,
-    pix: +$('v-pix').value,
-    dither: $('v-dither').value,
-    dithAmt: +$('v-dith').value / 100,
-    bright: +$('v-bright').value,
-    contrast: +$('v-contrast').value,
-    scanlines: $('v-scanlines').checked,
-    loop: $('v-loop').checked,
-    scene: $('v-scene').value,
-    seed: $('v-seed').value.trim(),
-    speed: +$('v-speed').value / 100,
-    density: +$('v-density').value / 100,
-    react: +$('v-react').value / 100,
-    len: +$('v-len').value,
-    cut: +$('v-cut').value,
+    chip: $('v-chip').value, res: $('v-res').value, format: $('v-format').value,
+    pix: +$('v-pix').value, dither: $('v-dither').value, dithAmt: +$('v-dith').value / 100,
+    bright: +$('v-bright').value, contrast: +$('v-contrast').value,
+    scanlines: $('v-scanlines').checked, loop: $('v-loop').checked,
+    react: +$('v-react').value / 100, len: +$('v-len').value,
+    audioSrc: $('v-audio-src').value, vol: +$('v-vol').value / 100,
+    fps: +$('v-fps').value, scale: +$('v-scale').value, title: $('v-title').value,
     fx: {
       bloom: +$('v-bloom').value / 100, glitch: +$('v-glitch').value / 100,
       chroma: +$('v-chroma').value / 100, vignette: +$('v-vig').value / 100,
       curve: +$('v-curve').value / 100,
     },
     text: {
-      text: $('v-text').value.trim(), pos: $('v-text-pos').value,
-      color: $('v-text-col').value, size: +$('v-text-size').value / 100,
-      shadow: $('v-text-shadow').checked,
+      text: $('v-text').value.trim(), pos: $('v-text-pos').value, color: $('v-text-col').value,
+      size: +$('v-text-size').value / 100, shadow: $('v-text-shadow').checked,
     },
-    audioSrc: $('v-audio-src').value,
-    vol: +$('v-vol').value / 100,
-    fps: +$('v-fps').value,
-    scale: +$('v-scale').value,
-    title: $('v-title').value,
   });
 
-  const AR = { '16:9': 16/9, '1:1': 1, '9:16': 9/16, '4:3': 4/3 };
   function baseSize(cfg) {
-    const [w, h] = cfg.res !== 'auto'
-      ? cfg.res.split('x').map(Number)
-      : (PALETTES[cfg.chip] || PALETTES.gameboy).size;
+    const [w, h] = cfg.res !== 'auto' ? cfg.res.split('x').map(Number)
+                                      : (PALETTES[cfg.chip] || PALETTES.gameboy).size;
     const ar = AR[cfg.format];
-    // Keep the hardware's vertical resolution and reshape the width, so a
-    // vertical crop stays as chunky as the console it came from.
     return ar ? [Math.max(2, Math.round(h * ar / 2) * 2), h] : [w, h];
   }
 
-  const ready = cfg => cfg.mode === 'generate' || clipReady;
-  const duration = cfg => cfg.mode === 'import'
-    ? (video.duration || 0)
-    : (buffer ? buffer.duration : cfg.len);
+  const liveLayers = () => layers.filter(L => L.on && (L.mode === 'generate' || L._ready));
+  const ready = () => liveLayers().length > 0;
+  const clipDuration = () => Math.max(0, ...layers.filter(L => L._ready).map(L => L._video.duration || 0));
+  function duration(cfg) {
+    if (buffer) return buffer.duration;
+    const c = clipDuration();
+    return c || cfg.len;
+  }
 
   // ---------- audio envelope ----------
-  // One shape for every scene: overall level plus three bands, all 0..1 and
-  // already scaled by the reactivity control.
   const EMPTY = { level: 0, bass: 0, mid: 0, treble: 0, freq: [], wave: [] };
   function envelope(cfg) {
     if (!analyser || !playing || !cfg.react) return EMPTY;
@@ -105,54 +96,68 @@
     for (let i = 0; i < waveData.length; i++) rms += waveData[i] * waveData[i];
     rms = Math.min(1, Math.sqrt(rms / waveData.length) * 3.2);
     const k = cfg.react;
-    return { level: rms * k, bass: band(0, .08) * k, mid: band(.08, .32) * k, treble: band(.32, .8) * k,
-             freq: freqData, wave: waveData };
+    return { level: rms * k, bass: band(0, .08) * k, mid: band(.08, .32) * k, treble: band(.32, .8) * k, freq: freqData, wave: waveData };
   }
 
-  // ---------- scene ----------
-  // With auto-cut on, the running order is a seeded shuffle of every scene, so
-  // the same seed gives the same sequence of shots every time.
+  // ---------- scenes ----------
   function cutOrder(seed) {
     const keys = Object.keys(window.NeoScene.SCENES), r = window.NeoScene.rng(seed + ':order');
     for (let i = keys.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [keys[i], keys[j]] = [keys[j], keys[i]]; }
     return keys;
   }
-  function activeScene(cfg) {
-    if (cfg.mode !== 'generate' || !cfg.cut) return cfg.scene;
-    const order = cutOrder(cfg.seed || 'neojutsu');
-    return order[Math.floor(genTime / cfg.cut) % order.length];
+  function activeScene(L) {
+    if (!L.cut) return L.scene;
+    const order = cutOrder(L.seed || 'neojutsu');
+    return order[Math.floor(genTime / L.cut) % order.length];
   }
-  function ensureScene(cfg, key, w, h) {
-    const sig = [key, cfg.seed, cfg.density.toFixed(2), w, h].join('|');
-    if (sig === sceneSig && scene) return;
+  function ensureScene(L, key, w, h) {
+    const sig = [key, L.seed, L.density.toFixed(2), w, h].join('|');
+    if (sig === L._sig && L._scene) return;
     const def = window.NeoScene.SCENES[key] || Object.values(window.NeoScene.SCENES)[0];
-    scene = def.init(window.NeoScene.rng(cfg.seed || 'neojutsu'), w, h, cfg.density);
-    sceneKey = key; sceneSig = sig;
+    L._scene = def.init(window.NeoScene.rng(L.seed || 'neojutsu'), w, h, L.density);
+    L._key = key; L._sig = sig;
   }
 
-  // ---------- the 8-bit pipeline ----------
-  // Source (clip frame or generated scene) -> brightness/contrast -> dither ->
-  // snap to the hardware palette. Both modes share every step after the source.
+  // ---------- the pipeline ----------
+  // Layers composite in full colour first. The palette snap runs ONCE at the
+  // end, on the finished frame - snapping per layer would blend already-reduced
+  // colours and the hardware illusion falls apart.
   function processFrame(cfg, step) {
     const [bw, bh] = baseSize(cfg);
     const rw = Math.max(1, Math.round(bw / cfg.pix)), rh = Math.max(1, Math.round(bh / cfg.pix));
-    if (low.width !== rw || low.height !== rh) { low.width = rw; low.height = rh; sceneSig = ''; }
+    if (low.width !== rw || low.height !== rh) {
+      low.width = scratch.width = rw; low.height = scratch.height = rh;
+      for (const L of layers) L._sig = '';
+    }
     if (display.width !== bw || display.height !== bh) { display.width = bw; display.height = bh; }
 
     const env = envelope(cfg);
-    if (cfg.mode === 'generate') {
-      ensureScene(cfg, activeScene(cfg), rw, rh);
-      const def = window.NeoScene.SCENES[sceneKey];
-      lctx.save();
-      def.draw(lctx, rw, rh, genTime, env, scene, { speed: cfg.speed, density: cfg.density, step });
-      lctx.restore();
-    } else {
-      if (!clipReady) return;
-      lctx.imageSmoothingEnabled = true;
-      lctx.drawImage(video, 0, 0, rw, rh);
-    }
+    lctx.globalCompositeOperation = 'source-over'; lctx.globalAlpha = 1;
+    lctx.fillStyle = '#000000'; lctx.fillRect(0, 0, rw, rh);
 
-    window.NeoFX.apply(lctx, rw, rh, cfg.fx, env, cfg.mode === 'import' ? video.currentTime : genTime);
+    let drew = 0, topScene = '';
+    for (const L of layers) {
+      if (!L.on) continue;
+      if (L.mode === 'generate') {
+        const key = activeScene(L);
+        ensureScene(L, key, rw, rh);
+        topScene = key;
+        sctx.save();
+        window.NeoScene.SCENES[L._key].draw(sctx, rw, rh, genTime, env, L._scene, { speed: L.speed, density: L.density, step });
+        sctx.restore();
+      } else if (L._ready) {
+        sctx.imageSmoothingEnabled = true;
+        sctx.drawImage(L._video, 0, 0, rw, rh);
+      } else continue;
+      lctx.globalAlpha = L.opacity;
+      lctx.globalCompositeOperation = drew ? L.blend : 'source-over';
+      lctx.drawImage(scratch, 0, 0);
+      drew++;
+    }
+    lctx.globalAlpha = 1; lctx.globalCompositeOperation = 'source-over';
+    if (!drew) return;
+
+    window.NeoFX.apply(lctx, rw, rh, cfg.fx, env, genTime);
     window.NeoFX.drawText(lctx, rw, rh, cfg.text);
 
     const frame = lctx.getImageData(0, 0, rw, rh), data = frame.data;
@@ -160,7 +165,6 @@
     const contrast = (259 * (cfg.contrast + 255)) / (255 * (259 - cfg.contrast));
     const bay = BAYER[cfg.dither];
     const spread = bay ? (255 / levels) * cfg.dithAmt : 0;
-
     for (let y = 0; y < rh; y++) {
       for (let x = 0; x < rw; x++) {
         const i = (y * rw + x) * 4;
@@ -184,12 +188,15 @@
       }
     }
     lctx.putImageData(frame, 0, 0);
-
     dctx.imageSmoothingEnabled = false;
     dctx.drawImage(low, 0, 0, bw, bh);
     if (cfg.scanlines) {
       dctx.fillStyle = 'rgba(0,0,0,.22)';
       for (let y = 0; y < bh; y += 2) dctx.fillRect(0, y, bw, 1);
+    }
+    if (topScene && topScene !== metaScene) {
+      metaScene = topScene;
+      $('v-meta').textContent = `${bw}×${bh} · ${liveLayers().length} layer${liveLayers().length > 1 ? 's' : ''} · ${(window.NeoScene.SCENES[topScene] || {}).label || ''}`;
     }
   }
 
@@ -197,24 +204,16 @@
     requestAnimationFrame(frameLoop);
     const dt = Math.min(0.1, (now - lastFrame) / 1000 || 0); lastFrame = now;
     const cfg = look();
-    if (cfg.mode === 'generate' && playing) {
+    if (playing) {
       genTime += dt;
       const d = duration(cfg);
-      if (genTime >= d) { cfg.loop ? (genTime = 0) : stop(); }
+      if (d && genTime >= d) { cfg.loop ? (genTime = 0, seekClips(0)) : stop(); }
     }
-    if (!ready(cfg)) { display.classList.add('idle'); return; }
+    if (!ready()) { display.classList.add('idle'); return; }
     display.classList.remove('idle');
     processFrame(cfg, playing ? dt : 0);
-
-    const d = duration(cfg), at = cfg.mode === 'import' ? video.currentTime : genTime;
-    if (d) { $('v-scrub').value = Math.round((at / d) * 1000); $('v-position').textContent = clock(at); }
-    // Auto-cut changes the shot mid-playback, so the readout has to follow it
-    // rather than only refreshing when a control is touched.
-    if (cfg.mode === 'generate' && sceneKey !== metaScene) {
-      metaScene = sceneKey;
-      const [mw, mh] = baseSize(cfg);
-      $('v-meta').textContent = `${mw}×${mh} · ${(window.NeoScene.SCENES[sceneKey] || {}).label || ''}`;
-    }
+    const d = duration(cfg);
+    if (d) { $('v-scrub').value = Math.round((genTime / d) * 1000); $('v-position').textContent = clock(genTime); }
   }
 
   // ---------- audio ----------
@@ -232,10 +231,14 @@
   }
   const stopTrack = () => { if (trackNode) { try { trackNode.stop(); } catch {} trackNode.disconnect(); trackNode = null; } };
 
+  const firstClip = () => layers.find(L => L.on && L._ready);
   async function loadSoundtrack(cfg) {
     stopTrack(); buffer = null;
-    video.muted = cfg.audioSrc !== 'original';
-    if (cfg.audioSrc === 'none' || cfg.audioSrc === 'original') { syncLen(); return; }
+    // "The clip's own audio" follows the lowest visible clip layer; every other
+    // clip stays muted so stacked footage does not pile up sound.
+    for (const L of layers) if (L._video) L._video.muted = true;
+    if (cfg.audioSrc === 'original') { const c = firstClip(); if (c) c._video.muted = false; syncLen(); return; }
+    if (cfg.audioSrc === 'none') { syncLen(); return; }
     const track = savedTracks.find(t => t.id === cfg.audioSrc);
     if (!track) { syncLen(); return; }
     status('Rendering the soundtrack…');
@@ -243,13 +246,13 @@
     catch { status('That track could not be rendered.'); }
     syncLen();
   }
-
   function startAudio(cfg) {
     const ac = ctx();
     gain.gain.value = cfg.vol;
     if (cfg.audioSrc === 'original') {
-      if (!elementNode) { elementNode = ac.createMediaElementSource(video); elementNode.connect(gain); }
-      if (recorderDest) elementNode.connect(recorderDest);
+      const c = firstClip(); if (!c) return;
+      if (!c._node) { c._node = ac.createMediaElementSource(c._video); c._node.connect(gain); }
+      if (recorderDest) c._node.connect(recorderDest);
       return;
     }
     if (!buffer) return;
@@ -258,11 +261,10 @@
     trackNode.buffer = buffer; trackNode.loop = cfg.loop;
     trackNode.connect(gain);
     if (recorderDest) trackNode.connect(recorderDest);
-    const at = cfg.mode === 'import' ? video.currentTime : genTime;
-    trackNode.start(0, at % buffer.duration);
+    trackNode.start(0, genTime % buffer.duration);
   }
 
-  // ---------- tracks from the Audio Studio ----------
+  // ---------- tracks ----------
   function readTracks() {
     const out = [];
     try {
@@ -280,7 +282,7 @@
   function fillTracks() {
     savedTracks = readTracks();
     const sel = $('v-audio-src'), keep = sel.value;
-    sel.innerHTML = '<option value="none">Silent</option><option value="original">The video\'s own audio</option>';
+    sel.innerHTML = '<option value="none">Silent</option><option value="original">The clip\'s own audio</option>';
     for (const t of savedTracks) {
       const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; sel.append(o);
     }
@@ -291,22 +293,18 @@
     window.NeoSelect?.refreshAll?.();
   }
 
-  // ---------- import ----------
+  // ---------- clips ----------
   function openFile(file) {
+    const L = layers[selected];
     if (!file || !file.type.startsWith('video/')) { status('That file is not a video.'); return; }
-    if (objectURL) URL.revokeObjectURL(objectURL);
-    objectURL = URL.createObjectURL(file);
-    video.src = objectURL;
-    video.onloadedmetadata = () => {
-      clipReady = true;
-      $('v-empty').hidden = true;
-      $('v-scrub').disabled = false;
-      $('v-meta').textContent = `${video.videoWidth}×${video.videoHeight} · ${clock(video.duration)}`;
-      $('v-source-note').textContent = `${file.name} · stays on your device`;
-      video.currentTime = 0; save();
-    };
-    video.onerror = () => status('That video could not be decoded by this browser.');
+    if (L._url) URL.revokeObjectURL(L._url);
+    const v = L._video || document.createElement('video');
+    v.playsInline = true; v.muted = true; v.loop = true;
+    L._url = URL.createObjectURL(file); v.src = L._url; L._video = v;
+    v.onloadedmetadata = () => { L._ready = true; L.clipName = file.name; renderLayers(); syncLabels(); save(); };
+    v.onerror = () => status('That video could not be decoded by this browser.');
   }
+  const seekClips = t => { for (const L of layers) if (L._ready) { try { L._video.currentTime = t % (L._video.duration || 1); } catch {} } };
 
   // ---------- transport ----------
   function setPlaying(on) {
@@ -317,122 +315,160 @@
   }
   async function play() {
     const cfg = look();
-    if (!ready(cfg)) { status('Load a video first, or switch Footage to Generate.'); return; }
+    if (!ready()) { status('Add a layer, or load a clip.'); return; }
     ctx();
-    if (!buffer && cfg.audioSrc !== 'none' && cfg.audioSrc !== 'original') await loadSoundtrack(cfg);
-    if (cfg.mode === 'import') { video.loop = cfg.loop; await video.play(); }
-    setPlaying(true);
-    startAudio(cfg);
+    if (!buffer && cfg.audioSrc !== 'none') await loadSoundtrack(cfg);
+    for (const L of layers) if (L._ready && L.on) { try { await L._video.play(); } catch {} }
+    setPlaying(true); startAudio(cfg);
   }
-  function stop() { video.pause(); stopTrack(); setPlaying(false); }
+  function stop() { for (const L of layers) if (L._video) L._video.pause(); stopTrack(); setPlaying(false); }
   const toggle = () => (playing ? stop() : play());
 
   // ---------- export ----------
   async function exportVideo() {
     const cfg = look();
-    if (!ready(cfg)) { status('Nothing to export yet.'); return; }
-    if (typeof MediaRecorder === 'undefined') { status('This browser cannot record video.'); return; }
+    if (!ready()) { status('Nothing to export yet.'); return; }
     const [bw, bh] = baseSize(cfg);
     const out = document.createElement('canvas');
     out.width = bw * cfg.scale; out.height = bh * cfg.scale;
     const octx = out.getContext('2d'); octx.imageSmoothingEnabled = false;
-
-    stop();
+    stop(); genTime = 0; seekClips(0);
     const ac = ctx();
     recorderDest = ac.createMediaStreamDestination();
-    if (cfg.mode === 'import') video.currentTime = 0; else genTime = 0;
     await loadSoundtrack(cfg);
+    const total = duration(cfg) || cfg.len;
+    const paint = () => { octx.drawImage(display, 0, 0, out.width, out.height); if (running) requestAnimationFrame(paint); };
+    let running = true;
 
+    if (typeof MediaRecorder === 'undefined') { status('This browser cannot record video.'); return; }
     const stream = out.captureStream(cfg.fps);
     const type = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
       .find(t => MediaRecorder.isTypeSupported(t)) || '';
     const rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 6e6 } : undefined);
     const chunks = []; rec.ondataavailable = e => e.data.size && chunks.push(e.data);
     const stopped = new Promise(res => { rec.onstop = res; });
-
-    const paint = () => { octx.drawImage(display, 0, 0, out.width, out.height); if (rec.state === 'recording') requestAnimationFrame(paint); };
-
-    const total = duration(cfg) || cfg.len;
     rec.start(250); paint();
-    if (cfg.mode === 'import') { video.loop = false; await video.play(); }
+    for (const L of layers) if (L._ready && L.on) { try { await L._video.play(); } catch {} }
     setPlaying(true); startAudio(cfg);
     status(`Recording ${Math.round(total)}s… this runs in real time.`);
-
-    if (cfg.mode === 'import') await new Promise(res => { video.onended = res; });
-    else await new Promise(res => setTimeout(res, total * 1000));
-
-    rec.stop(); stop(); await stopped;
+    await new Promise(res => setTimeout(res, total * 1000));
+    running = false; rec.stop(); stop(); await stopped;
     const blob = new Blob(chunks, { type: type || 'video/webm' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${(cfg.title || 'neojutsu-video').replace(/[^\w.-]+/g, '-')}.webm`;
-    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    status(`Exported ${a.download} · ${(blob.size / 1048576).toFixed(1)} MB`);
+    download(blob, `${(cfg.title || 'neojutsu-video').replace(/[^\w.-]+/g, '-')}.webm`);
     recorderDest = null;
   }
+  function download(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    status(`Exported ${name} · ${(blob.size / 1048576).toFixed(1)} MB`);
+  }
 
-  // ---------- settings & labels ----------
+  // ---------- layer UI ----------
+  function renderLayers() {
+    const host = $('v-layers'); host.innerHTML = '';
+    layers.forEach((L, i) => {
+      const row = document.createElement('div');
+      row.className = 'layer-row' + (i === selected ? ' current' : '');
+      row.setAttribute('role', 'option');
+      row.setAttribute('aria-selected', String(i === selected));
+      const eye = document.createElement('button');
+      eye.type = 'button'; eye.className = 'layer-eye' + (L.on ? ' on' : '');
+      eye.title = L.on ? 'Hide this layer' : 'Show this layer';
+      eye.textContent = L.on ? '◉' : '◌';
+      eye.addEventListener('click', e => { e.stopPropagation(); L.on = !L.on; renderLayers(); save(); });
+      const name = document.createElement('span');
+      name.className = 'layer-name';
+      name.textContent = L.mode === 'generate'
+        ? ((window.NeoScene.SCENES[L.scene] || {}).label || L.scene).split(' · ')[0]
+        : (L.clipName || 'no clip');
+      const meta = document.createElement('span');
+      meta.className = 'layer-meta';
+      meta.textContent = i === 0 ? 'base' : (L.blend === 'source-over' ? 'over' : L.blend);
+      row.append(eye, name, meta);
+      row.addEventListener('click', () => { selected = i; renderLayers(); pullLayer(); syncLabels(); });
+      host.append(row);
+    });
+    $('v-layer-del').disabled = layers.length < 2;
+    $('v-layer-add').disabled = layers.length >= MAX_LAYERS;
+  }
+  // The layer controls edit whichever row is selected, so they have to be
+  // pushed and pulled rather than read straight from the DOM.
+  function pullLayer() {
+    const L = layers[selected];
+    $('v-mode').value = L.mode; $('v-scene').value = L.scene; $('v-seed').value = L.seed;
+    $('v-speed').value = Math.round(L.speed * 100); $('v-density').value = Math.round(L.density * 100);
+    $('v-cut').value = L.cut; $('v-blend').value = L.blend; $('v-opacity').value = Math.round(L.opacity * 100);
+    $('v-source-note').textContent = L.clipName ? `${L.clipName} · stays on your device` : 'Stays on your device. Nothing is uploaded.';
+    window.NeoSelect?.refreshAll?.();
+  }
+  function pushLayer() {
+    const L = layers[selected];
+    L.mode = $('v-mode').value; L.scene = $('v-scene').value; L.seed = $('v-seed').value.trim();
+    L.speed = +$('v-speed').value / 100; L.density = +$('v-density').value / 100;
+    L.cut = +$('v-cut').value; L.blend = $('v-blend').value; L.opacity = +$('v-opacity').value / 100;
+    L._sig = '';
+    renderLayers();
+  }
+
+  // ---------- settings ----------
   const status = msg => { $('v-status').textContent = msg; };
-  const FIELDS = ['v-chip','v-res','v-format','v-pix','v-dither','v-dith','v-bright','v-contrast','v-fps','v-scale','v-vol','v-title','v-scene','v-seed','v-speed','v-density','v-react','v-len','v-cut','v-bloom','v-glitch','v-chroma','v-vig','v-curve','v-text','v-text-pos','v-text-col','v-text-size'];
+  const GLOBAL_FIELDS = ['v-chip','v-res','v-format','v-pix','v-dither','v-dith','v-bright','v-contrast','v-react','v-len','v-fps','v-scale','v-vol','v-title','v-bloom','v-glitch','v-chroma','v-vig','v-curve','v-text','v-text-pos','v-text-col','v-text-size'];
+  const LAYER_FIELDS = ['v-mode','v-scene','v-seed','v-speed','v-density','v-cut','v-blend','v-opacity'];
 
   function save() {
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ look: look() })); $('v-autosave').textContent = 'Autosaved on this browser'; }
-    catch { $('v-autosave').textContent = 'Autosave unavailable'; }
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ look: look(), layers: layers.map(persistable), selected }));
+      $('v-autosave').textContent = 'Autosaved on this browser';
+    } catch { $('v-autosave').textContent = 'Autosave unavailable'; }
   }
   function restore() {
-    try {
-      const d = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); const l = d && d.look; if (!l) return;
-      const set = (id, v) => { if (v !== undefined && v !== null) $(id).value = v; };
-      set('v-mode', l.mode); set('v-chip', l.chip); set('v-res', l.res); set('v-pix', l.pix);
-      set('v-dither', l.dither); set('v-dith', l.dithAmt != null ? Math.round(l.dithAmt * 100) : null);
-      set('v-bright', l.bright); set('v-contrast', l.contrast); set('v-fps', l.fps); set('v-scale', l.scale);
-      set('v-vol', l.vol != null ? Math.round(l.vol * 100) : null);
-      set('v-scene', l.scene); set('v-seed', l.seed);
-      set('v-speed', l.speed != null ? Math.round(l.speed * 100) : null);
-      set('v-density', l.density != null ? Math.round(l.density * 100) : null);
-      set('v-react', l.react != null ? Math.round(l.react * 100) : null);
-      set('v-len', l.len); set('v-title', l.title); set('v-format', l.format); set('v-cut', l.cut);
-      if (l.fx) { set('v-bloom', Math.round(l.fx.bloom*100)); set('v-glitch', Math.round(l.fx.glitch*100));
-        set('v-chroma', Math.round(l.fx.chroma*100)); set('v-vig', Math.round(l.fx.vignette*100));
-        set('v-curve', Math.round(l.fx.curve*100)); }
-      if (l.text) { set('v-text', l.text.text); set('v-text-pos', l.text.pos); set('v-text-col', l.text.color);
-        set('v-text-size', Math.round(l.text.size*100)); $('v-text-shadow').checked = l.text.shadow !== false; }
-      $('v-scanlines').checked = !!l.scanlines; $('v-loop').checked = l.loop !== false;
-    } catch {}
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); } catch {}
+    layers = (d && Array.isArray(d.layers) && d.layers.length ? d.layers : [newLayer()]).slice(0, MAX_LAYERS).map(L => newLayer(L));
+    selected = Math.min(d && d.selected || 0, layers.length - 1);
+    const l = d && d.look; if (!l) return;
+    const set = (id, v) => { if (v !== undefined && v !== null) $(id).value = v; };
+    set('v-chip', l.chip); set('v-res', l.res); set('v-format', l.format); set('v-pix', l.pix);
+    set('v-dither', l.dither); set('v-dith', l.dithAmt != null ? Math.round(l.dithAmt * 100) : null);
+    set('v-bright', l.bright); set('v-contrast', l.contrast); set('v-fps', l.fps); set('v-scale', l.scale);
+    set('v-vol', l.vol != null ? Math.round(l.vol * 100) : null);
+    set('v-react', l.react != null ? Math.round(l.react * 100) : null);
+    set('v-len', l.len); set('v-title', l.title);
+    if (l.fx) { set('v-bloom', Math.round(l.fx.bloom*100)); set('v-glitch', Math.round(l.fx.glitch*100));
+      set('v-chroma', Math.round(l.fx.chroma*100)); set('v-vig', Math.round(l.fx.vignette*100)); set('v-curve', Math.round(l.fx.curve*100)); }
+    if (l.text) { set('v-text', l.text.text); set('v-text-pos', l.text.pos); set('v-text-col', l.text.color);
+      set('v-text-size', Math.round(l.text.size*100)); $('v-text-shadow').checked = l.text.shadow !== false; }
+    $('v-scanlines').checked = !!l.scanlines; $('v-loop').checked = l.loop !== false;
   }
   function syncLen() {
-    const cfg = look();
-    const locked = !!buffer;
+    const cfg = look(), locked = !!buffer || clipDuration() > 0;
     $('v-len').disabled = locked;
     $('v-len-v').textContent = Math.round(duration(cfg)) || cfg.len;
-    $('v-len-note').textContent = locked
-      ? 'Length follows the soundtrack.'
-      : 'A soundtrack sets the length automatically.';
+    $('v-len-note').textContent = buffer ? 'Length follows the soundtrack.'
+      : clipDuration() ? 'Length follows the longest clip.' : 'A soundtrack sets the length automatically.';
   }
   function syncLabels() {
     const l = look();
     $('v-pix-v').textContent = l.pix; $('v-dith-v').textContent = Math.round(l.dithAmt * 100);
     $('v-bright-v').textContent = l.bright; $('v-contrast-v').textContent = l.contrast;
     $('v-scale-v').textContent = l.scale; $('v-vol-v').textContent = Math.round(l.vol * 100);
-    $('v-speed-v').textContent = Math.round(l.speed * 100); $('v-density-v').textContent = Math.round(l.density * 100);
     $('v-react-v').textContent = Math.round(l.react * 100);
-    $('v-bloom-v').textContent = Math.round(l.fx.bloom * 100);
-    $('v-glitch-v').textContent = Math.round(l.fx.glitch * 100);
-    $('v-chroma-v').textContent = Math.round(l.fx.chroma * 100);
-    $('v-vig-v').textContent = Math.round(l.fx.vignette * 100);
-    $('v-curve-v').textContent = Math.round(l.fx.curve * 100);
-    $('v-text-size-v').textContent = Math.round(l.text.size * 100);
+    $('v-speed-v').textContent = $('v-speed').value; $('v-density-v').textContent = $('v-density').value;
+    $('v-opacity-v').textContent = $('v-opacity').value;
+    $('v-bloom-v').textContent = Math.round(l.fx.bloom * 100); $('v-glitch-v').textContent = Math.round(l.fx.glitch * 100);
+    $('v-chroma-v').textContent = Math.round(l.fx.chroma * 100); $('v-vig-v').textContent = Math.round(l.fx.vignette * 100);
+    $('v-curve-v').textContent = Math.round(l.fx.curve * 100); $('v-text-size-v').textContent = Math.round(l.text.size * 100);
     $('v-badge').textContent = `out: 型 ${(PALETTES[l.chip] || PALETTES.gameboy).label.split(' · ')[0]}`;
     const [bw, bh] = baseSize(l);
-    if (!ready(l)) { display.width = bw; display.height = bh; }
-    $('v-import-block').hidden = l.mode !== 'import';
-    $('v-gen-block').hidden = l.mode !== 'generate';
-    $('v-empty').hidden = ready(l);
-    $('v-scrub').disabled = !ready(l);
-    $('v-meta').textContent = l.mode === 'generate'
-      ? `${bw}×${bh} · ${(window.NeoScene.SCENES[activeScene(l)] || {}).label || ''}`
-      : (clipReady ? `${video.videoWidth}×${video.videoHeight} · ${clock(video.duration)}` : '—');
+    if (!ready()) { display.width = bw; display.height = bh; }
+    const L = layers[selected];
+    $('v-import-block').hidden = L.mode !== 'import';
+    $('v-gen-block').hidden = L.mode !== 'generate';
+    $('v-empty').hidden = ready();
+    $('v-scrub').disabled = !ready();
     if (gain) gain.gain.value = l.vol;
+    metaScene = '';
     syncLen();
   }
 
@@ -442,8 +478,7 @@
     for (const [key, def] of Object.entries(window.NeoScene.SCENES)) {
       const o = document.createElement('option'); o.value = key; o.textContent = def.label; sel.append(o);
     }
-    $('v-seed').value = window.NeoScene.randomSeed();
-    restore(); fillTracks(); syncLabels();
+    restore(); fillTracks(); renderLayers(); pullLayer(); syncLabels();
     window.NeoSelect?.refreshAll?.();
 
     $('v-pick').addEventListener('click', () => $('v-file').click());
@@ -456,36 +491,53 @@
     $('v-play').addEventListener('click', toggle);
     $('v-open-export').addEventListener('click', exportVideo);
     $('v-audio-refresh').addEventListener('click', fillTracks);
-    $('v-dice').addEventListener('click', () => { $('v-seed').value = window.NeoScene.randomSeed(); sceneSig = ''; save(); });
+    $('v-dice').addEventListener('click', () => { $('v-seed').value = window.NeoScene.randomSeed(); pushLayer(); save(); });
     $('v-mutate').addEventListener('click', () => {
       const cur = $('v-seed').value.trim() || window.NeoScene.randomSeed();
       $('v-seed').value = cur.slice(0, 5) + Math.random().toString(36).slice(2, 3);
-      sceneSig = ''; save();
+      pushLayer(); save();
     });
-    $('v-mode').addEventListener('change', () => { stop(); genTime = 0; syncLabels(); save(); });
+    $('v-layer-add').addEventListener('click', () => {
+      if (layers.length >= MAX_LAYERS) return;
+      layers.splice(selected + 1, 0, newLayer({ scene: 'motes', blend: 'lighter', opacity: .8 }));
+      selected++; renderLayers(); pullLayer(); syncLabels(); save();
+    });
+    $('v-layer-del').addEventListener('click', () => {
+      if (layers.length < 2) return;
+      const [gone] = layers.splice(selected, 1);
+      if (gone._url) URL.revokeObjectURL(gone._url);
+      selected = Math.max(0, selected - 1);
+      renderLayers(); pullLayer(); syncLabels(); save();
+    });
+    const move = dir => {
+      const j = selected + dir;
+      if (j < 0 || j >= layers.length) return;
+      [layers[selected], layers[j]] = [layers[j], layers[selected]];
+      selected = j; renderLayers(); pullLayer(); save();
+    };
+    $('v-layer-up').addEventListener('click', () => move(-1));
+    $('v-layer-down').addEventListener('click', () => move(1));
+
     $('v-toggle-inspector').addEventListener('click', () => {
       const open = $('v-inspector').hasAttribute('hidden');
       open ? $('v-inspector').removeAttribute('hidden') : $('v-inspector').setAttribute('hidden', '');
       $('v-toggle-inspector').setAttribute('aria-expanded', String(open));
     });
-
     $('v-scrub').addEventListener('input', e => {
-      const cfg = look(), d = duration(cfg); if (!d) return;
-      const at = (e.target.value / 1000) * d;
-      if (cfg.mode === 'import') video.currentTime = at; else genTime = at;
+      const d = duration(look()); if (!d) return;
+      genTime = (e.target.value / 1000) * d; seekClips(genTime);
     });
     $('v-audio-src').addEventListener('change', async () => {
       stopTrack(); await loadSoundtrack(look()); if (playing) startAudio(look()); save();
     });
-    for (const id of FIELDS) $(id).addEventListener('input', () => { syncLabels(); save(); });
-    for (const id of ['v-scanlines','v-loop','v-text-shadow']) $(id).addEventListener('change', () => { video.loop = look().loop; save(); });
-    video.addEventListener('ended', () => { if (!look().loop) stop(); });
+    for (const id of GLOBAL_FIELDS) $(id).addEventListener('input', () => { syncLabels(); save(); });
+    for (const id of LAYER_FIELDS) $(id).addEventListener('input', () => { pushLayer(); syncLabels(); save(); });
+    for (const id of ['v-scanlines','v-loop','v-text-shadow']) $(id).addEventListener('change', save);
 
     document.addEventListener('keydown', e => {
       if (e.code === 'Space' && !/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName)) { e.preventDefault(); toggle(); }
     });
     window.addEventListener('storage', e => { if (e.key === SAVED_KEY) fillTracks(); });
-
     requestAnimationFrame(frameLoop);
   }
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', init) : init();
