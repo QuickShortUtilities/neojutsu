@@ -17,15 +17,23 @@ SAMPLE = """() => {
 def setv(page, sel, val):
     page.evaluate("([s,v])=>{const e=document.querySelector(s); e.value=v; e.dispatchEvent(new Event('input',{bubbles:true}));}", [sel, str(val)])
 
-ORDER = ['glow','glitch','chroma','vignette','curve','zoom','shake']
+ORDER = ['glow','glitch','chroma','vignette','curve','zoom','shake','trails','mirror']
+def open_unit(page, name):
+    page.locator(f'.vchip[data-vfx={name}]').click(); page.wait_for_timeout(120)
+def power(page, name):
+    page.locator(f'.fx-window[data-vfx={name}] .fx-power').click(); page.wait_for_timeout(120)
 def unit_on(page, name):
-    page.locator('.vchip').nth(ORDER.index(name)).click()
+    """Open the plugin window and hit its power button, the way a person would."""
+    if page.locator(f'.fx-window[data-vfx={name}]').count() == 0 or \
+       not page.locator(f'.fx-window[data-vfx={name}]').is_visible():
+        open_unit(page, name)
+    power(page, name)
 def unit_amount(page, name, val):
-    page.evaluate("""(v)=>{const r=document.querySelector('#v-rack-params input[type=range]');
-      r.value=v; r.dispatchEvent(new Event('input',{bubbles:true}));}""", str(val))
+    # Dials are real dials; End drives the focused one to maximum.
+    page.locator(f'.fx-window[data-vfx={name}] .dial-face').first.press('End')
 def unit_motion(page, name, shape):
-    page.evaluate("""(v)=>{const s=document.querySelector('#v-rack-params select');
-      s.value=v; s.dispatchEvent(new Event('change',{bubbles:true}));}""", shape)
+    page.evaluate("""([n,v])=>{const w=document.querySelector(`.fx-window[data-vfx=${n}]`);
+      const s=w.querySelector('.m-shape'); s.value=v; s.dispatchEvent(new Event('change',{bubbles:true}));}""", [name, shape])
 
 def pick_scene(page, key):
     page.evaluate("(k)=>{const s=document.getElementById('v-scene'); s.value=k; s.dispatchEvent(new Event('input',{bubbles:true}));}", key)
@@ -75,7 +83,7 @@ with sync_playwright() as p:
 
     # Every effect must change the picture and none may leave the palette.
     fx_effect={}
-    for name in ['glow','glitch','chroma','curve','zoom','shake']:
+    for name in ['glow','glitch','chroma','curve','zoom','shake','trails','mirror']:
         before = page.evaluate(SAMPLE)['sig']
         unit_on(page,name); unit_amount(page,name,80); page.wait_for_timeout(600)
         after = page.evaluate(SAMPLE)
@@ -87,8 +95,7 @@ with sync_playwright() as p:
     assert all(fx_effect.values()), fx_effect
 
     # Motion drives a parameter over time without touching a control.
-    unit_on(page,'zoom'); unit_amount(page,'zoom',10); unit_motion(page,'zoom','sine')
-    unit_amount(page,'zoom',10)
+    unit_on(page,'zoom'); unit_motion(page,'zoom','sine')
     page.wait_for_timeout(400)
     a = page.evaluate(SAMPLE)['sig']; moved=False
     for _ in range(24):

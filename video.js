@@ -649,7 +649,7 @@
     }
     if (!timeline.shots.length) timeline.shots = [newShot(), { ...newShot(), scene: 'grid' }];
     renderTimeline(); pullShot();
-    window.NeoVRack.build($('v-rack-grid'), $('v-rack-params'), () => rack, next => { rack = next; save(); });
+    window.NeoVRackUI.init($('v-rack-grid'), () => rack, () => save());
     syncLabels();
     window.NeoSelect?.refreshAll?.();
 

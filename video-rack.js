@@ -1,20 +1,54 @@
-/* Video effects rack. Mirrors the Audio Studio's NeoRack shape: units declared
-   in a SPEC, each with a kanji, an on/off and a few parameters - and, like the
-   audio rack's motion, every parameter can be driven by an LFO or by the music
-   itself instead of sitting at a fixed value. */
+/* Video effects rack. Same shape as the Audio Studio's NeoRack: units declared
+   in a SPEC, opened as draggable plugin windows with dials, a power LED and a
+   live screen - reusing the audio rack's markup and CSS so the two studios feel
+   like one desk. Any parameter can be driven by an LFO or by the music. */
 (() => {
   'use strict';
+  const P = (label, min, max, def, unit = '') => ({ label, min, max, def, unit });
+
+  const SPEC = {
+    glow:     { label: 'Glow', kanji: '光', theme: 'reverb', screen: 'curve',
+                blurb: 'Bright areas bleed. Threshold picks what counts as bright.',
+                params: { amount: P('Amount', 0, 100, 40), threshold: P('Threshold', 0, 100, 62),
+                          radius: P('Radius', 1, 6, 2), warmth: P('Warmth', -100, 100, 0) } },
+    glitch:   { label: 'Glitch', kanji: '乱', theme: 'crush', screen: 'bars',
+                blurb: 'Torn scanline slices. Hold sets how long a tear survives.',
+                params: { amount: P('Amount', 0, 100, 40), height: P('Slice', 1, 40, 12, '%'),
+                          shift: P('Shift', 0, 100, 35, '%'), hold: P('Hold', 1, 24, 8, '/s'),
+                          tear: P('Colour tear', 0, 100, 0) } },
+    chroma:   { label: 'Colour split', kanji: '色', theme: 'phaser', screen: 'curve',
+                blurb: 'Red and blue pull apart along an angle.',
+                params: { amount: P('Amount', 0, 100, 30), angle: P('Angle', 0, 360, 0, '°') } },
+    vignette: { label: 'Vignette', kanji: '暗', theme: 'comp', screen: 'curve',
+                blurb: 'Darkens toward the edge. Shape bends it from round to square.',
+                params: { amount: P('Amount', 0, 100, 45), softness: P('Softness', 1, 100, 50),
+                          shape: P('Shape', 0, 100, 0) } },
+    curve:    { label: 'Tube curve', kanji: '管', theme: 'flanger', screen: 'curve',
+                blurb: 'Bows the picture like a tube, and darkens the corners with it.',
+                params: { amount: P('Curve', 0, 100, 35), edge: P('Corner', 0, 100, 40) } },
+    zoom:     { label: 'Zoom', kanji: '寄', theme: 'echo', screen: 'bars',
+                blurb: 'Pushes in about a point. Put it on motion for a breathing shot.',
+                params: { amount: P('Amount', 0, 100, 20), cx: P('Centre X', -50, 50, 0, '%'),
+                          cy: P('Centre Y', -50, 50, 0, '%') } },
+    shake:    { label: 'Shake', kanji: '震', theme: 'crush', screen: 'bars',
+                blurb: 'Camera knock. Put it on ♪ Bass to shake on the kick.',
+                params: { amount: P('Amount', 0, 100, 30), speed: P('Speed', 1, 100, 40),
+                          axis: P('Axis', 0, 2, 0) } },
+    trails:   { label: 'Trails', kanji: '残', theme: 'echo', screen: 'curve',
+                blurb: 'Each frame keeps a ghost of the last one.',
+                params: { amount: P('Feedback', 0, 100, 50), decay: P('Decay', 0, 100, 40) } },
+    mirror:   { label: 'Mirror', kanji: '鏡', theme: 'width', screen: 'curve',
+                blurb: 'Folds the frame back on itself. Mode picks the axis.',
+                params: { mode: P('Mode', 0, 3, 1), offset: P('Offset', -50, 50, 0, '%') } },
+  };
+  const ORDER = Object.keys(SPEC);
 
   const SHAPES = {
-    off:    null,
-    sine:   t => Math.sin(t * 6.283) * .5 + .5,
-    tri:    t => 1 - Math.abs(((t % 1) * 2) - 1),
+    sine: t => Math.sin(t * 6.283) * .5 + .5,
+    tri: t => 1 - Math.abs(((t % 1) * 2) - 1),
     square: t => ((t % 1) < .5 ? 1 : 0),
-    ramp:   t => (t % 1),
-    fall:   t => 1 - (t % 1),
-    level:  null,   // follows overall loudness
-    bass:   null,   // follows the low end
-    treble: null,   // follows the high end
+    ramp: t => (t % 1),
+    fall: t => 1 - (t % 1),
   };
   const SHAPE_LABELS = { off: 'Fixed', sine: 'Sine', tri: 'Triangle', square: 'Square',
                          ramp: 'Ramp up', fall: 'Ramp down', level: '♪ Level', bass: '♪ Bass', treble: '♪ Treble' };
@@ -24,143 +58,124 @@
     { id: '1/4', label: '1/4', hz: 2 }, { id: '1/8', label: '1/8', hz: 4 },
   ];
 
-  // amount is always 0..100 in the UI and 0..1 to the renderer.
-  const SPEC = {
-    glow:     { label: 'Glow', kanji: '光', out: 'bloom' },
-    glitch:   { label: 'Glitch', kanji: '乱', out: 'glitch' },
-    chroma:   { label: 'Colour split', kanji: '色', out: 'chroma' },
-    vignette: { label: 'Vignette', kanji: '暗', out: 'vignette' },
-    curve:    { label: 'Tube curve', kanji: '管', out: 'curve' },
-    zoom:     { label: 'Zoom', kanji: '寄', out: 'zoom' },
-    shake:    { label: 'Shake', kanji: '震', out: 'shake' },
-  };
-  const ORDER = Object.keys(SPEC);
-
-  const unitDefaults = () => ({ on: false, amount: 40, shape: 'off', rate: '1', depth: 50 });
-  const defaults = () => Object.fromEntries(ORDER.map(id => [id, unitDefaults()]));
+  const unitDefaults = id => ({
+    on: false,
+    params: Object.fromEntries(Object.entries(SPEC[id].params).map(([k, p]) => [k, p.def])),
+    motion: {},
+  });
+  const defaults = () => Object.fromEntries(ORDER.map(id => [id, unitDefaults(id)]));
 
   function normalize(state) {
     const out = defaults();
-    if (state) for (const id of ORDER) if (state[id]) Object.assign(out[id], state[id]);
+    if (!state) return out;
+    for (const id of ORDER) {
+      const src = state[id]; if (!src) continue;
+      out[id].on = !!src.on;
+      if (src.params) for (const k of Object.keys(SPEC[id].params)) {
+        if (typeof src.params[k] === 'number') out[id].params[k] = src.params[k];
+      }
+      if (src.motion) out[id].motion = { ...src.motion };
+    }
     return out;
   }
 
-  // A unit's live value: its dial, then motion pushes it around. Music-driven
-  // shapes read the same envelope the scenes get, so picture and sound move together.
-  function value(unit, t, env) {
-    const base = unit.amount / 100;
-    if (unit.shape === 'off') return base;
-    const depth = unit.depth / 100;
-    let m;
-    if (unit.shape === 'level') m = env.level;
-    else if (unit.shape === 'bass') m = env.bass;
-    else if (unit.shape === 'treble') m = env.treble;
-    else {
-      const hz = (RATES.find(r => r.id === unit.rate) || RATES[2]).hz;
-      m = SHAPES[unit.shape](t * hz);
-    }
-    return Math.max(0, Math.min(1, base * (1 - depth) + m * depth));
+  // A parameter's live value: the dial, then motion moves it between its own
+  // value and the far end of its range.
+  function paramValue(id, key, unit, t, env) {
+    const spec = SPEC[id].params[key], base = unit.params[key];
+    const m = unit.motion && unit.motion[key];
+    if (!m || !m.shape || m.shape === 'off') return base;
+    let f;
+    if (m.shape === 'level') f = env.level || 0;
+    else if (m.shape === 'bass') f = env.bass || 0;
+    else if (m.shape === 'treble') f = env.treble || 0;
+    else f = (SHAPES[m.shape] || SHAPES.sine)(t * ((RATES.find(r => r.id === m.rate) || RATES[2]).hz));
+    const depth = (m.depth ?? 50) / 100;
+    return base + (spec.max - base) * f * depth;
   }
 
-  // Flatten the rack into the plain object the renderer consumes.
   function evaluate(state, t, env) {
-    const s = normalize(state);
-    const fx = { bloom: 0, glitch: 0, chroma: 0, vignette: 0, curve: 0, zoom: 1, shakeX: 0, shakeY: 0 };
+    const s = normalize(state), e = env || {};
+    const fx = { glow: null, glitch: null, chroma: null, vignette: null, curve: null,
+                 zoom: null, shake: null, trails: null, mirror: null };
     for (const id of ORDER) {
       const u = s[id];
       if (!u.on) continue;
-      const v = value(u, t, env);
-      if (id === 'zoom') fx.zoom = 1 + v * 0.6;
-      else if (id === 'shake') {
-        const amp = v * 6;
-        fx.shakeX = Math.round(Math.sin(t * 37.1) * amp);
-        fx.shakeY = Math.round(Math.cos(t * 29.7) * amp);
-      } else fx[SPEC[id].out] = v;
+      const v = {};
+      for (const key of Object.keys(SPEC[id].params)) v[key] = paramValue(id, key, u, t, e);
+      fx[id] = v;
     }
     return fx;
   }
 
-  // ---------- UI ----------
-  // A grid of chips rather than a stack of panels: every unit is visible at
-  // once, and only the selected one spends vertical space on its parameters.
-  let current = null;
+  // ---------- plugin windows ----------
+  const SEGMENTS = 14;
+  const norm = (p, v) => (v - p.min) / (p.max - p.min);
+  const denorm = (p, t) => p.min + Math.max(0, Math.min(1, t)) * (p.max - p.min);
+  const fmt = (p, v) => (p.max - p.min <= 4 ? v.toFixed(0) : Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(0));
 
-  function build(grid, params, getState, onChange) {
-    const state = normalize(getState());
-    const paint = () => {
-      grid.innerHTML = '';
-      for (const id of ORDER) {
-        const spec = SPEC[id], u = state[id];
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'vchip' + (u.on ? ' on' : '') + (id === current ? ' current' : '');
-        chip.title = spec.label;
-        chip.innerHTML = `<span class="vchip-k">${spec.kanji}</span><span class="vchip-label">${spec.label}</span>`;
-        chip.addEventListener('click', () => {
-          if (id === current && u.on) u.on = false;
-          else { u.on = true; current = id; }
-          onChange(state); paint();
-        });
-        grid.append(chip);
-      }
-      drawParams(params, state, onChange, paint);
-      window.NeoSelect?.refreshAll?.();
-    };
-    paint();
-    return state;
+  function makeDial(p, getValue, onInput) {
+    const wrap = document.createElement('div');
+    wrap.className = 'dial';
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 64 64'); svg.setAttribute('class', 'dial-face');
+    svg.setAttribute('role', 'slider'); svg.setAttribute('tabindex', '0');
+    svg.setAttribute('aria-label', p.label);
+    svg.setAttribute('aria-valuemin', p.min); svg.setAttribute('aria-valuemax', p.max);
+    const A0 = -125, A1 = 125, segs = [];
+    for (let i = 0; i < SEGMENTS; i++) {
+      const r = document.createElementNS(ns, 'rect');
+      const a = A0 + (i / (SEGMENTS - 1)) * (A1 - A0);
+      r.setAttribute('x', 30.5); r.setAttribute('y', 4);
+      r.setAttribute('width', 3); r.setAttribute('height', 8);
+      r.setAttribute('transform', `rotate(${a} 32 32)`);
+      r.setAttribute('class', 'dial-seg');
+      svg.append(r); segs.push(r);
+    }
+    const body = document.createElementNS(ns, 'rect');
+    body.setAttribute('x', 18); body.setAttribute('y', 18);
+    body.setAttribute('width', 28); body.setAttribute('height', 28); body.setAttribute('class', 'dial-body');
+    const nib = document.createElementNS(ns, 'rect');
+    nib.setAttribute('class', 'dial-nib');
+    nib.setAttribute('x', 30); nib.setAttribute('y', 20); nib.setAttribute('width', 4); nib.setAttribute('height', 11);
+    svg.append(body, nib);
+    const label = document.createElement('span'); label.className = 'dial-label'; label.textContent = p.label;
+    const readout = document.createElement('span'); readout.className = 'dial-value';
+    wrap.append(svg, label, readout);
+
+    function render() {
+      const v = getValue(), t = norm(p, v), lit = Math.round(t * (SEGMENTS - 1));
+      segs.forEach((r, i) => r.classList.toggle('on', i <= lit));
+      nib.setAttribute('transform', `rotate(${A0 + t * (A1 - A0)} 32 32)`);
+      readout.textContent = fmt(p, v) + (p.unit || '');
+      svg.setAttribute('aria-valuenow', v.toFixed(2));
+    }
+    let dragging = false, startY = 0, startT = 0;
+    svg.addEventListener('pointerdown', e => {
+      dragging = true; startY = e.clientY; startT = norm(p, getValue());
+      svg.setPointerCapture(e.pointerId); wrap.classList.add('turning'); e.preventDefault();
+    });
+    svg.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const travel = e.shiftKey ? 600 : 170;
+      onInput(denorm(p, startT + (startY - e.clientY) / travel)); render();
+    });
+    const end = () => { if (!dragging) return; dragging = false; wrap.classList.remove('turning'); };
+    svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end);
+    svg.addEventListener('dblclick', () => { onInput(p.def); render(); });
+    svg.addEventListener('keydown', e => {
+      const step = e.shiftKey ? 0.005 : 0.04;
+      let t = norm(p, getValue());
+      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') t += step;
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') t -= step;
+      else if (e.key === 'Home') t = 0; else if (e.key === 'End') t = 1;
+      else return;
+      e.preventDefault(); onInput(denorm(p, t)); render();
+    });
+    wrap.render = render; render();
+    return wrap;
   }
 
-  function drawParams(host, state, onChange, repaint) {
-    host.innerHTML = '';
-    if (!current || !state[current] || !state[current].on) {
-      const p = document.createElement('p');
-      p.className = 'vparams-empty';
-      p.textContent = 'Pick an effect above to switch it on and set it up. Click it again to switch it off.';
-      host.append(p); return;
-    }
-    const id = current, spec = SPEC[id], u = state[id];
-    const head = document.createElement('div');
-    head.className = 'vparams-head';
-    head.innerHTML = `<span class="vchip-k">${spec.kanji}</span><b>${spec.label}</b>`;
-    host.append(head);
-
-    const slider = (label, value, min, max, onInput) => {
-      const wrap = document.createElement('label');
-      wrap.className = 'field range';
-      wrap.innerHTML = `<span>${label} <b>${value}</b></span>`;
-      const r = document.createElement('input');
-      r.type = 'range'; r.min = min; r.max = max; r.step = 1; r.value = value;
-      r.setAttribute('aria-label', `${spec.label} ${label.toLowerCase()}`);
-      r.addEventListener('input', () => { wrap.querySelector('b').textContent = r.value; onInput(+r.value); onChange(state); });
-      wrap.append(r); host.append(wrap);
-      return wrap;
-    };
-    slider('Amount', u.amount, 0, 100, v => { u.amount = v; });
-
-    const motion = document.createElement('label');
-    motion.className = 'field';
-    motion.innerHTML = '<span>Motion</span>';
-    const ms = document.createElement('select');
-    for (const [k, label] of Object.entries(SHAPE_LABELS)) {
-      const o = document.createElement('option'); o.value = k; o.textContent = label; ms.append(o);
-    }
-    ms.value = u.shape;
-    ms.addEventListener('change', () => { u.shape = ms.value; onChange(state); repaint(); });
-    motion.append(ms); host.append(motion);
-
-    if (u.shape !== 'off') {
-      if (!['level','bass','treble'].includes(u.shape)) {
-        const rate = document.createElement('label');
-        rate.className = 'field'; rate.innerHTML = '<span>Rate</span>';
-        const rs = document.createElement('select');
-        for (const r of RATES) { const o = document.createElement('option'); o.value = r.id; o.textContent = r.label; rs.append(o); }
-        rs.value = u.rate;
-        rs.addEventListener('change', () => { u.rate = rs.value; onChange(state); });
-        rate.append(rs); host.append(rate);
-      }
-      slider('Depth', u.depth, 0, 100, v => { u.depth = v; });
-    }
-  }
-
-  window.NeoVRack = { SPEC, ORDER, SHAPES, SHAPE_LABELS, RATES, defaults, normalize, evaluate, value, build };
+  window.NeoVRack = { SPEC, ORDER, SHAPES, SHAPE_LABELS, RATES, defaults, normalize, evaluate, makeDial, norm, denorm };
 })();

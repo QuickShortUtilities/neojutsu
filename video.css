@@ -166,3 +166,13 @@
 .vparams-empty { font-size: 11px; color: var(--muted); margin: 0 0 12px; line-height: 1.6; }
 .vparams-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .vparams-head b { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text); flex: 1; }
+
+/* motion strip inside a video plugin window */
+.vfx-motion {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px;
+  padding: 10px 12px 0; margin-top: 6px; border-top: 2px solid #000;
+}
+.vfx-motion .field { margin-bottom: 10px; }
+.vfx-motion .field > span { font-size: 9px; }
+.fx-window .fx-blurb { font-size: 10px; color: var(--muted); line-height: 1.6; margin: 10px 12px 4px; }
+.fx-window .fx-dials { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px 0; justify-content: flex-start; }
