@@ -49,11 +49,58 @@
     <aside class="panel gen">
       <h2 class="panel-title"><span class="k">映</span> Source</h2>
 
-      <div class="drop-zone" id="v-drop">
-        <p class="drop-hint">Drop a video here</p>
-        <button class="mini" id="v-pick" type="button">Choose a file</button>
-        <input type="file" id="v-file" accept="video/*" hidden>
-        <p class="drop-note" id="v-source-note">Stays on your device. Nothing is uploaded.</p>
+      <label class="field">
+        <span>Footage</span>
+        <select id="v-mode">
+          <option value="generate" selected>Generate · no upload needed</option>
+          <option value="import">Import my own video</option>
+        </select>
+      </label>
+
+      <div id="v-import-block" hidden>
+        <div class="drop-zone" id="v-drop">
+          <p class="drop-hint">Drop a video here</p>
+          <button class="mini" id="v-pick" type="button">Choose a file</button>
+          <input type="file" id="v-file" accept="video/*" hidden>
+          <p class="drop-note" id="v-source-note">Stays on your device. Nothing is uploaded.</p>
+        </div>
+      </div>
+
+      <div id="v-gen-block">
+        <label class="field">
+          <span>Scene</span>
+          <select id="v-scene"></select>
+        </label>
+
+        <label class="field">
+          <span>Seed</span>
+          <div class="seed-row">
+            <input type="text" id="v-seed" value="" placeholder="random" spellcheck="false" maxlength="24">
+            <button type="button" class="mini" id="v-dice" title="Random seed">⚄</button>
+            <button type="button" class="mini" id="v-mutate" title="Small variation of this seed">変</button>
+          </div>
+        </label>
+
+        <label class="field range">
+          <span>Speed <b id="v-speed-v">100</b></span>
+          <input type="range" id="v-speed" min="10" max="300" step="5" value="100" aria-label="Scene speed">
+        </label>
+
+        <label class="field range">
+          <span>Density <b id="v-density-v">50</b></span>
+          <input type="range" id="v-density" min="0" max="100" step="1" value="50" aria-label="Scene density">
+        </label>
+
+        <label class="field range">
+          <span>Reacts to audio <b id="v-react-v">70</b></span>
+          <input type="range" id="v-react" min="0" max="100" step="1" value="70" aria-label="Audio reactivity">
+        </label>
+
+        <label class="field range">
+          <span>Length <b id="v-len-v">30</b>s</span>
+          <input type="range" id="v-len" min="5" max="300" step="5" value="30" aria-label="Generated length in seconds">
+        </label>
+        <p class="hint" id="v-len-note">A soundtrack sets the length automatically.</p>
       </div>
 
       <h2 class="panel-title"><span class="k">型</span> Look</h2>
@@ -171,6 +218,7 @@
   </main>
 
   <script src="chip.js"></script>
+  <script src="video-gen.js"></script>
   <script src="neo-select.js"></script>
   <script src="video.js"></script>
 </body>

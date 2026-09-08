@@ -1,5 +1,5 @@
-/* NeoJutsu Video Studio: turn imported footage into 8-bit video and score it
-   with a track made in the Audio Studio. Everything runs on the device. */
+/* NeoJutsu Video Studio: generate 8-bit footage from a seed, or bring your own
+   clip, then score it with a track made in the Audio Studio. Runs on device. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -7,8 +7,6 @@
   const SAVED_KEY = 'neojutsu.saved';
   const DRAFT_KEY = 'neojutsu.draft.v1';
 
-  // Output palettes keyed to the same hardware names the Audio Studio uses, so a
-  // track and the picture it scores can share one machine.
   const PALETTES = {
     gameboy: { label: 'Game Boy · DMG', size: [160, 144], colors: ['#0f380f','#306230','#8bac0f','#9bbc0f'] },
     nes:     { label: 'NES · 2A03', size: [256, 240], colors: ['#000000','#fcfcfc','#bcbcbc','#7c7c7c','#0000fc','#0078f8','#3cbcfc','#a4e4fc','#00b800','#b8f818','#e40058','#f87858','#f8b800','#fcfcb0','#6844fc','#d800cc'] },
@@ -19,7 +17,7 @@
   const BAYER = {
     bayer4: { n: 4, m: [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5] },
     bayer2: { n: 2, m: [0,2, 3,1] },
-    none:   null,
+    none: null,
   };
 
   const rgb = hex => [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
@@ -33,11 +31,13 @@
   video.playsInline = true; video.muted = true; video.crossOrigin = 'anonymous';
   const display = $('v-canvas'), dctx = display.getContext('2d');
   const low = document.createElement('canvas'), lctx = low.getContext('2d', { willReadFrequently: true });
-  let sourceReady = false, raf = 0, objectURL = '';
-  let audio = null, gain = null, trackNode = null, elementNode = null, recorderDest = null;
-  let buffer = null, audioStartedAt = 0, savedTracks = [];
+  let clipReady = false, objectURL = '', playing = false, lastFrame = 0;
+  let audio = null, gain = null, analyser = null, trackNode = null, elementNode = null, recorderDest = null;
+  let buffer = null, savedTracks = [], freqData = null, waveData = null;
+  let scene = null, sceneKey = '', sceneSig = '', genTime = 0;
 
   const look = () => ({
+    mode: $('v-mode').value,
     chip: $('v-chip').value,
     res: $('v-res').value,
     pix: +$('v-pix').value,
@@ -47,6 +47,12 @@
     contrast: +$('v-contrast').value,
     scanlines: $('v-scanlines').checked,
     loop: $('v-loop').checked,
+    scene: $('v-scene').value,
+    seed: $('v-seed').value.trim(),
+    speed: +$('v-speed').value / 100,
+    density: +$('v-density').value / 100,
+    react: +$('v-react').value / 100,
+    len: +$('v-len').value,
     audioSrc: $('v-audio-src').value,
     vol: +$('v-vol').value / 100,
     fps: +$('v-fps').value,
@@ -54,22 +60,66 @@
     title: $('v-title').value,
   });
 
-  function baseSize(cfg) {
-    if (cfg.res !== 'auto') { const [w, h] = cfg.res.split('x').map(Number); return [w, h]; }
-    return (PALETTES[cfg.chip] || PALETTES.gameboy).size;
+  const baseSize = cfg => cfg.res !== 'auto'
+    ? cfg.res.split('x').map(Number)
+    : (PALETTES[cfg.chip] || PALETTES.gameboy).size;
+
+  const ready = cfg => cfg.mode === 'generate' || clipReady;
+  const duration = cfg => cfg.mode === 'import'
+    ? (video.duration || 0)
+    : (buffer ? buffer.duration : cfg.len);
+
+  // ---------- audio envelope ----------
+  // One shape for every scene: overall level plus three bands, all 0..1 and
+  // already scaled by the reactivity control.
+  const EMPTY = { level: 0, bass: 0, mid: 0, treble: 0, freq: [], wave: [] };
+  function envelope(cfg) {
+    if (!analyser || !playing || !cfg.react) return EMPTY;
+    analyser.getByteFrequencyData(freqData);
+    analyser.getFloatTimeDomainData(waveData);
+    const band = (a, b) => {
+      let sum = 0; const lo = Math.floor(a * freqData.length), hi = Math.floor(b * freqData.length);
+      for (let i = lo; i < hi; i++) sum += freqData[i];
+      return Math.min(1, sum / ((hi - lo) * 255) * 2.2);
+    };
+    let rms = 0;
+    for (let i = 0; i < waveData.length; i++) rms += waveData[i] * waveData[i];
+    rms = Math.min(1, Math.sqrt(rms / waveData.length) * 3.2);
+    const k = cfg.react;
+    return { level: rms * k, bass: band(0, .08) * k, mid: band(.08, .32) * k, treble: band(.32, .8) * k,
+             freq: freqData, wave: waveData };
+  }
+
+  // ---------- scene ----------
+  function ensureScene(cfg, w, h) {
+    const sig = [cfg.scene, cfg.seed, cfg.density.toFixed(2), w, h].join('|');
+    if (sig === sceneSig && scene) return;
+    const def = window.NeoScene.SCENES[cfg.scene] || Object.values(window.NeoScene.SCENES)[0];
+    scene = def.init(window.NeoScene.rng(cfg.seed || 'neojutsu'), w, h, cfg.density);
+    sceneKey = cfg.scene; sceneSig = sig;
   }
 
   // ---------- the 8-bit pipeline ----------
-  // Downscale, push through brightness/contrast, dither, then snap every pixel to
-  // the hardware palette. Small buffers keep this comfortably real-time.
-  function processFrame(cfg) {
+  // Source (clip frame or generated scene) -> brightness/contrast -> dither ->
+  // snap to the hardware palette. Both modes share every step after the source.
+  function processFrame(cfg, step) {
     const [bw, bh] = baseSize(cfg);
     const rw = Math.max(1, Math.round(bw / cfg.pix)), rh = Math.max(1, Math.round(bh / cfg.pix));
-    if (low.width !== rw || low.height !== rh) { low.width = rw; low.height = rh; }
+    if (low.width !== rw || low.height !== rh) { low.width = rw; low.height = rh; sceneSig = ''; }
     if (display.width !== bw || display.height !== bh) { display.width = bw; display.height = bh; }
 
-    lctx.imageSmoothingEnabled = true;
-    lctx.drawImage(video, 0, 0, rw, rh);
+    const env = envelope(cfg);
+    if (cfg.mode === 'generate') {
+      ensureScene(cfg, rw, rh);
+      const def = window.NeoScene.SCENES[sceneKey];
+      lctx.save();
+      def.draw(lctx, rw, rh, genTime, env, scene, { speed: cfg.speed, density: cfg.density, step });
+      lctx.restore();
+    } else {
+      if (!clipReady) return;
+      lctx.imageSmoothingEnabled = true;
+      lctx.drawImage(video, 0, 0, rw, rh);
+    }
 
     const frame = lctx.getImageData(0, 0, rw, rh), data = frame.data;
     const pal = paletteRGB(cfg.chip), levels = pal.length;
@@ -102,7 +152,6 @@
     lctx.putImageData(frame, 0, 0);
 
     dctx.imageSmoothingEnabled = false;
-    dctx.clearRect(0, 0, bw, bh);
     dctx.drawImage(low, 0, 0, bw, bh);
     if (cfg.scanlines) {
       dctx.fillStyle = 'rgba(0,0,0,.22)';
@@ -110,15 +159,21 @@
     }
   }
 
-  function loop() {
-    raf = requestAnimationFrame(loop);
-    if (!sourceReady) return;
-    processFrame(look());
-    const d = video.duration || 0;
-    if (d) {
-      $('v-scrub').value = Math.round((video.currentTime / d) * 1000);
-      $('v-position').textContent = clock(video.currentTime);
+  function frameLoop(now) {
+    requestAnimationFrame(frameLoop);
+    const dt = Math.min(0.1, (now - lastFrame) / 1000 || 0); lastFrame = now;
+    const cfg = look();
+    if (cfg.mode === 'generate' && playing) {
+      genTime += dt;
+      const d = duration(cfg);
+      if (genTime >= d) { cfg.loop ? (genTime = 0) : stop(); }
     }
+    if (!ready(cfg)) { display.classList.add('idle'); return; }
+    display.classList.remove('idle');
+    processFrame(cfg, playing ? dt : 0);
+
+    const d = duration(cfg), at = cfg.mode === 'import' ? video.currentTime : genTime;
+    if (d) { $('v-scrub').value = Math.round((at / d) * 1000); $('v-position').textContent = clock(at); }
   }
 
   // ---------- audio ----------
@@ -126,26 +181,26 @@
     if (!audio) {
       audio = new (window.AudioContext || window.webkitAudioContext)();
       gain = audio.createGain(); gain.connect(audio.destination);
+      analyser = audio.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = .72;
+      gain.connect(analyser);
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+      waveData = new Float32Array(analyser.fftSize);
     }
     if (audio.state === 'suspended') audio.resume();
     return audio;
   }
-
-  function stopTrack() {
-    if (trackNode) { try { trackNode.stop(); } catch {} trackNode.disconnect(); trackNode = null; }
-  }
+  const stopTrack = () => { if (trackNode) { try { trackNode.stop(); } catch {} trackNode.disconnect(); trackNode = null; } };
 
   async function loadSoundtrack(cfg) {
     stopTrack(); buffer = null;
     video.muted = cfg.audioSrc !== 'original';
-    if (cfg.audioSrc === 'none' || cfg.audioSrc === 'original') return;
+    if (cfg.audioSrc === 'none' || cfg.audioSrc === 'original') { syncLen(); return; }
     const track = savedTracks.find(t => t.id === cfg.audioSrc);
-    if (!track) return;
+    if (!track) { syncLen(); return; }
     status('Rendering the soundtrack…');
-    try {
-      buffer = await window.NeoChip.render(track.pattern, { tail: true });
-      status(`Soundtrack: ${track.name}`);
-    } catch (e) { status('That track could not be rendered.'); }
+    try { buffer = await window.NeoChip.render(track.pattern, { tail: true }); status(`Soundtrack: ${track.name}`); }
+    catch { status('That track could not be rendered.'); }
+    syncLen();
   }
 
   function startAudio(cfg) {
@@ -153,19 +208,20 @@
     gain.gain.value = cfg.vol;
     if (cfg.audioSrc === 'original') {
       if (!elementNode) { elementNode = ac.createMediaElementSource(video); elementNode.connect(gain); }
+      if (recorderDest) elementNode.connect(recorderDest);
       return;
     }
     if (!buffer) return;
     stopTrack();
     trackNode = ac.createBufferSource();
-    trackNode.buffer = buffer; trackNode.loop = true;
+    trackNode.buffer = buffer; trackNode.loop = cfg.loop;
     trackNode.connect(gain);
     if (recorderDest) trackNode.connect(recorderDest);
-    trackNode.start(0, video.currentTime % buffer.duration);
-    audioStartedAt = ac.currentTime;
+    const at = cfg.mode === 'import' ? video.currentTime : genTime;
+    trackNode.start(0, at % buffer.duration);
   }
 
-  // ---------- saved tracks from the Audio Studio ----------
+  // ---------- tracks from the Audio Studio ----------
   function readTracks() {
     const out = [];
     try {
@@ -180,7 +236,6 @@
     } catch {}
     return out;
   }
-
   function fillTracks() {
     savedTracks = readTracks();
     const sel = $('v-audio-src'), keep = sel.value;
@@ -195,83 +250,77 @@
     window.NeoSelect?.refreshAll?.();
   }
 
-  // ---------- source ----------
+  // ---------- import ----------
   function openFile(file) {
     if (!file || !file.type.startsWith('video/')) { status('That file is not a video.'); return; }
     if (objectURL) URL.revokeObjectURL(objectURL);
     objectURL = URL.createObjectURL(file);
     video.src = objectURL;
     video.onloadedmetadata = () => {
-      sourceReady = true;
-      display.classList.remove('idle');
+      clipReady = true;
       $('v-empty').hidden = true;
       $('v-scrub').disabled = false;
       $('v-meta').textContent = `${video.videoWidth}×${video.videoHeight} · ${clock(video.duration)}`;
       $('v-source-note').textContent = `${file.name} · stays on your device`;
-      video.currentTime = 0;
-      processFrame(look());
-      save();
+      video.currentTime = 0; save();
     };
     video.onerror = () => status('That video could not be decoded by this browser.');
   }
 
   // ---------- transport ----------
   function setPlaying(on) {
+    playing = on;
     $('v-play').setAttribute('aria-pressed', String(on));
     $('v-play-icon').textContent = on ? '■' : '▶';
     $('v-play-label').textContent = on ? 'Stop' : 'Play';
   }
   async function play() {
-    if (!sourceReady) { status('Load a video first.'); return; }
     const cfg = look();
+    if (!ready(cfg)) { status('Load a video first, or switch Footage to Generate.'); return; }
     ctx();
     if (!buffer && cfg.audioSrc !== 'none' && cfg.audioSrc !== 'original') await loadSoundtrack(cfg);
-    video.loop = cfg.loop;
-    await video.play();
-    startAudio(cfg);
+    if (cfg.mode === 'import') { video.loop = cfg.loop; await video.play(); }
     setPlaying(true);
+    startAudio(cfg);
   }
   function stop() { video.pause(); stopTrack(); setPlaying(false); }
-  const toggle = () => (video.paused ? play() : stop());
+  const toggle = () => (playing ? stop() : play());
 
   // ---------- export ----------
   async function exportVideo() {
-    if (!sourceReady) { status('Load a video first.'); return; }
+    const cfg = look();
+    if (!ready(cfg)) { status('Nothing to export yet.'); return; }
     if (typeof MediaRecorder === 'undefined') { status('This browser cannot record video.'); return; }
-    const cfg = look(), [bw, bh] = baseSize(cfg);
+    const [bw, bh] = baseSize(cfg);
     const out = document.createElement('canvas');
     out.width = bw * cfg.scale; out.height = bh * cfg.scale;
     const octx = out.getContext('2d'); octx.imageSmoothingEnabled = false;
 
+    stop();
     const ac = ctx();
     recorderDest = ac.createMediaStreamDestination();
-    if (cfg.audioSrc === 'original' && elementNode) elementNode.connect(recorderDest);
+    if (cfg.mode === 'import') video.currentTime = 0; else genTime = 0;
+    await loadSoundtrack(cfg);
 
     const stream = out.captureStream(cfg.fps);
-    stop(); video.currentTime = 0;
-    await loadSoundtrack(cfg);
-    startAudio(cfg);
-    if (recorderDest.stream.getAudioTracks().length) stream.addTrack(recorderDest.stream.getAudioTracks()[0]);
-
     const type = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
       .find(t => MediaRecorder.isTypeSupported(t)) || '';
     const rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 6e6 } : undefined);
-    const chunks = [];
-    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    const chunks = []; rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    const stopped = new Promise(res => { rec.onstop = res; });
 
-    const paint = () => {
-      octx.drawImage(display, 0, 0, out.width, out.height);
-      if (rec.state === 'recording') requestAnimationFrame(paint);
-    };
-    const done = new Promise(res => { rec.onstop = res; });
+    const paint = () => { octx.drawImage(display, 0, 0, out.width, out.height); if (rec.state === 'recording') requestAnimationFrame(paint); };
 
-    video.loop = false;
+    const total = duration(cfg) || cfg.len;
     rec.start(250); paint();
-    await video.play(); setPlaying(true);
-    status('Recording… this runs in real time.');
-    await new Promise(res => { video.onended = res; });
-    rec.stop(); stop(); await done;
+    if (cfg.mode === 'import') { video.loop = false; await video.play(); }
+    setPlaying(true); startAudio(cfg);
+    status(`Recording ${Math.round(total)}s… this runs in real time.`);
 
+    if (cfg.mode === 'import') await new Promise(res => { video.onended = res; });
+    else await new Promise(res => setTimeout(res, total * 1000));
+
+    rec.stop(); stop(); await stopped;
     const blob = new Blob(chunks, { type: type || 'video/webm' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -281,41 +330,69 @@
     recorderDest = null;
   }
 
-  // ---------- settings ----------
+  // ---------- settings & labels ----------
   const status = msg => { $('v-status').textContent = msg; };
-  const FIELDS = ['v-chip','v-res','v-pix','v-dither','v-dith','v-bright','v-contrast','v-fps','v-scale','v-vol','v-title','v-audio-src'];
+  const FIELDS = ['v-chip','v-res','v-pix','v-dither','v-dith','v-bright','v-contrast','v-fps','v-scale','v-vol','v-title','v-scene','v-seed','v-speed','v-density','v-react','v-len'];
+
   function save() {
-    const data = { look: look() };
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(data)); $('v-autosave').textContent = 'Autosaved on this browser'; }
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ look: look() })); $('v-autosave').textContent = 'Autosaved on this browser'; }
     catch { $('v-autosave').textContent = 'Autosave unavailable'; }
   }
   function restore() {
     try {
-      const d = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); if (!d || !d.look) return;
-      const l = d.look;
-      $('v-chip').value = l.chip ?? 'gameboy'; $('v-res').value = l.res ?? 'auto';
-      $('v-pix').value = l.pix ?? 1; $('v-dither').value = l.dither ?? 'bayer4';
-      $('v-dith').value = Math.round((l.dithAmt ?? .6) * 100); $('v-bright').value = l.bright ?? 0;
-      $('v-contrast').value = l.contrast ?? 15; $('v-scanlines').checked = !!l.scanlines;
-      $('v-loop').checked = l.loop !== false; $('v-fps').value = l.fps ?? 30;
-      $('v-scale').value = l.scale ?? 4; $('v-vol').value = Math.round((l.vol ?? .8) * 100);
-      if (l.title) $('v-title').value = l.title;
+      const d = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); const l = d && d.look; if (!l) return;
+      const set = (id, v) => { if (v !== undefined && v !== null) $(id).value = v; };
+      set('v-mode', l.mode); set('v-chip', l.chip); set('v-res', l.res); set('v-pix', l.pix);
+      set('v-dither', l.dither); set('v-dith', l.dithAmt != null ? Math.round(l.dithAmt * 100) : null);
+      set('v-bright', l.bright); set('v-contrast', l.contrast); set('v-fps', l.fps); set('v-scale', l.scale);
+      set('v-vol', l.vol != null ? Math.round(l.vol * 100) : null);
+      set('v-scene', l.scene); set('v-seed', l.seed);
+      set('v-speed', l.speed != null ? Math.round(l.speed * 100) : null);
+      set('v-density', l.density != null ? Math.round(l.density * 100) : null);
+      set('v-react', l.react != null ? Math.round(l.react * 100) : null);
+      set('v-len', l.len); set('v-title', l.title);
+      $('v-scanlines').checked = !!l.scanlines; $('v-loop').checked = l.loop !== false;
     } catch {}
+  }
+  function syncLen() {
+    const cfg = look();
+    const locked = !!buffer;
+    $('v-len').disabled = locked;
+    $('v-len-v').textContent = Math.round(duration(cfg)) || cfg.len;
+    $('v-len-note').textContent = locked
+      ? 'Length follows the soundtrack.'
+      : 'A soundtrack sets the length automatically.';
   }
   function syncLabels() {
     const l = look();
     $('v-pix-v').textContent = l.pix; $('v-dith-v').textContent = Math.round(l.dithAmt * 100);
     $('v-bright-v').textContent = l.bright; $('v-contrast-v').textContent = l.contrast;
     $('v-scale-v').textContent = l.scale; $('v-vol-v').textContent = Math.round(l.vol * 100);
+    $('v-speed-v').textContent = Math.round(l.speed * 100); $('v-density-v').textContent = Math.round(l.density * 100);
+    $('v-react-v').textContent = Math.round(l.react * 100);
     $('v-badge').textContent = `out: 型 ${(PALETTES[l.chip] || PALETTES.gameboy).label.split(' · ')[0]}`;
     const [bw, bh] = baseSize(l);
-    if (!sourceReady) { display.width = bw; display.height = bh; display.classList.add('idle'); }
+    if (!ready(l)) { display.width = bw; display.height = bh; }
+    $('v-import-block').hidden = l.mode !== 'import';
+    $('v-gen-block').hidden = l.mode !== 'generate';
+    $('v-empty').hidden = ready(l);
+    $('v-scrub').disabled = !ready(l);
+    $('v-meta').textContent = l.mode === 'generate'
+      ? `${bw}×${bh} · ${(window.NeoScene.SCENES[l.scene] || {}).label || ''}`
+      : (clipReady ? `${video.videoWidth}×${video.videoHeight} · ${clock(video.duration)}` : '—');
     if (gain) gain.gain.value = l.vol;
+    syncLen();
   }
 
   // ---------- wiring ----------
   function init() {
+    const sel = $('v-scene');
+    for (const [key, def] of Object.entries(window.NeoScene.SCENES)) {
+      const o = document.createElement('option'); o.value = key; o.textContent = def.label; sel.append(o);
+    }
+    $('v-seed').value = window.NeoScene.randomSeed();
     restore(); fillTracks(); syncLabels();
+    window.NeoSelect?.refreshAll?.();
 
     $('v-pick').addEventListener('click', () => $('v-file').click());
     $('v-file').addEventListener('change', e => openFile(e.target.files[0]));
@@ -327,6 +404,13 @@
     $('v-play').addEventListener('click', toggle);
     $('v-open-export').addEventListener('click', exportVideo);
     $('v-audio-refresh').addEventListener('click', fillTracks);
+    $('v-dice').addEventListener('click', () => { $('v-seed').value = window.NeoScene.randomSeed(); sceneSig = ''; save(); });
+    $('v-mutate').addEventListener('click', () => {
+      const cur = $('v-seed').value.trim() || window.NeoScene.randomSeed();
+      $('v-seed').value = cur.slice(0, 5) + Math.random().toString(36).slice(2, 3);
+      sceneSig = ''; save();
+    });
+    $('v-mode').addEventListener('change', () => { stop(); genTime = 0; syncLabels(); save(); });
     $('v-toggle-inspector').addEventListener('click', () => {
       const open = $('v-inspector').hasAttribute('hidden');
       open ? $('v-inspector').removeAttribute('hidden') : $('v-inspector').setAttribute('hidden', '');
@@ -334,10 +418,13 @@
     });
 
     $('v-scrub').addEventListener('input', e => {
-      if (!sourceReady || !video.duration) return;
-      video.currentTime = (e.target.value / 1000) * video.duration;
+      const cfg = look(), d = duration(cfg); if (!d) return;
+      const at = (e.target.value / 1000) * d;
+      if (cfg.mode === 'import') video.currentTime = at; else genTime = at;
     });
-    $('v-audio-src').addEventListener('change', async () => { stopTrack(); await loadSoundtrack(look()); if (!video.paused) startAudio(look()); save(); });
+    $('v-audio-src').addEventListener('change', async () => {
+      stopTrack(); await loadSoundtrack(look()); if (playing) startAudio(look()); save();
+    });
     for (const id of FIELDS) $(id).addEventListener('input', () => { syncLabels(); save(); });
     for (const id of ['v-scanlines','v-loop']) $(id).addEventListener('change', () => { video.loop = look().loop; save(); });
     video.addEventListener('ended', () => { if (!look().loop) stop(); });
@@ -347,7 +434,7 @@
     });
     window.addEventListener('storage', e => { if (e.key === SAVED_KEY) fillTracks(); });
 
-    loop();
+    requestAnimationFrame(frameLoop);
   }
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', init) : init();
 })();
