@@ -13,6 +13,13 @@ with sync_playwright() as p:
  page=context.new_page(); errors=[]
  page.on('pageerror',lambda e: errors.append(str(e)))
  page.goto(ROOT.as_uri()+'/studio.html'); page.wait_for_timeout(700)
+ def pick(sid,value):
+  # The pixel dropdown is the real control now, so drive it the way a person does.
+  idx=page.evaluate("([s,v])=>[...document.querySelector(s).options].findIndex(o=>o.value===v)",[f'#{sid}',str(value)])
+  assert idx>=0, f'no option {value!r} in #{sid}'
+  page.locator(f'.neo-select:has(#{sid}) .neo-select-btn').click()
+  page.locator('.neo-select-menu:not([hidden]) .neo-option').nth(idx).click()
+  page.wait_for_timeout(60)
  assert not errors, errors
  assert page.locator('#mixer-strips .mixer-strip').count()==6
  page.screenshot(path=str(ARTIFACTS/'neojutsu-studio-desktop.png'),full_page=True)
@@ -32,7 +39,7 @@ with sync_playwright() as p:
  page.reload(); page.wait_for_timeout(500)
  assert page.locator('#mix-p1-pan').input_value()=='-65'
  assert page.locator('#x-title').input_value()=='My test track'
- page.locator('#loop-start').select_option('2'); page.locator('#loop-end').select_option('3'); page.locator('#loop-toggle').click()
+ pick('loop-start','2'); pick('loop-end','3'); page.locator('#loop-toggle').click()
  assert draft()['pattern']['loop']=={'enabled':True,'start':2,'end':3}
  page.locator('#play').click(); page.wait_for_timeout(1400)
  assert page.locator('#position').inner_text().startswith(('02','03'))
@@ -45,12 +52,12 @@ with sync_playwright() as p:
  assert page.locator('#view-label').inner_text()=='bar 1–8 of 8'
  assert page.locator('#view-prev').is_disabled()
  assert page.locator('#view-next').is_disabled()   # whole pattern already visible
- page.locator('#view-zoom').select_option('4'); assert page.locator('#view-label').inner_text()=='bar 1–4 of 8'
+ pick('view-zoom','4'); assert page.locator('#view-label').inner_text()=='bar 1–4 of 8'
  assert page.locator('#view-next').is_enabled()
  page.locator('#view-next').click(); assert page.locator('#view-label').inner_text()=='bar 5–8 of 8'
  assert page.locator('#bar-ruler span').count()==4
  page.locator('#view-prev').click(); assert page.locator('#view-label').inner_text()=='bar 1–4 of 8'
- page.locator('#view-zoom').select_option('8')
+ pick('view-zoom','8')
  # the noise lane shows the full kit
  page.locator('.lane[data-lane=no]').click()
  page.locator('.lane[data-lane=p1]').click()
@@ -65,6 +72,12 @@ with sync_playwright() as p:
  window_rate_default=page.evaluate("NeoRack.SPEC.phaser.params.rate.def")
  # --- effects rack: dock, windows, dials, motion ---
  assert page.locator('#fx-dock .rack-btn').count()==8
+ # every dropdown is our own listbox, never the operating system's
+ assert page.evaluate("[...document.querySelectorAll('.studio select, .export-dialog select, .fx-window select')].every(s=>s.dataset.neo==='1')"), 'a select was left unstyled'
+ assert page.evaluate("getComputedStyle(document.querySelector('#g-mood')).opacity")=='0'
+ page.locator('.neo-select:has(#g-mood) .neo-select-btn').click()
+ assert page.locator('.neo-select-menu:not([hidden]) .neo-option').count()==5
+ page.keyboard.press('Escape')
  assert page.locator('.nav-links a[href*="github"]').count()==0, 'GitHub link should be gone'
  page.locator('.rack-btn[data-fx=phaser]').click(); page.wait_for_timeout(120)
  win=page.locator('.fx-window[data-fx=phaser]')
@@ -122,7 +135,7 @@ with sync_playwright() as p:
  page.locator('#open-export').click(); page.wait_for_timeout(150)
  assert page.locator('#export-dialog').is_visible()
  assert '出' in page.locator('#open-export').inner_text()
- page.locator('#x-range').select_option('loop'); page.locator('#x-tail').uncheck()
+ pick('x-range','loop'); page.locator('#x-tail').uncheck()
  with page.expect_download(timeout=60000) as dl: page.locator('#x-mp3').click()
  download=dl.value; download.save_as(str(ARTIFACTS/'neojutsu-test.mp3'))
  assert download.suggested_filename=='My test track.mp3'
