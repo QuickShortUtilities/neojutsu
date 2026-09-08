@@ -1,0 +1,48 @@
+/* Video Studio: only the pieces the Audio Studio does not already define.
+   Layout, panels, fields, buttons and pixel controls are inherited. */
+
+.video-studio .stage { display: flex; flex-direction: column; gap: 14px; min-height: 420px; }
+
+.stage-frame {
+  position: relative; flex: 1; display: grid; place-items: center;
+  background: #05040a; border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px; min-height: 320px; overflow: hidden;
+}
+/* The canvas is authored at hardware resolution and blown up without smoothing,
+   so the pixels stay square instead of turning to mush. */
+#v-canvas.idle { opacity: .25; }
+#v-canvas {
+  /* Fill the stage: the canvas keeps its hardware aspect ratio while CSS blows
+     it up, so a 160x144 frame reads at full size without resampling. */
+  height: 56vh; width: auto; max-width: 100%; max-height: 56vh;
+  image-rendering: pixelated; image-rendering: crisp-edges;
+  border-radius: 4px; box-shadow: 0 0 0 1px #2a2340, 0 18px 50px #0009;
+}
+.stage-empty {
+  position: absolute; margin: 0; font-family: var(--pixel); font-size: 10px;
+  color: var(--muted); letter-spacing: 1px; pointer-events: none;
+}
+.stage-bar { display: flex; align-items: center; gap: 14px; }
+.stage-bar input[type=range] { flex: 1; }
+.stage-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* import */
+.drop-zone {
+  display: grid; gap: 10px; justify-items: center; text-align: center;
+  border: 1px dashed #3a3252; border-radius: 10px; padding: 18px 14px; margin-bottom: 22px;
+  background: #0b0913; transition: border-color .15s, background .15s;
+}
+.drop-zone.over { border-color: var(--cyan); background: #0e1620; }
+.drop-hint { margin: 0; font-family: var(--pixel); font-size: 9px; color: var(--text); letter-spacing: 1px; }
+.drop-note { margin: 0; font-size: 10px; color: var(--muted); line-height: 1.5; }
+
+/* small shared bits */
+.hint { font-size: 11px; color: var(--muted); line-height: 1.6; margin: 0 0 14px; }
+.toggle-row { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 4px; }
+.chk { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); cursor: pointer; text-transform: uppercase; letter-spacing: 1px; }
+.chk input { accent-color: var(--magenta); }
+.audio-actions { display: flex; gap: 8px; margin-bottom: 16px; }
+.audio-actions .mini { flex: 1; white-space: nowrap; text-align: center; justify-content: center; }
+.as-link { display: inline-flex; align-items: center; text-decoration: none; }
+
+@media (max-width: 1100px) { .video-studio .stage { grid-column: 1 / -1; } }

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Studio — NEO術</title>
+  <meta name="description" content="NeoJutsu Video Studio: turn your own footage into 8-bit video and score it with tracks made in the Audio Studio.">
+  <meta name="theme-color" content="#07060c">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2307060c'/%3E%3Ctext x='32' y='47' font-size='42' text-anchor='middle' font-family='serif' fill='%23ff2e88'%3E術%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Serif+JP:wght@700;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="studio.css">
+  <link rel="stylesheet" href="video.css">
+</head>
+<body class="studio-body">
+  <div class="scanlines" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="index.html" aria-label="NeoJutsu home">
+      <span class="brand-neo">NEO</span><span class="brand-kanji">術</span>
+      <span class="brand-sub">VIDEO</span>
+    </a>
+    <nav class="nav-links">
+      <a href="studio.html">Audio Studio</a>
+      <a class="nav-studio" href="video.html" aria-current="page">Video Studio</a>
+      <span class="nav-soon" title="Playable chip games scored by your track — in development">Game Studio<i>soon</i></span>
+      <span class="nav-soon" title="Chain the studios into repeatable runs — in development">Automation Studio<i>soon</i></span>
+      <span class="engine-badge" id="v-badge" title="Output hardware">out: 型 Game Boy</span>
+      <a href="index.html#how">About</a>
+    </nav>
+  </header>
+
+  <main class="studio video-studio">
+    <section class="session-bar panel" aria-label="Session and transport">
+      <div class="session-name"><span class="eyebrow">YOUR VIDEO WORKSPACE</span>
+        <label class="sr-only" for="v-title">Video title</label><input id="v-title" value="neojutsu-video" maxlength="100" spellcheck="false" aria-label="Video title">
+        <span id="v-autosave" role="status">Autosave ready</span>
+      </div>
+      <div class="session-controls">
+        <button class="btn btn-primary" id="v-play" type="button" aria-pressed="false" title="Play / stop (Space)"><span id="v-play-icon">▶</span> <span id="v-play-label">Play</span></button>
+        <output id="v-position" aria-label="Playback position">00 : 00</output>
+      </div>
+      <div class="session-actions"><button class="mini" id="v-toggle-inspector" aria-expanded="true" aria-controls="v-inspector" type="button">Audio &amp; files</button><button class="btn btn-export" id="v-open-export" type="button"><span class="k-glyph">出</span> Export</button></div>
+    </section>
+
+    <!-- ===== left: source + look ===== -->
+    <aside class="panel gen">
+      <h2 class="panel-title"><span class="k">映</span> Source</h2>
+
+      <div class="drop-zone" id="v-drop">
+        <p class="drop-hint">Drop a video here</p>
+        <button class="mini" id="v-pick" type="button">Choose a file</button>
+        <input type="file" id="v-file" accept="video/*" hidden>
+        <p class="drop-note" id="v-source-note">Stays on your device. Nothing is uploaded.</p>
+      </div>
+
+      <h2 class="panel-title"><span class="k">型</span> Look</h2>
+
+      <label class="field">
+        <span>Hardware</span>
+        <select id="v-chip">
+          <option value="gameboy" selected>Game Boy · DMG</option>
+          <option value="nes">NES · 2A03</option>
+          <option value="genesis">Genesis · YM2612</option>
+          <option value="c64">C64 · SID</option>
+          <option value="mono">1-bit · Macintosh</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Resolution</span>
+        <select id="v-res">
+          <option value="auto" selected>Match hardware</option>
+          <option value="160x144">160 × 144 · Game Boy</option>
+          <option value="256x240">256 × 240 · NES</option>
+          <option value="320x224">320 × 224 · Genesis</option>
+          <option value="320x200">320 × 200 · C64</option>
+          <option value="480x360">480 × 360 · chunky</option>
+        </select>
+      </label>
+
+      <label class="field range">
+        <span>Pixel size <b id="v-pix-v">1</b></span>
+        <input type="range" id="v-pix" min="1" max="8" step="1" value="1" aria-label="Pixel block size">
+      </label>
+
+      <label class="field">
+        <span>Dither</span>
+        <select id="v-dither">
+          <option value="bayer4" selected>Bayer 4×4</option>
+          <option value="bayer2">Bayer 2×2</option>
+          <option value="none">None · hard bands</option>
+        </select>
+      </label>
+
+      <label class="field range">
+        <span>Dither amount <b id="v-dith-v">60</b></span>
+        <input type="range" id="v-dith" min="0" max="100" step="1" value="60" aria-label="Dither amount">
+      </label>
+
+      <label class="field range">
+        <span>Brightness <b id="v-bright-v">0</b></span>
+        <input type="range" id="v-bright" min="-60" max="60" step="1" value="0" aria-label="Brightness">
+      </label>
+
+      <label class="field range">
+        <span>Contrast <b id="v-contrast-v">15</b></span>
+        <input type="range" id="v-contrast" min="-50" max="90" step="1" value="15" aria-label="Contrast">
+      </label>
+
+      <div class="toggle-row">
+        <label class="chk"><input type="checkbox" id="v-scanlines"> <span>Scanlines</span></label>
+        <label class="chk"><input type="checkbox" id="v-loop" checked> <span>Loop</span></label>
+      </div>
+    </aside>
+
+    <!-- ===== centre: preview ===== -->
+    <section class="panel stage" aria-label="Preview">
+      <div class="stage-frame">
+        <canvas id="v-canvas" width="160" height="144" aria-label="8-bit video preview"></canvas>
+        <p class="stage-empty" id="v-empty">No footage loaded</p>
+      </div>
+      <div class="stage-bar">
+        <input type="range" id="v-scrub" min="0" max="1000" step="1" value="0" aria-label="Scrub position" disabled>
+        <span class="stage-meta" id="v-meta">—</span>
+      </div>
+    </section>
+
+    <!-- ===== right: audio ===== -->
+    <aside class="panel" id="v-inspector">
+      <h2 class="panel-title"><span class="k">音</span> Audio</h2>
+
+      <label class="field">
+        <span>Soundtrack</span>
+        <select id="v-audio-src">
+          <option value="none" selected>Silent</option>
+          <option value="original">The video's own audio</option>
+        </select>
+      </label>
+
+      <p class="hint" id="v-audio-note">Tracks you save in the Audio Studio appear here.</p>
+
+      <div class="audio-actions">
+        <button class="mini" id="v-audio-refresh" type="button">Refresh tracks</button>
+        <a class="mini as-link" href="studio.html">Make a track</a>
+      </div>
+
+      <label class="field range">
+        <span>Volume <b id="v-vol-v">80</b></span>
+        <input type="range" id="v-vol" min="0" max="100" step="1" value="80" aria-label="Soundtrack volume">
+      </label>
+
+      <h2 class="panel-title"><span class="k">出</span> Export</h2>
+      <label class="field">
+        <span>Frame rate</span>
+        <select id="v-fps">
+          <option value="30" selected>30 fps</option>
+          <option value="24">24 fps</option>
+          <option value="60">60 fps</option>
+        </select>
+      </label>
+      <label class="field range">
+        <span>Upscale <b id="v-scale-v">4</b>×</span>
+        <input type="range" id="v-scale" min="1" max="8" step="1" value="4" aria-label="Export upscale">
+      </label>
+      <p class="hint" id="v-export-note">Recorded live, so an export takes as long as the clip runs.</p>
+      <p class="hint" id="v-status" role="status"></p>
+    </aside>
+  </main>
+
+  <script src="chip.js"></script>
+  <script src="neo-select.js"></script>
+  <script src="video.js"></script>
+</body>
+</html>
