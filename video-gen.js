@@ -115,7 +115,7 @@
     },
 
     skyline: {
-      label: 'Skyline · parallax city', cat: 'cyber', solid: true,
+      label: 'Skyline · parallax city', cat: 'cyber',
       init(r, w, h, density) {
         const layers = [];
         for (let l = 0; l < 3; l++) {
@@ -148,7 +148,7 @@
             for (const b of L.blocks) {
               const bh = b.h * h * (1 + (near ? env.mid * 0.3 : 0));
               g.fillStyle = shades[l];
-              g.fillRect(x | 0, (base - bh) | 0, Math.max(2, b.w | 0), (bh + h) | 0);
+              g.fillRect(x | 0, (base - bh) | 0, Math.max(2, b.w | 0), (o.bg !== false ? bh + h : h - (base - bh)) | 0);
               if (near && b.lit > 0.45) {
                 g.fillStyle = env.treble > 0.3 ? '#2ef2ff' : '#ffd23f';
                 for (let wy = base - bh + 3; wy < h - 2; wy += 5)
@@ -440,7 +440,7 @@
 
     // ---------------- RPG ----------------
     village: {
-      label: 'Village · rooftops', cat: 'rpg', solid: true,
+      label: 'Village · rooftops', cat: 'rpg',
       init(r, w, h, density) {
         const n = Math.round(lerp(5, 16, density));
         return { r, off: 0,
@@ -454,8 +454,7 @@
         g.fillStyle = '#fff6d8'; g.beginPath(); g.arc(w * .2, h * .3, 9 + env.bass * 6, 0, 7); g.fill();
         s.off += o.speed * o.step * 16 * (1 + env.level * .6);
         const base = h * .78;
-        g.fillStyle = '#2c1f14';
-        g.fillRect(0, base, w, h - base);
+        if (o.bg !== false) { g.fillStyle = '#2c1f14'; g.fillRect(0, base, w, h - base); }
         const span = s.huts.reduce((a, b) => a + b.w + 8, 0);
         let x = -(s.off % span);
         for (let pass = 0; pass < 2 && x < w; pass++) {
@@ -671,7 +670,7 @@
 
     // ---------------- MONSTER ----------------
     kaiju: {
-      label: 'Kaiju · city stomp', cat: 'monster', solid: true,
+      label: 'Kaiju · city stomp', cat: 'monster',
       init(r, w, h, density) {
         const n = Math.round(lerp(8, 22, density));
         return { r, off: 0, step: 0,
@@ -692,7 +691,7 @@
           for (const b of s.blocks) {
             const bh = b.h * h;
             g.fillStyle = '#0a0410';
-            g.fillRect(x | 0, (base - bh) | 0, b.w | 0, bh + 4);
+            g.fillRect(x | 0, (base - bh) | 0, b.w | 0, bh + (o.bg !== false ? 4 : Math.max(4, h - base + 4)));
             if (b.lit > .5) {
               g.fillStyle = '#ffd23f';
               for (let wy = base - bh + 3; wy < base - 2; wy += 5)
@@ -792,7 +791,7 @@
 
     // ---------------- PLATFORMER ----------------
     hills: {
-      label: 'Hills · side-scroll', cat: 'platform', solid: true,
+      label: 'Hills · side-scroll', cat: 'platform',
       init(r, w, h, density) {
         const n = Math.round(lerp(3, 10, density));
         return { r, off: 0,
@@ -826,8 +825,10 @@
           g.fillStyle = '#8a5a2a'; g.fillRect(px | 0, py | 0, pl.w | 0, 5);
           g.fillStyle = '#3fbf4a'; g.fillRect(px | 0, (py - 2) | 0, pl.w | 0, 2);
         }
-        g.fillStyle = '#6b4423'; g.fillRect(0, h * .88, w, h * .12);
-        g.fillStyle = '#3fbf4a'; g.fillRect(0, h * .88, w, 3);
+        if (o.bg !== false) {
+          g.fillStyle = '#6b4423'; g.fillRect(0, h * .88, w, h * .12);
+          g.fillStyle = '#3fbf4a'; g.fillRect(0, h * .88, w, 3);
+        }
       },
     },
 
@@ -910,7 +911,7 @@
 
     // ---------------- CYBERPUNK ----------------
     alley: {
-      label: 'Alley · neon', cat: 'cyber', solid: true,
+      label: 'Alley · neon', cat: 'cyber',
       init(r, w, h, density) {
         const n = Math.round(lerp(4, 14, density));
         return { r, z: 0,
@@ -922,11 +923,13 @@
         s.z += o.speed * o.step * .22 * (1 + env.level);
         const cx = w / 2, cy = h * .46;
         const cols = ['#ff2e88', '#2ef2ff', '#ffd23f', '#8b5cf6'];
-        g.fillStyle = '#0d0a16';
-        g.beginPath(); g.moveTo(0, 0); g.lineTo(cx - w * .1, cy); g.lineTo(cx - w * .1, h); g.lineTo(0, h); g.closePath(); g.fill();
-        g.beginPath(); g.moveTo(w, 0); g.lineTo(cx + w * .1, cy); g.lineTo(cx + w * .1, h); g.lineTo(w, h); g.closePath(); g.fill();
-        g.fillStyle = '#15101f';
-        g.beginPath(); g.moveTo(cx - w * .1, cy); g.lineTo(cx + w * .1, cy); g.lineTo(w, h); g.lineTo(0, h); g.closePath(); g.fill();
+        if (o.bg !== false) {
+          g.fillStyle = '#0d0a16';
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(cx - w * .1, cy); g.lineTo(cx - w * .1, h); g.lineTo(0, h); g.closePath(); g.fill();
+          g.beginPath(); g.moveTo(w, 0); g.lineTo(cx + w * .1, cy); g.lineTo(cx + w * .1, h); g.lineTo(w, h); g.closePath(); g.fill();
+          g.fillStyle = '#15101f';
+          g.beginPath(); g.moveTo(cx - w * .1, cy); g.lineTo(cx + w * .1, cy); g.lineTo(w, h); g.lineTo(0, h); g.closePath(); g.fill();
+        }
         for (const sg of s.signs) {
           const f = ((sg.d + s.z) % 1) ** 1.8;
           const depth = .08 + f * .92;
@@ -1274,7 +1277,7 @@
     },
 
     pyramids: {
-      label: 'Pyramids · valley', cat: 'biome', solid: true,
+      label: 'Pyramids · valley', cat: 'biome',
       init(r, w, h, density) {
         const n = Math.round(lerp(2, 6, density));
         return { r, off: 0,
@@ -1303,12 +1306,12 @@
           g.fillStyle = darkC;
           g.beginPath(); g.moveTo(x + pw / 2, base); g.lineTo(x + pw / 2, base - ph); g.lineTo(x + pw, base); g.closePath(); g.fill();
         }
-        g.fillStyle = '#c99a5e'; g.fillRect(0, base, w, h - base);
+        if (o.bg !== false) { g.fillStyle = '#c99a5e'; g.fillRect(0, base, w, h - base); }
       },
     },
 
     jungle: {
-      label: 'Jungle · canopy', cat: 'biome', solid: true,
+      label: 'Jungle · canopy', cat: 'biome',
       init(r, w, h, density) {
         const n = Math.round(lerp(8, 26, density));
         return { r, off: 0,
@@ -1321,7 +1324,7 @@
         if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         // shafts of light through the canopy
         g.fillStyle = 'rgba(230,255,170,.10)';
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0; o.bg !== false && i < 4; i++) {
           const x = w * (.15 + i * .23) + Math.sin(t * .3 + i) * 6;
           g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 16, 0); g.lineTo(x + 34, h); g.lineTo(x + 8, h); g.closePath(); g.fill();
         }
@@ -1353,7 +1356,7 @@
     },
 
     tundra: {
-      label: 'Tundra · aurora', cat: 'biome', solid: true,
+      label: 'Tundra · aurora', cat: 'biome',
       init(r, w, h, density) {
         const n = Math.round(lerp(30, 150, density));
         return { r,
@@ -1384,7 +1387,7 @@
           g.beginPath(); g.moveTo(x - ph * .35, base - ph * .62); g.lineTo(x, base - ph); g.lineTo(x + ph * .35, base - ph * .62); g.closePath(); g.fill();
           g.fillStyle = '#243a56';
         }
-        g.fillStyle = '#e8f1fa'; g.fillRect(0, base, w, h - base);
+        if (o.bg !== false) { g.fillStyle = '#e8f1fa'; g.fillRect(0, base, w, h - base); }
         for (const f of s.flakes) {
           f.y += f.v * o.speed * o.step * .22;
           f.x += Math.sin(t + f.d * 9) * .0007 * o.speed;
@@ -1396,7 +1399,7 @@
     },
 
     volcano: {
-      label: 'Volcano · ash', cat: 'biome', solid: true,
+      label: 'Volcano · ash', cat: 'biome',
       init(r, w, h, density) {
         const n = Math.round(lerp(14, 60, density));
         return { r, glow: 0,
@@ -1425,7 +1428,7 @@
             g.lineTo(cx + i * (3 + (y - base + ph) * .28) + Math.sin(y * .3 + i) * 2, y);
           g.stroke();
         }
-        g.fillStyle = '#0d0406'; g.fillRect(0, base, w, h - base);
+        if (o.bg !== false) { g.fillStyle = '#0d0406'; g.fillRect(0, base, w, h - base); }
         for (const e of s.embers) {
           e.y -= e.v * o.speed * o.step * .18 * (1 + env.level);
           e.x += Math.sin(t * 1.4 + e.s * 9) * .0012 * o.speed;
@@ -1514,7 +1517,7 @@
     },
 
     oasis: {
-      label: 'Oasis · palms', cat: 'biome', solid: true,
+      label: 'Oasis · palms', cat: 'biome',
       init(r, w, h, density) {
         const n = Math.round(lerp(2, 7, density));
         return { r, off: 0, palms: Array.from({ length: n }, () => ({ x: r() * 1.4, s: .6 + r() * .8, lean: (r() - .5) * .5, d: .4 + r() * .6 })) };
@@ -1526,10 +1529,12 @@
         g.fillStyle = '#fff8d0';
         g.beginPath(); g.arc(w * .72, h * .22, 11 + env.bass * 6, 0, 7); g.fill();
         const base = h * .74;
-        g.fillStyle = '#d9b978'; g.fillRect(0, base, w, h - base);
-        // water, with a shimmering reflection band
-        g.fillStyle = '#2a7fa8'; g.fillRect(0, h * .84, w, h * .16);
-        for (let i = 0; i < 7; i++) {
+        if (o.bg !== false) {
+          g.fillStyle = '#d9b978'; g.fillRect(0, base, w, h - base);
+          // water, with a shimmering reflection band
+          g.fillStyle = '#2a7fa8'; g.fillRect(0, h * .84, w, h * .16);
+        }
+        for (let i = 0; o.bg !== false && i < 7; i++) {
           const y = h * .85 + i * (h * .022);
           g.fillStyle = `rgba(190,235,255,${.5 - i * .05})`;
           for (let x = 0; x < w; x += 4)

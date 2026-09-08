@@ -618,6 +618,9 @@
   function closePicker() {
     pickerOpen = false; cancelAnimationFrame(pickerRaf);
     $('v-picker').hidden = true; pickerTiles = [];
+    // Drop the tile canvases; opening rebuilds them anyway, and a growing
+    // library would otherwise leave a canvas per scene parked in the DOM.
+    $('v-picker-grid').innerHTML = '';
   }
 
   // ---------- timeline ----------

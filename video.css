@@ -12,9 +12,10 @@
    so the pixels stay square instead of turning to mush. */
 #v-canvas.idle { opacity: .25; }
 #v-canvas {
-  /* Fill the stage: the canvas keeps its hardware aspect ratio while CSS blows
-     it up, so a 160x144 frame reads at full size without resampling. */
-  height: 56vh; width: auto; max-width: 100%; max-height: 56vh;
+  /* Fill the stage without ever distorting the frame. Sizing by height alone
+     let max-width clamp the width while the height stayed put, which stretched
+     the picture on narrow screens; object-fit makes that impossible. */
+  width: 100%; height: 56vh; max-height: 56vh; object-fit: contain;
   image-rendering: pixelated; image-rendering: crisp-edges;
   border-radius: 4px; box-shadow: 0 0 0 1px #2a2340, 0 18px 50px #0009;
 }
@@ -22,9 +23,14 @@
   position: absolute; margin: 0; font-family: var(--pixel); font-size: 10px;
   color: var(--muted); letter-spacing: 1px; pointer-events: none;
 }
-.stage-bar { display: flex; align-items: center; gap: 14px; }
-.stage-bar input[type=range] { flex: 1; }
-.stage-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+.stage-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.stage-bar input[type=range] { flex: 1 1 120px; min-width: 0; }
+/* The readout can be long; let it shrink and clip rather than push the bar
+   past the viewport and give the whole page a horizontal scrollbar. */
+.stage-meta {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 auto;
+}
 
 /* import */
 .drop-zone {
