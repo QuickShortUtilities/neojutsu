@@ -90,6 +90,30 @@ with sync_playwright() as p:
  title=win.locator('.fx-title').bounding_box()
  page.mouse.move(title['x']+60, title['y']+10); page.mouse.down(); page.mouse.move(title['x']+200, title['y']+150, steps=6); page.mouse.up()
  win.locator('.fx-close').click(); assert not win.is_visible()
+ # --- real EQ + compressor, and the screens actually draw ---
+ page.locator('.rack-btn[data-fx=eq]').click(); page.wait_for_timeout(150)
+ eq=page.locator('.fx-window[data-fx=eq]')
+ assert eq.locator('.dial').count()==12, 'EQ should expose freq/gain/Q on four bands'
+ eq.locator('.fx-power').click(); page.wait_for_timeout(80)
+ # drag band 2's handle on the screen and check the pattern followed
+ before=draft()['pattern']['rack']['eq']
+ sc=eq.locator('.fx-screen').bounding_box()
+ page.mouse.move(sc['x']+sc['width']*0.35, sc['y']+sc['height']/2)
+ page.mouse.down(); page.mouse.move(sc['x']+sc['width']*0.45, sc['y']+sc['height']*0.25, steps=8); page.mouse.up()
+ page.wait_for_timeout(200)
+ after=draft()['pattern']['rack']['eq']
+ assert any(abs(after['g'+str(n)]-before['g'+str(n)])>0.5 for n in (1,2,3,4)), 'dragging the EQ screen should change a band gain'
+ # each open screen paints something other than the background
+ painted=page.evaluate('''(()=>{const out={};for(const c of document.querySelectorAll('.fx-window:not([hidden]) .fx-screen')){
+   const g=c.getContext('2d');const d=g.getImageData(0,0,c.width,c.height).data;let n=0;
+   for(let i=0;i<d.length;i+=64){if(d[i]>20||d[i+1]>20||d[i+2]>20)n++;}
+   out[c.closest('.fx-window').dataset.fx]=n;}return out;})()''')
+ assert painted and all(v>50 for v in painted.values()), f'screens should draw: {painted}'
+ page.locator('.rack-btn[data-fx=comp]').click(); page.wait_for_timeout(150)
+ assert page.locator('.fx-window[data-fx=comp] .dial').count()==6
+ eq.locator('.fx-close').click()
+ page.locator('.fx-window[data-fx=comp] .fx-close').click()
+ assert not errors, errors
  # rack state survives a reload
  page.reload(); page.wait_for_timeout(600)
  assert draft()['pattern']['rack']['phaser']['on'] is True

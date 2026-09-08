@@ -103,7 +103,7 @@
       master = ctx.createGain(); master.gain.value = 0.9;
       shaper = ctx.createWaveShaper(); shaper.curve = crushCurve(crushBits);
       analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
-      rack = window.NeoRack ? window.NeoRack.create(ctx) : null;
+      rack = window.NeoRack ? window.NeoRack.create(ctx, { meter: !context }) : null;
       if (rack) master.connect(shaper).connect(rack.input), rack.output.connect(analyser).connect(ctx.destination);
       else master.connect(shaper).connect(analyser).connect(ctx.destination);
       // echo bus: send -> delay -> (feedback) -> wet -> master
@@ -341,6 +341,7 @@
 
     return {
       ensure, note, drum, midiToHz, setCrush, setEcho, setMix, silence, setRack, echoDivision,
+      get rackProbe() { return rack ? rack.probe : null; },
       channelAnalyser(ch) { return channels[ch]?.meter; },
       get ctx() { return ctx; },
       get analyser() { return analyser; },

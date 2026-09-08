@@ -851,11 +851,14 @@
   let rackDirty = false;
   NeoFxUI.init({
     get: () => pattern.rack,
+    probe: () => engine.rackProbe,
+    bpm: () => pattern.bpm,
     preview: () => { rackDirty = true; if (seq.playing) engine.setRack(pattern.rack, { bpm: pattern.bpm }); },
     commit: () => {
       if (!rackDirty) snapshot();                       // a toggle or select, not the end of a drag
       rackDirty = false;
       engine.ensure(); engine.setRack(pattern.rack, { bpm: pattern.bpm });
+      if (!seq.playing) engine.setMix(pattern);
       queueSave(); syncUI();
     },
   });
