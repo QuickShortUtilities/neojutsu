@@ -47,7 +47,12 @@ with sync_playwright() as p:
 
     scenes = page.eval_on_selector_all('#v-scene option','e=>e.map(o=>o.value)')
     report['scene_count'] = len(scenes)
-    assert len(scenes) == 13, scenes
+    # A growing scene library must not break this; check the floor and that
+    # every scene is filed under a category the picker knows about.
+    assert len(scenes) >= 20, len(scenes)
+    uncategorised = page.evaluate("()=>Object.entries(window.NeoScene.SCENES).filter(([k,v])=>!v.cat||!window.NeoScene.CATS[v.cat]).map(([k])=>k)")
+    assert not uncategorised, f'scenes with no valid category: {uncategorised}'
+    report['categories'] = page.evaluate("()=>Object.keys(window.NeoScene.CATS).length")
 
     page.select_option('#v-chip','gameboy'); page.dispatch_event('#v-chip','input')
     pick_scene(page, 'skyline')

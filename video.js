@@ -493,7 +493,7 @@
 
   // ---------- scene picker ----------
   const TILE_W = 104;
-  let pickerOpen = false, pickerTiles = [], pickerRaf = 0, pickerT = 0, pickerLast = 0;
+  let pickerOpen = false, pickerTiles = [], pickerRaf = 0, pickerT = 0, pickerLast = 0, pickerCat = 'all';
 
   function buildPicker() {
     const grid = $('v-picker-grid'); grid.innerHTML = ''; pickerTiles = [];
@@ -502,6 +502,7 @@
     const th = Math.max(24, Math.round(TILE_W * bh / bw));
     const filter = $('v-picker-search').value.trim().toLowerCase();
     for (const [key, def] of Object.entries(window.NeoScene.SCENES)) {
+      if (pickerCat !== 'all' && def.cat !== pickerCat) continue;
       if (filter && !def.label.toLowerCase().includes(filter)) continue;
       const tile = document.createElement('button');
       tile.type = 'button';
@@ -532,11 +533,33 @@
       snap(t.ctx, t.w, t.h, cfg);
     }
   }
+  // Category tabs, built from whatever categories the scenes actually declare -
+  // adding a scene in a new genre needs no UI work.
+  function buildCats() {
+    const host = $('v-picker-cats'); host.innerHTML = '';
+    const used = new Set(Object.values(window.NeoScene.SCENES).map(d => d.cat));
+    const counts = {};
+    for (const d of Object.values(window.NeoScene.SCENES)) counts[d.cat] = (counts[d.cat] || 0) + 1;
+    const entries = [['all', { label: 'All', kanji: '全' }]]
+      .concat(Object.entries(window.NeoScene.CATS).filter(([k]) => used.has(k)));
+    for (const [key, cat] of entries) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'picker-cat' + (key === pickerCat ? ' current' : '');
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(key === pickerCat));
+      const n = key === 'all' ? Object.keys(window.NeoScene.SCENES).length : counts[key];
+      b.innerHTML = `<span class="pc-k">${cat.kanji}</span>${cat.label}<i>${n}</i>`;
+      b.addEventListener('click', () => { pickerCat = key; buildCats(); buildPicker(); });
+      host.append(b);
+    }
+  }
+
   function openPicker() {
     pickerOpen = true; pickerT = 0; pickerLast = 0;
     $('v-picker-title').textContent = `CHOOSE A SCENE · LAYER ${selected + 1}`;
     $('v-picker').hidden = false;
-    buildPicker();
+    buildCats(); buildPicker();
     cancelAnimationFrame(pickerRaf); pickerRaf = requestAnimationFrame(pickerLoop);
   }
   function closePicker() {

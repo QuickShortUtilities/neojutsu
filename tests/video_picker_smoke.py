@@ -19,7 +19,7 @@ with sync_playwright() as p:
     assert page.locator('#v-picker').is_visible(), 'picker did not open'
     tiles = page.locator('.picker-tile').count()
     report['tiles']=tiles
-    assert tiles==13, tiles
+    assert tiles==29, tiles
 
     # Every thumbnail must render real, on-palette footage - a preview that
     # lies about the look is worse than no preview.
@@ -41,6 +41,19 @@ with sync_playwright() as p:
     assert not stray, f'thumbnails off-palette: {stray}'
     report['thumb_size']=[stats[0]['w'],stats[0]['h']]
     report['all_thumbs_live']=True
+
+    # Category tabs narrow the grid to a genre.
+    cats = page.locator('.picker-cat').count()
+    report['categories']=cats
+    assert cats >= 10, cats
+    page.evaluate("()=>[...document.querySelectorAll('.picker-cat')].find(b=>b.textContent.includes('RPG')).click()")
+    page.wait_for_timeout(700)
+    rpg = page.locator('.picker-tile').count()
+    report['rpg_tiles']=rpg
+    assert 1 <= rpg < 29, f'RPG tab showed {rpg} tiles'
+    page.evaluate("()=>[...document.querySelectorAll('.picker-cat')].find(b=>b.textContent.includes('All')).click()")
+    page.wait_for_timeout(500)
+    assert page.locator('.picker-tile').count()==29, 'All tab did not restore the full grid'
 
     # Filter narrows the grid.
     page.fill('#v-picker-search','fire'); page.wait_for_timeout(500)

@@ -176,3 +176,16 @@
 .vfx-motion .field > span { font-size: 9px; }
 .fx-window .fx-blurb { font-size: 10px; color: var(--muted); line-height: 1.6; margin: 10px 12px 4px; }
 .fx-window .fx-dials { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px 0; justify-content: flex-start; }
+
+/* scene categories */
+.picker-cats { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.picker-cat {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  background: #0b0913; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); font-size: 10px; padding: 5px 10px 5px 7px;
+}
+.picker-cat:hover { border-color: var(--cyan); color: var(--text); }
+.picker-cat.current { border-color: var(--magenta); color: var(--text); background: #1a1024; }
+.picker-cat .pc-k { font-family: var(--kanji); font-weight: 900; font-size: 12px; color: #6b5b8f; line-height: 1; }
+.picker-cat.current .pc-k { color: var(--magenta); }
+.picker-cat i { font-family: var(--mono); font-style: normal; font-size: 9px; color: var(--muted); opacity: .8; }
