@@ -64,7 +64,8 @@
     body.setAttribute('class', 'dial-body');
     const nib = document.createElementNS(ns, 'rect');
     nib.setAttribute('class', 'dial-nib');
-    nib.setAttribute('width', 4); nib.setAttribute('height', 10);
+    nib.setAttribute('x', 30); nib.setAttribute('y', 20);      // straight up; rotated about the centre
+    nib.setAttribute('width', 4); nib.setAttribute('height', 11);
     svg.append(body, nib);
 
     const label = document.createElement('span'); label.className = 'dial-label'; label.textContent = spec.label;
@@ -75,10 +76,7 @@
       const v = getValue(), t = norm(spec, v);
       const lit = Math.round(t * (SEGMENTS - 1));
       segs.forEach((r, i) => r.classList.toggle('on', i <= lit));
-      const a = (A0 + t * (A1 - A0) - 90) * Math.PI / 180;
-      nib.setAttribute('x', 32 + Math.cos(a) * 9 - 2);
-      nib.setAttribute('y', 32 + Math.sin(a) * 9 - 5);
-      nib.setAttribute('transform', `rotate(${A0 + t * (A1 - A0)} ${32 + Math.cos(a) * 9} ${32 + Math.sin(a) * 9})`);
+      nib.setAttribute('transform', `rotate(${A0 + t * (A1 - A0)} 32 32)`);
       readout.textContent = format(spec, v) + (spec.unit && spec.unit !== 'Hz' ? spec.unit : spec.unit === 'Hz' ? 'Hz' : '');
       svg.setAttribute('aria-valuenow', v.toFixed(2));
     }
@@ -310,19 +308,68 @@
 
     width(g, w, h, fx, probe) {
       const size = probe ? probe.scopeSize : 0;
-      const cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 6;
-      g.strokeStyle = 'rgba(255,255,255,.10)';
-      g.beginPath(); g.moveTo(cx - r, cy); g.lineTo(cx + r, cy); g.moveTo(cx, cy - r); g.lineTo(cx, cy + r); g.stroke();
+      const meterW = 26, corrH = 16;
+      const gw = w - meterW - 6, gh = h - corrH - 4;
+      const cx = gw / 2, cy = gh / 2, r = Math.min(gw, gh) / 2 - 8;
+
+      // goniometer frame: mono is vertical, hard left and right are the diagonals
+      g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(cx, cy - r); g.lineTo(cx, cy + r); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,.07)';
+      g.beginPath();
+      g.moveTo(cx - r, cy - r); g.lineTo(cx + r, cy + r);
+      g.moveTo(cx + r, cy - r); g.lineTo(cx - r, cy + r);
+      g.stroke();
+      g.font = '7px monospace'; g.fillStyle = 'rgba(154,146,179,.85)';
+      g.textAlign = 'left'; g.textBaseline = 'top'; g.fillText('L', 3, 3);
+      g.textAlign = 'right'; g.fillText('R', gw - 3, 3);
+      g.textAlign = 'center'; g.fillText('M', cx, 3);
+
       if (!size) return;
       const l = new Uint8Array(size), rr = new Uint8Array(size);
       if (!probe.stereo(l, rr)) return;
+
+      // trace, plus running sums for correlation and peaks
+      let sll = 0, srr = 0, slr = 0, peakL = 0, peakR = 0;
       g.fillStyle = fx.on ? '#f472b6' : '#6b7280';
-      for (let i = 0; i < size; i += 2) {
+      for (let i = 0; i < size; i++) {
         const a = (l[i] - 128) / 128, b = (rr[i] - 128) / 128;
-        const x = cx + (a - b) / 2 * r * 1.4;           // side
-        const y = cy - (a + b) / 2 * r * 1.4;           // mid
+        sll += a * a; srr += b * b; slr += a * b;
+        if (Math.abs(a) > peakL) peakL = Math.abs(a);
+        if (Math.abs(b) > peakR) peakR = Math.abs(b);
+        if (i % 2) continue;
+        const x = cx + (a - b) / 2 * r * 1.45;              // side
+        const y = cy - (a + b) / 2 * r * 1.45;              // mid
         g.fillRect(Math.round(x / PX) * PX, Math.round(y / PX) * PX, PX, PX);
       }
+
+      // L and R peak meters
+      const bars = 12;
+      [['L', peakL, 0], ['R', peakR, 1]].forEach(([name, peak, col]) => {
+        const x = gw + 6 + col * (meterW / 2);
+        const lit = Math.round(Math.min(1, peak) * bars);
+        for (let i = 0; i < bars; i++) {
+          const on = fx.on !== undefined && i < lit;
+          g.fillStyle = on ? (i > bars - 3 ? '#ff2e88' : i > bars - 6 ? '#ffd23f' : '#5eff8f') : 'rgba(255,255,255,.07)';
+          g.fillRect(x, 12 + (bars - 1 - i) * ((gh - 16) / bars), meterW / 2 - 3, (gh - 16) / bars - 2);
+        }
+        g.fillStyle = 'rgba(154,146,179,.9)'; g.font = '7px monospace';
+        g.textAlign = 'left'; g.textBaseline = 'top'; g.fillText(name, x, 2);
+      });
+
+      // correlation: +1 mono-safe, 0 wide, -1 will cancel in mono
+      const corr = (sll > 1e-9 && srr > 1e-9) ? slr / Math.sqrt(sll * srr) : 1;
+      const y0 = h - corrH + 2, barW = w - 30;
+      g.fillStyle = 'rgba(255,255,255,.06)'; g.fillRect(0, y0, barW, 8);
+      const mid = barW / 2;
+      const px = Math.round(mid + corr * mid);
+      g.fillStyle = corr < 0 ? '#ff2e88' : corr < 0.35 ? '#ffd23f' : '#5eff8f';
+      g.fillRect(Math.min(px, mid), y0, Math.max(2, Math.abs(px - mid)), 8);
+      g.fillStyle = 'rgba(255,255,255,.3)'; g.fillRect(Math.round(mid), y0 - 2, 1, 12);
+      g.font = '7px monospace'; g.textBaseline = 'top';
+      g.fillStyle = 'rgba(154,146,179,.9)'; g.textAlign = 'left'; g.fillText('-1', 0, y0 + 9);
+      g.textAlign = 'right'; g.fillStyle = 'rgba(236,232,245,.95)';
+      g.fillText('CORR ' + corr.toFixed(2), w - 2, y0 + 9);
     },
   };
 
@@ -345,7 +392,7 @@
         <button class="fx-power" type="button" aria-pressed="false" aria-label="Turn ${spec.label} on"><span class="led"></span>ON</button>
         <button class="fx-close" type="button" aria-label="Close ${spec.label}">✕</button>
       </header>
-      <div class="fx-screen-wrap"><canvas class="fx-screen" width="384" height="128" aria-label="${spec.label} display"></canvas></div>
+      <div class="fx-screen-wrap"><canvas class="fx-screen" width="384" height="${id === 'width' ? 150 : 128}" aria-label="${spec.label} display"></canvas></div>
       <p class="fx-blurb">${spec.blurb}</p>
       <div class="fx-dials"></div>`;
 

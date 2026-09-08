@@ -100,8 +100,13 @@
     },
     width: {
       label: 'Stereo', kanji: '広', theme: 'width', screen: 'width',
-      blurb: 'Mid/side width. Past 100% the sides outweigh the centre.',
-      params: { width: P('Width', 0, 200, 100, '%') },
+      blurb: 'Mid/side imaging. Watch the trace: a vertical line is mono, a wide blob is wide. Keep correlation out of the red and the mix survives mono.',
+      params: {
+        width:  P('Width', 0, 200, 100, '%'),
+        bass:   P('Bass mono', 0, 400, 0, 'Hz'),
+        rotate: P('Rotate', -45, 45, 0, '°', false),
+        trim:   P('Balance', -100, 100, 0, '', false),
+      },
     },
   };
 
@@ -251,25 +256,52 @@
     const convolver = ctx.createConvolver();
     mixer('reverb', (src) => { src.connect(convolver); params.reverb = { size: null, damp: null, mix: null }; return convolver; });
 
-    // ---- Stereo width (mid/side). L = M + S, R = M - S.
+    // ---- Stereo imaging.
+    // Decode to mid/side, highpass the side (bass mono), rotate the M/S vector,
+    // scale the side (width), then encode back: L = M + S, R = M - S.
+    let sideHP = null, hpWet = null, hpDry = null, rot = null, trimL = null, trimR = null;
     {
       const inNode = ctx.createGain(), outNode = ctx.createGain();
       const split = ctx.createChannelSplitter(2), merge = ctx.createChannelMerger(2);
       const midG = ctx.createGain(), sideG = ctx.createGain(), negR = ctx.createGain();
-      const sideOut = ctx.createGain(), sideNeg = ctx.createGain();
-      const sumL = ctx.createGain(), sumR = ctx.createGain();
       midG.gain.value = 0.5; sideG.gain.value = 0.5; negR.gain.value = -1;
-      sideOut.gain.value = 1; sideNeg.gain.value = -1;
       inNode.connect(split);
       split.connect(midG, 0); split.connect(midG, 1);
       split.connect(sideG, 0); split.connect(negR, 1); negR.connect(sideG);
-      sideG.connect(sideOut); sideG.connect(sideNeg);
-      midG.connect(sumL); sideOut.connect(sumL);
-      midG.connect(sumR); sideNeg.connect(sumR);
-      sumL.connect(merge, 0, 0); sumR.connect(merge, 0, 1);
+
+      // Bass mono highpasses the side signal. With it off the side must bypass the
+      // filter completely: even a 10 Hz highpass is not perfectly transparent, and
+      // the error shows up as a whisper of signal in a hard-panned channel.
+      sideHP = ctx.createBiquadFilter(); sideHP.type = 'highpass'; sideHP.frequency.value = 120; sideHP.Q.value = 0.7;
+      hpWet = ctx.createGain(); hpDry = ctx.createGain();
+      hpWet.gain.value = 0; hpDry.gain.value = 1;
+      const sideOut = ctx.createGain();
+      sideG.connect(hpWet).connect(sideHP).connect(sideOut);
+      sideG.connect(hpDry).connect(sideOut);
+
+      // rotation: m' = m·cos − s·sin, s' = m·sin + s·cos
+      const midBus = ctx.createGain(), sideBus = ctx.createGain();
+      rot = { mCos: ctx.createGain(), sNegSin: ctx.createGain(), mSin: ctx.createGain(), sCos: ctx.createGain() };
+      rot.mCos.gain.value = 1; rot.sCos.gain.value = 1; rot.mSin.gain.value = 0; rot.sNegSin.gain.value = 0;
+      midG.connect(rot.mCos).connect(midBus);
+      sideOut.connect(rot.sNegSin).connect(midBus);
+      midG.connect(rot.mSin).connect(sideBus);
+      sideOut.connect(rot.sCos).connect(sideBus);
+
+      const sidePos = ctx.createGain(), sideNeg = ctx.createGain();
+      sidePos.gain.value = 1; sideNeg.gain.value = -1;
+      sideBus.connect(sidePos); sideBus.connect(sideNeg);
+
+      trimL = ctx.createGain(); trimR = ctx.createGain();
+      const sumL = ctx.createGain(), sumR = ctx.createGain();
+      midBus.connect(sumL); sidePos.connect(sumL);
+      midBus.connect(sumR); sideNeg.connect(sumR);
+      sumL.connect(trimL).connect(merge, 0, 0);
+      sumR.connect(trimR).connect(merge, 0, 1);
       merge.connect(outNode);
+
       nodes.width = { in: inNode, out: outNode };
-      params.width = { width: sideOut.gain, _mirror: sideNeg.gain };
+      params.width = { width: sidePos.gain, _mirror: sideNeg.gain, bass: sideHP.frequency, rotate: null, trim: null };
     }
 
     // ---- chain
@@ -307,6 +339,23 @@
         case 'flanger.delay': apply(p, value / 1000); return;
         case 'crush.tone': apply(p, value); return;
         case 'width.width': apply(p, value / 100); apply(params.width._mirror, -(value / 100)); return;
+        case 'width.bass': {                                            // 0 on the dial means off
+          const on = value > 0;
+          apply(sideHP.frequency, on ? value : 120);
+          apply(hpWet.gain, on ? 1 : 0); apply(hpDry.gain, on ? 0 : 1);
+          return;
+        }
+        case 'width.rotate': {
+          const th = value * Math.PI / 180;
+          apply(rot.mCos.gain, Math.cos(th)); apply(rot.sCos.gain, Math.cos(th));
+          apply(rot.mSin.gain, Math.sin(th)); apply(rot.sNegSin.gain, -Math.sin(th));
+          return;
+        }
+        case 'width.trim': {
+          const t = value / 100;                                        // -1 hard left, +1 hard right
+          apply(trimL.gain, Math.min(1, 1 - t)); apply(trimR.gain, Math.min(1, 1 + t));
+          return;
+        }
         default: return;
       }
     }
@@ -374,7 +423,12 @@
       // units without a Mix dial bypass by going flat
       if (!state.eq.on) for (const b of SPEC.eq.bands) set(params.eq['g' + b.n], 0);
       if (!state.comp.on) { set(params.comp.threshold, 0); set(params.comp.ratio, 1); set(params.comp.knee, 0); set(params.comp.makeup, 1); }
-      if (!state.width.on) { set(params.width.width, 1); set(params.width._mirror, -1); }
+      if (!state.width.on) {
+        set(params.width.width, 1); set(params.width._mirror, -1);
+        set(hpWet.gain, 0); set(hpDry.gain, 1);
+        set(rot.mCos.gain, 1); set(rot.sCos.gain, 1); set(rot.mSin.gain, 0); set(rot.sNegSin.gain, 0);
+        set(trimL.gain, 1); set(trimR.gain, 1);
+      }
 
       const bits = state.crush.on ? state.crush.bits : 16;
       if (bits !== lastBits) { crushShaper.curve = crushCurve(bits); lastBits = bits; }

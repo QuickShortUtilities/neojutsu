@@ -402,3 +402,42 @@ button[aria-pressed=true].mini { background: #2ef2ff18; border-color: var(--cyan
 .motion .neo-select-btn { padding: 3px 5px; font-size: 9px; }
 .edit-options .neo-select, .view-zoom-label .neo-select { width: auto; min-width: 92px; }
 .export-grid .neo-select-btn { font-size: 12px; }
+
+/* ================= v1.0: rack typography =================
+   Press Start 2P has an 8px pixel grid, so below ~10px it lands between
+   device pixels and goes soft. It now sets headings only; labels use the
+   mono face in caps, which stays crisp at small sizes. */
+.fx-title h3 { font-family: var(--pixel); font-size: 10px; line-height: 1.4; letter-spacing: .5px; }
+.fx-kanji { font-size: 20px; line-height: 1; }
+
+.fx-power, .fx-close {
+  font-family: var(--mono); font-weight: 600; font-size: 10px; letter-spacing: .12em;
+  line-height: 1; padding: 7px 9px; min-height: 26px;
+}
+.fx-close { padding: 7px 8px; font-size: 11px; letter-spacing: 0; }
+.fx-power .led { flex: none; }
+
+.dial-label {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase;
+  line-height: 1.35; color: var(--muted); text-align: center;
+  max-width: 100%; overflow-wrap: break-word; hyphens: none;
+}
+.dial-value { font-family: var(--mono); font-size: 11px; color: var(--text); line-height: 1.2; font-variant-numeric: tabular-nums; }
+.dial-cell { gap: 3px; padding: 7px 3px 6px; }
+
+.motion-toggle {
+  font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .08em;
+  padding: 5px 4px; line-height: 1.2;
+}
+.fx-select { font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .09em; }
+.fx-blurb { font-size: 11px; line-height: 1.6; padding: 10px 12px 2px; }
+
+.rack-name { font-family: var(--mono); font-weight: 600; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.rack-btn { padding: 10px; }
+.fx-sub { font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+
+/* the Stereo window is a metering tool, so give its screen more room */
+.theme-width { width: min(430px, calc(100vw - 16px)); }
+.theme-width .fx-screen { aspect-ratio: 384 / 150; }
+.theme-width .fx-dials { gap: 4px; }

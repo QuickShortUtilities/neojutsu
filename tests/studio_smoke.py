@@ -122,10 +122,28 @@ with sync_playwright() as p:
    for(let i=0;i<d.length;i+=64){if(d[i]>20||d[i+1]>20||d[i+2]>20)n++;}
    out[c.closest('.fx-window').dataset.fx]=n;}return out;})()''')
  assert painted and all(v>50 for v in painted.values()), f'screens should draw: {painted}'
+ # --- stereo imaging unit ---
+ page.locator('.rack-btn[data-fx=width]').click(); page.wait_for_timeout(150)
+ st=page.locator('.fx-window[data-fx=width]')
+ assert st.locator('.dial').count()==4, 'stereo should have width, bass mono, rotate and balance'
+ st.locator('.fx-power').click(); page.wait_for_timeout(80)
+ assert draft()['pattern']['rack']['width']['on'] is True
+ # bass mono is automatable, rotate and balance are not
+ cells=st.locator('.dial-cell')
+ assert cells.nth(0).locator('.motion-toggle').count()==1
+ assert cells.nth(2).locator('.motion-toggle').count()==0
+ # unity when on with default dials: a hard-panned voice must stay silent in the far channel
+ unity=page.evaluate('''async()=>{const p=JSON.parse(localStorage.getItem('neojutsu.draft.v1')).pattern;
+   p.mix.p1.pan=-1;for(const l of ['p2','p3','p4','tr','no'])p.mix[l].mute=true;
+   const b=await NeoChip.render(p,{tail:false});const r=b.getChannelData(1);let e=0;
+   for(let i=0;i<r.length;i++)e+=r[i]*r[i];return e/r.length;}''')
+ assert unity<1e-12, f'stereo unit should be transparent at defaults, right-channel energy {unity}'
+ st.locator('.fx-power').click()                                  # leave it off again
+ st.locator('.fx-close').click()
  page.locator('.rack-btn[data-fx=comp]').click(); page.wait_for_timeout(150)
  assert page.locator('.fx-window[data-fx=comp] .dial').count()==6
+ page.locator('.fx-window[data-fx=comp] .fx-close').click()   # close the top window first
  eq.locator('.fx-close').click()
- page.locator('.fx-window[data-fx=comp] .fx-close').click()
  assert not errors, errors
  # rack state survives a reload
  page.reload(); page.wait_for_timeout(600)
