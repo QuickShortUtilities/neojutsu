@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Studio — NEO術</title>
+  <meta name="description" content="NeoJutsu Studio: generate, edit and export original chiptune. Four hardware voices, real MIDI out.">
+  <meta name="theme-color" content="#07060c">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2307060c'/%3E%3Ctext x='32' y='47' font-size='42' text-anchor='middle' font-family='serif' fill='%23ff2e88'%3E術%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Serif+JP:wght@700;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="studio.css">
+</head>
+<body class="studio-body">
+  <div class="scanlines" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="index.html" aria-label="NeoJutsu home">
+      <span class="brand-neo">NEO</span><span class="brand-kanji">術</span>
+      <span class="brand-sub">STUDIO</span>
+    </a>
+    <nav class="nav-links">
+      <span class="engine-badge" id="engine-badge" title="The generator currently running">engine: procedural v0</span>
+      <a href="index.html#how">About</a>
+      <a class="nav-gh" href="https://github.com/QuickShortUtilities/neojutsu" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <main class="studio">
+    <!-- ===== left: generate ===== -->
+    <aside class="panel gen">
+      <h2 class="panel-title"><span class="k">生</span> Generate</h2>
+
+      <label class="field">
+        <span>Hardware</span>
+        <select id="g-chip">
+          <option value="nes">NES · 2A03</option>
+          <option value="gameboy">Game Boy · LR35902</option>
+          <option value="genesis">Genesis · YM2612</option>
+          <option value="c64">C64 · SID</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Mood</span>
+        <select id="g-mood">
+          <option value="stage">Stage theme</option>
+          <option value="boss">Boss fight</option>
+          <option value="title">Title screen</option>
+          <option value="chill">Overworld / chill</option>
+          <option value="dark">Dark corridor</option>
+        </select>
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span>Key</span>
+          <select id="g-key">
+            <option>C</option><option>C#</option><option>D</option><option>D#</option><option>E</option><option>F</option>
+            <option>F#</option><option>G</option><option>G#</option><option selected>A</option><option>A#</option><option>B</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Scale</span>
+          <select id="g-scale">
+            <option value="minor">Minor</option>
+            <option value="major">Major</option>
+            <option value="dorian">Dorian</option>
+            <option value="phrygian">Phrygian</option>
+            <option value="pent">Minor pent.</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="field-row">
+        <label class="field">
+          <span>Bars</span>
+          <select id="g-bars">
+            <option value="2">2</option><option value="4" selected>4</option><option value="8">8</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Tempo <b id="g-bpm-val">150</b></span>
+          <input type="range" id="g-bpm" min="80" max="220" value="150">
+        </label>
+      </div>
+
+      <label class="field">
+        <span>Seed <small>(same seed, same track)</small></span>
+        <div class="seed-row">
+          <input type="text" id="g-seed" value="" placeholder="random" spellcheck="false">
+          <button type="button" class="mini" id="g-dice" title="Random seed">⚄</button>
+        </div>
+      </label>
+
+      <button class="btn btn-primary wide" id="g-go" type="button"><span class="btn-icon">◆</span> Generate</button>
+
+      <p class="gen-note">
+        The trained model isn't wired in yet. Until it is, <b>Generate</b> runs a rule-based engine
+        so the whole path works today: controls → pattern → chip synth → MIDI. When NeoJutsu
+        finishes training, only the engine changes.
+      </p>
+    </aside>
+
+    <!-- ===== centre: editor ===== -->
+    <section class="panel editor">
+      <div class="transport">
+        <button class="btn btn-primary" id="play" type="button" aria-pressed="false">
+          <span class="btn-icon" id="play-icon">▶</span> <span id="play-label">Play</span>
+        </button>
+        <div class="lane-tabs" role="tablist" aria-label="Channel to edit">
+          <button class="lane active" data-lane="p1" role="tab" aria-selected="true"><span class="dot p1"></span>Pulse 1</button>
+          <button class="lane" data-lane="p2" role="tab" aria-selected="false"><span class="dot p2"></span>Pulse 2</button>
+          <button class="lane" data-lane="tr" role="tab" aria-selected="false"><span class="dot tr"></span>Triangle</button>
+          <button class="lane" data-lane="no" role="tab" aria-selected="false"><span class="dot no"></span>Noise</button>
+        </div>
+        <div class="tools">
+          <button type="button" class="mini" id="t-clear" title="Clear this channel">clear</button>
+          <button type="button" class="mini" id="t-shift-up" title="Transpose channel up an octave">+8va</button>
+          <button type="button" class="mini" id="t-shift-dn" title="Transpose channel down an octave">−8va</button>
+          <button type="button" class="mini" id="t-undo" title="Undo (⌘Z)">undo</button>
+        </div>
+        <label class="tempo">
+          <span>BPM <b id="bpm-val">150</b></span>
+          <input type="range" id="bpm" min="80" max="220" value="150">
+        </label>
+      </div>
+
+      <div class="roll-wrap">
+        <canvas id="roll" aria-label="Piano roll editor"></canvas>
+      </div>
+      <p class="roll-help">
+        <b>Click</b> to place a note, <b>drag</b> to paint, <b>right-click</b> or <b>shift-click</b> to erase.
+        <b>Space</b> plays. One note per step per voice, the way the hardware works.
+      </p>
+      <canvas id="scope" width="1200" height="70" aria-label="Oscilloscope"></canvas>
+    </section>
+
+    <!-- ===== right: track & export ===== -->
+    <aside class="panel side">
+      <h2 class="panel-title"><span class="k">出</span> Export</h2>
+      <div class="track-meta">
+        <div><span>Title</span><input type="text" id="x-title" value="neojutsu-track" spellcheck="false"></div>
+        <div><span>Chip</span><b id="x-chip">NES · 2A03</b></div>
+        <div><span>Length</span><b id="x-len">4 bars · 64 steps</b></div>
+        <div><span>Seed</span><b id="x-seed">—</b></div>
+      </div>
+      <button class="btn btn-ghost wide" id="x-midi" type="button">⬇ Download MIDI</button>
+      <button class="btn btn-ghost wide" id="x-link" type="button">⧉ Copy share link</button>
+      <p class="side-note" id="x-status"></p>
+
+      <h2 class="panel-title mt"><span class="k">庫</span> Saved</h2>
+      <div class="saved" id="saved-list"><p class="side-note">Nothing saved yet.</p></div>
+      <button class="btn btn-ghost wide" id="x-save" type="button">＋ Save to browser</button>
+    </aside>
+  </main>
+
+  <footer class="footer studio-footer">
+    <p>NeoJutsu Studio · everything runs in your browser · nothing is uploaded</p>
+  </footer>
+
+  <script src="chip.js"></script>
+  <script src="studio.js"></script>
+</body>
+</html>

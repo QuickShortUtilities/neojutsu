@@ -25,6 +25,7 @@
       <span class="brand-neo">NEO</span><span class="brand-kanji">術</span>
     </a>
     <nav class="nav-links">
+      <a class="nav-studio" href="studio.html">Studio</a>
       <a href="#listen">Listen</a>
       <a href="#how">How it's made</a>
       <a href="#consoles">Consoles</a>
@@ -51,7 +52,7 @@
           <button class="btn btn-primary" id="hero-play" type="button">
             <span class="btn-icon">▶</span> Hear the chips
           </button>
-          <a class="btn btn-ghost" href="#how">How it's made</a>
+          <a class="btn btn-ghost" href="studio.html">Open Studio</a>
         </div>
         <div class="hero-stats">
           <div class="stat"><span class="stat-n" data-count="205191">0</span><span class="stat-l">MIDI files</span></div>
@@ -196,6 +197,7 @@
       <ul class="roadmap">
         <li class="done"><span class="rm-mark">✓</span><div><b>Dataset</b><span>205,191 MIDI files collected, verified and organised by console.</span></div></li>
         <li class="done"><span class="rm-mark">✓</span><div><b>neojutsu.com</b><span>This site. Live chip synth demo.</span></div></li>
+        <li class="done"><span class="rm-mark">✓</span><div><b>Studio v0</b><span>Generate, edit, play and export MIDI in the browser. Procedural engine for now.</span></div></li>
         <li class="now"><span class="rm-mark">●</span><div><b>Clean &amp; tokenize</b><span>Dedupe, filter, convert MIDI to token streams with console tags.</span></div></li>
         <li><span class="rm-mark">○</span><div><b>Train</b><span>Pretrain on Lakh, fine-tune on chips. One overnight on the 3090.</span></div></li>
         <li><span class="rm-mark">○</span><div><b>Generate</b><span>Type a console and a mood, get an original chiptune. Download the MIDI.</span></div></li>
@@ -209,6 +211,7 @@
     <p class="fine">Training data consists of fan transcriptions and public research datasets. Generated music is original output of the model.</p>
   </footer>
 
+  <script src="chip.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
