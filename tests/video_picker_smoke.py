@@ -58,6 +58,27 @@ with sync_playwright() as p:
     assert 'Kaleido' in page.text_content('#v-scene-name'), page.text_content('#v-scene-name')
     report['choose_works']=True
 
+    # Double-clicking a layer row opens the picker for that layer.
+    page.click('#v-layer-add'); page.wait_for_timeout(400)
+    page.evaluate("()=>document.querySelectorAll('.layer-row')[0].dispatchEvent(new MouseEvent('dblclick',{bubbles:true}))")
+    page.wait_for_timeout(900)
+    assert page.locator('#v-picker').is_visible(), 'double-click did not open the picker'
+    heading = page.text_content('#v-picker-title')
+    assert 'LAYER' in heading, heading
+    report['dblclick_opens_picker'] = heading
+    # It must act on the row that was double-clicked.
+    top_index = page.evaluate("()=>[...document.querySelectorAll('.layer-row')].findIndex(r=>r.classList.contains('current'))")
+    assert top_index == 0, f'double-click did not select that row: {top_index}'
+    page.evaluate("()=>{const t=[...document.querySelectorAll('.picker-tile')].find(e=>e.textContent.toLowerCase().includes('tunnel')); t.click();}")
+    page.wait_for_timeout(500)
+    assert page.eval_on_selector('#v-scene','e=>e.value')=='tunnel', 'choice did not apply to that layer'
+    report['dblclick_choice_applies']=True
+    # Clicking the eye must not hijack into the picker.
+    page.evaluate("()=>document.querySelectorAll('.layer-row .layer-eye')[0].dispatchEvent(new MouseEvent('dblclick',{bubbles:true}))")
+    page.wait_for_timeout(500)
+    assert page.locator('#v-picker').is_hidden(), 'double-click on the eye opened the picker'
+    report['eye_not_hijacked']=True
+
     # The Look controls moved out of the sidebar into the middle column.
     assert page.locator('.lookbar .look-grid').count()==1, 'look bar missing'
     inside = page.evaluate("()=>!!document.querySelector('.stage .lookbar')")

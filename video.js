@@ -424,7 +424,15 @@
       meta.className = 'layer-meta';
       meta.textContent = i === 0 ? 'base' : (L.blend === 'source-over' ? 'over' : L.blend);
       row.append(eye, name, meta);
+      row.title = L.mode === 'generate' ? 'Double-click to choose a scene' : 'Double-click to load a clip';
       row.addEventListener('click', () => { selected = i; renderLayers(); pullLayer(); syncLabels(); });
+      // Double-click goes straight to whatever that layer is made of: the scene
+      // grid for a generated layer, the file dialog for a clip.
+      row.addEventListener('dblclick', e => {
+        if (e.target.closest('.layer-eye')) return;
+        selected = i; renderLayers(); pullLayer(); syncLabels();
+        if (layers[i].mode === 'generate') openPicker(); else $('v-file').click();
+      });
       host.append(row);
     });
     $('v-layer-del').disabled = layers.length < 2;
@@ -526,6 +534,7 @@
   }
   function openPicker() {
     pickerOpen = true; pickerT = 0; pickerLast = 0;
+    $('v-picker-title').textContent = `CHOOSE A SCENE · LAYER ${selected + 1}`;
     $('v-picker').hidden = false;
     buildPicker();
     cancelAnimationFrame(pickerRaf); pickerRaf = requestAnimationFrame(pickerLoop);
