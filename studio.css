@@ -504,23 +504,23 @@ input[type=range].neo-range::-moz-range-thumb {
 .session-controls .neo-range, .gen .neo-range { --slider: var(--magenta); }
 
 /* ---- toggle switch, replacing the tick box ---- */
-.fx-check input[type=checkbox], .export-check input[type=checkbox] {
+.fx-check input[type=checkbox], .export-check input[type=checkbox], .chk input[type=checkbox] {
   appearance: none; -webkit-appearance: none;
   position: relative; width: 34px; height: 18px; margin: 0; flex: none; cursor: pointer;
   background: #16121f; box-shadow: inset 0 0 0 2px #2a2340, inset 2px 2px 0 #00000066;
 }
-.fx-check input[type=checkbox]::after, .export-check input[type=checkbox]::after {
+.fx-check input[type=checkbox]::after, .export-check input[type=checkbox]::after, .chk input[type=checkbox]::after {
   content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px;
   background: #4b4463; transition: transform .08s steps(2), background .08s;
 }
-.fx-check input[type=checkbox]:checked, .export-check input[type=checkbox]:checked {
+.fx-check input[type=checkbox]:checked, .export-check input[type=checkbox]:checked, .chk input[type=checkbox]:checked {
   box-shadow: inset 0 0 0 2px var(--cyan), inset 2px 2px 0 #00000044;
   background: rgba(46,242,255,.10);
 }
-.fx-check input[type=checkbox]:checked::after, .export-check input[type=checkbox]:checked::after {
+.fx-check input[type=checkbox]:checked::after, .export-check input[type=checkbox]:checked::after, .chk input[type=checkbox]:checked::after {
   transform: translateX(16px); background: var(--cyan); box-shadow: 0 0 8px var(--cyan);
 }
-.fx-check input[type=checkbox]:focus-visible, .export-check input[type=checkbox]:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.fx-check input[type=checkbox]:focus-visible, .export-check input[type=checkbox]:focus-visible, .chk input[type=checkbox]:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 .fx-check em { font-style: normal; font-size: 10px; color: var(--muted); line-height: 1.3; }
 
 /* ---- sidebar row rhythm ---- */

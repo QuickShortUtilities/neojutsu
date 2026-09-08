@@ -45,8 +45,10 @@
 /* small shared bits */
 .hint { font-size: 11px; color: var(--muted); line-height: 1.6; margin: 0 0 14px; }
 .toggle-row { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 4px; }
-.chk { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); cursor: pointer; text-transform: uppercase; letter-spacing: 1px; }
-.chk input { accent-color: var(--magenta); }
+/* The switch itself comes from studio.css, shared with the Audio Studio. */
+.chk { display: inline-flex; align-items: center; gap: 9px; font-size: 11px; color: var(--muted); cursor: pointer; text-transform: uppercase; letter-spacing: 1px; }
+.chk:hover { color: var(--text); }
+.chk input[type=checkbox]:checked ~ span { color: var(--text); }
 .audio-actions { display: flex; gap: 8px; margin-bottom: 16px; }
 .audio-actions .mini { flex: 1; white-space: nowrap; text-align: center; justify-content: center; }
 .as-link { display: inline-flex; align-items: center; text-decoration: none; }
