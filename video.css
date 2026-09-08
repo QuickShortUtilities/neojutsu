@@ -240,3 +240,11 @@
 .fold[open] > summary::after { content: '▾'; }
 .fold > summary:hover { color: var(--cyan); }
 .fold > summary .k { font-family: var(--kanji); font-weight: 900; font-size: 22px; color: var(--magenta); text-shadow: var(--glow-m); }
+
+/* export button while a render is running */
+.btn-export.busy { opacity: .75; cursor: progress; }
+.btn-export:disabled { transform: none; }
+
+/* transport-side toggle, sized like the rest of the session bar */
+.transport-chk { letter-spacing: 1px; }
+.session-controls { flex-wrap: nowrap; }

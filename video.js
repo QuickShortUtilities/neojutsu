@@ -363,9 +363,30 @@
     try { v.currentTime = t; } catch { done(); }
   });
 
+  let exporting = false;
+  function exportUI(on, label) {
+    const btn = $('v-open-export');
+    btn.disabled = on;
+    btn.classList.toggle('busy', on);
+    btn.innerHTML = on ? `<span class="k-glyph">出</span> ${label}`
+                       : '<span class="k-glyph">出</span> Export';
+  }
+
   async function exportVideo() {
     const cfg = look();
+    if (exporting) return;                       // a second click must not start a second render
     if (!ready()) { status('Nothing to export yet.'); return; }
+    exporting = true; exportUI(true, 'Starting…');
+    try {
+      await runExport(cfg);
+    } catch (e) {
+      status(`Export failed: ${e && e.message ? e.message : e}`);
+    } finally {
+      exporting = false; exportUI(false);
+    }
+  }
+
+  async function runExport(cfg) {
     stop();
     // Rewind everything, not just the clock. Scenes integrate their own motion,
     // so an export that inherited state from the preview - or from the previous
@@ -397,7 +418,7 @@
     const bitrate = Math.min(40e6, Math.max(1.2e7, Math.round(out.width * out.height * fps * 0.9)));
     const blob = await window.NeoVideoExport.encode({
       width: out.width, height: out.height, fps, total, buffer, quality: bitrate,
-      onProgress: p => status(`Rendering MP4 · ${Math.round(p * 100)}%`),
+      onProgress: p => { const n = Math.round(p * 100); status(`Rendering MP4 · ${n}%`); exportUI(true, `${n}%`); },
       onFrame: async f => {
         genTime = f / fps;
         offlineEnv = envs ? envs[Math.min(f, envs.length - 1)] : EMPTY;
@@ -430,6 +451,7 @@
     for (const L of layers) if (L._ready && L.on) { try { await L._video.play(); } catch {} }
     setPlaying(true); startAudio(cfg);
     status(`Recording ${Math.round(total)}s… this runs in real time.`);
+    exportUI(true, `Recording ${Math.round(total)}s`);
     await new Promise(res => setTimeout(res, total * 1000));
     running = false; rec.stop(); stop(); await stopped;
     download(new Blob(chunks, { type: type || 'video/webm' }), `${safeName(cfg.title)}.webm`);
