@@ -24,6 +24,11 @@
 
   const midiToHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
+  // Chip arpeggios: intervals cycled one per video frame (60 Hz), the classic trick
+  // for faking chords on a one-note voice.
+  const ARPS = { maj: [0, 4, 7], min: [0, 3, 7], oct: [0, 12], pow: [0, 7, 12], sus: [0, 5, 7], dim: [0, 3, 6], maj7: [0, 4, 7, 11] };
+  const ARP_FRAME = 1 / 60;
+
   function create(context = null) {
     let ctx = null, master = null, analyser = null, noiseBuf = null, shaper = null;
     let delay = null, fbGain = null, wetGain = null;
@@ -152,8 +157,17 @@
         osc.start(t); osc.stop(stopAt);
       }
 
+      // arpeggio: step the pitch through the interval set every frame for the note's length
+      const arp = fx.arp && ARPS[fx.arp];
+      if (arp) {
+        const frames = Math.floor(dur / ARP_FRAME);
+        pitchTargets.forEach((p, i) => {
+          const mult = i === 1 ? cfg.ratio : 1;
+          for (let f = 0; f <= frames; f++) p.setValueAtTime(midiToHz(midi + arp[f % arp.length]) * mult, t + f * ARP_FRAME);
+        });
+      }
       // slide: glide in from the previous note (portamento), classic FM lead trick
-      if (fx.slide && prevMidi != null && prevMidi >= 0 && prevMidi !== midi) {
+      if (!arp && fx.slide && prevMidi != null && prevMidi >= 0 && prevMidi !== midi) {
         const from = midiToHz(prevMidi);
         pitchTargets.forEach((p, i) => {
           const mult = i === 1 ? cfg.ratio : 1;          // FM modulator follows the carrier
@@ -246,15 +260,16 @@
       const fx = p.fx || {};
       while (nextTime < engine.now + lookahead) {
         const i = step;
+        const t = nextTime + swingOffset(p, i, spb);
         for (const ch of ['p1', 'p2', 'tr']) {
           const { v, len } = noteInRange(p[ch], i, bounds);
           if (v == null || v === TIE) continue;
           const dur = len > 1 ? len * spb * 0.97 : spb * (ch === 'p2' ? 0.55 : ch === 'tr' ? 0.8 : 0.9);
-          engine.note(p.chip, ch, v, nextTime, dur, fx[ch] || {}, prev[ch]);
+          engine.note(p.chip, ch, v, t, dur, fx[ch] || {}, prev[ch]);
           prev[ch] = v;
         }
-        engine.drum(p.chip, p.no[i], nextTime, fx.no || {});
-        if (onStep) onStep(i, nextTime);
+        engine.drum(p.chip, p.no[i], t, fx.no || {});
+        if (onStep) onStep(i, t);
         nextTime += spb;
         step = step + 1 >= bounds.end ? bounds.start : step + 1;
       }
@@ -272,6 +287,11 @@
     const loop = p.loop;
     return loop?.enabled ? { start: (loop.start - 1) * 16, end: loop.end * 16 } : { start: 0, end: p.steps };
   }
+  // swing: delay every off-beat 16th by up to half a step (0 = straight, 1 = hard shuffle)
+  function swingOffset(p, step, spb) {
+    const swing = p.master?.swing || 0;
+    return step % 2 ? swing * spb * 0.5 : 0;
+  }
 
   // Use the same synth and note timing for listening and offline audio exports.
   async function render(p, { selection = false, tail = true } = {}) {
@@ -286,7 +306,7 @@
     synth.setCrush(p.master?.crush || 0); synth.setEcho(echo, feedback);
     const prev = { p1: null, p2: null, tr: null };
     for (let i = bounds.start; i < bounds.end; i++) {
-      const t = (i - bounds.start) * stepTime;
+      const t = (i - bounds.start) * stepTime + swingOffset(p, i, stepTime);
       for (const ch of ['p1', 'p2', 'tr']) {
         const { v, len } = noteInRange(p[ch], i, bounds); if (v == null || v === TIE) continue;
         const dur = len > 1 ? len * stepTime * .97 : stepTime * (ch === 'p2' ? .55 : ch === 'tr' ? .8 : .9);
@@ -297,5 +317,5 @@
     return offline.startRendering();
   }
 
-  window.NeoChip = { CHIPS, TIE, create, sequencer, midiToHz, noteLength, echoSeconds, loopBounds, render };
+  window.NeoChip = { CHIPS, TIE, ARPS, create, sequencer, midiToHz, noteLength, echoSeconds, loopBounds, swingOffset, render };
 })();

@@ -45,6 +45,9 @@ Open `studio.html` directly or serve the repository with a static host. The stud
 - Undo/redo for notes, generation, title, mixer and effects. Space plays/stops, 1–4 select voices, L toggles looping, and Cmd/Ctrl Z / Shift Z undo/redo. Arrow keys navigate voice tabs.
 - Browser autosave and named saves. A valid share link takes precedence over a draft. Storage failures are shown in the UI.
 - A collapsible effects/file panel and a responsive layout.
+- **MIDI import**: drop any `.mid` on the roll (or use Import MIDI). The three busiest melodic parts map to Pulse 1 (highest), Pulse 2 and Triangle (lowest); channel 10 becomes Noise. Quantised to 16ths, durations kept as held notes, first 16 bars. `midi-import.js` is dependency-free.
+- **Arpeggio** per voice (major, minor, power, sus4, dim, maj7, octave), stepped at 60 Hz like the hardware trick. **Swing** on the master.
+- Three rule engines: 型 kata-A (motif & variation), kata-B (chords & sustain), kata-C (arcade arps). The trained model plugs in as another engine.
 
 Audio stays in the browser. `audio-export.js` loads the bundled, unmodified `vendor/lame-1.2.1.min.js` on the first MP3 export; no encoding service is used. See `vendor/README.md` and the included LAME license files.
 

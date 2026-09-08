@@ -203,3 +203,7 @@ button[aria-pressed=true].mini { background: #2ef2ff18; border-color: var(--cyan
 
 .roll-wrap { overflow-x: auto; overscroll-behavior-x: contain; }
 .roll-wrap .bar-ruler { margin-bottom: 0; }
+
+/* ---------- v0.4: import drop target ---------- */
+.roll-wrap.dragover { outline: 2px dashed var(--cyan); outline-offset: -2px; box-shadow: var(--glow-c); }
+.roll-wrap.dragover::after { content: 'drop .mid to import'; position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--pixel); font-size: 12px; color: var(--cyan); background: rgba(7,6,12,.6); pointer-events: none; }

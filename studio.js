@@ -13,15 +13,15 @@
   const MIN_MIDI = 36, MAX_MIDI = 84;          // C2..C6
   const DRUMS = ['k', 's', 'h'];
   const DRUM_LABEL = { k: 'kick', s: 'snare', h: 'hat' };
-  const ENGINE_LABEL = { kataA: 'kata-A', kataB: 'kata-B' };
+  const ENGINE_LABEL = { kataA: 'kata-A', kataB: 'kata-B', kataC: 'kata-C' };
 
   const defaultFx = () => ({
-    p1: { vib: 0, echo: 0, duty: null, slide: false },
-    p2: { vib: 0, echo: 0, duty: null, slide: false },
-    tr: { vib: 0, echo: 0, duty: null, slide: false },
+    p1: { vib: 0, echo: 0, duty: null, slide: false, arp: null },
+    p2: { vib: 0, echo: 0, duty: null, slide: false, arp: null },
+    tr: { vib: 0, echo: 0, duty: null, slide: false, arp: null },
     no: { echo: 0 },
   });
-  const defaultMaster = () => ({ crush: 0, echoDiv: '8d', echoFb: 0.35, volume: 1 });
+  const defaultMaster = () => ({ crush: 0, echoDiv: '8d', echoFb: 0.35, volume: 1, swing: 0 });
   // chip-appropriate starting FX, applied on generate
   const CHIP_FX = {
     nes:     { p1: { duty: 0.125 }, p2: { duty: 0.5 } },
@@ -53,11 +53,13 @@
       for (const k of ['vib', 'echo']) p.fx[l][k] = bounded(p.fx[l][k], 0, 1, 0);
       p.fx[l].duty = [.125, .25, .5].includes(p.fx[l].duty) ? p.fx[l].duty : null;
       p.fx[l].slide = !!p.fx[l].slide;
+      p.fx[l].arp = NeoChip.ARPS[p.fx[l].arp] ? p.fx[l].arp : null;
       const m = p.mix[l] || {};
       p.mix[l] = { volume: bounded(m.volume, 0, 1, 1), pan: bounded(m.pan, -1, 1, 0), mute: !!m.mute, solo: !!m.solo };
     }
     p.master = Object.assign(defaultMaster(), p.master || {});
     p.master.crush = bounded(p.master.crush, 0, 1, 0); p.master.echoFb = bounded(p.master.echoFb, 0, .8, .35); p.master.volume = bounded(p.master.volume, 0, 1, 1);
+    p.master.swing = bounded(p.master.swing, 0, 1, 0);
     if (!['16', '8', '8d', '4'].includes(p.master.echoDiv)) p.master.echoDiv = '8d';
     const bars = p.steps / 16, loop = p.loop || {};
     const start = Math.round(bounded(loop.start, 1, bars, 1));
@@ -228,7 +230,35 @@
     return p;
   }
 
-  const ENGINES = { kataA, kataB };
+  // =============== 型 kata-C: arcade (arpeggio chords, driving riff) ===============
+  function kataC(opts) {
+    const { r, steps, p, scale, mood, prog, degToMidi } = setup(opts);
+    const quality = (chord) => {                                   // major or minor triad on this degree?
+      const third = (scale[(chord + 2) % scale.length] - scale[chord % scale.length] + 12) % 12;
+      return third === 4 ? 'maj' : third === 3 ? 'min' : 'pow';
+    };
+    for (let bar = 0; bar < opts.bars; bar++) {
+      const chord = prog[bar % prog.length], b0 = bar * 16;
+      // pulse 2: arpeggiated chord stabs, root held with the 60 Hz arp doing the chord
+      const stabs = mood.density > .6 ? [0, 3, 6, 8, 11, 14] : [0, 4, 8, 12];
+      for (const s of stabs) { p.p2[b0 + s] = degToMidi(chord, mood.oct); const hold = mood.density > .6 ? 2 : 3; for (let k = 1; k < hold && s + k < 16; k++) p.p2[b0 + s + k] = TIE; }
+      // bass: driving 8ths on the root, octave up on the "and" of 2 and 4
+      for (let e = 0; e < 8; e++) p.tr[b0 + e * 2] = degToMidi(chord, -1 + mood.oct) + (e % 4 === 3 ? 12 : 0);
+      // lead: syncopated riff built from a 4-note cell that climbs the chord
+      const cell = [0, 2, 4, 7].map((d) => chord + 7 + d);
+      const rhythm = r() < .5 ? [0, 3, 6, 10, 12, 14] : [0, 2, 4, 7, 9, 12, 14];
+      rhythm.forEach((s, i) => { if (r() < mood.density + .2) p.p1[b0 + s] = degToMidi(cell[i % cell.length] + (r() < .15 ? pick(r, [-1, 1]) : 0), mood.oct); });
+      if (bar % 4 === 3) for (let k = 12; k < 16; k++) p.p1[b0 + k] = degToMidi(cell[(3 - (k - 12)) % 4], mood.oct);   // turnaround run
+    }
+    const lastChord = prog[(opts.bars - 1) % prog.length];
+    p.fx.p2.arp = quality(lastChord) === 'pow' ? 'pow' : quality(prog[0]);
+    p.fx.p1.echo = Math.max(p.fx.p1.echo, 0.2);
+    p.master.swing = mood.drums === 'light' ? 0.25 : 0;
+    drums(p, r, KITS[mood.drums === 'sparse' ? 'light' : mood.drums], steps);
+    return p;
+  }
+
+  const ENGINES = { kataA, kataB, kataC };
 
   // =============== audio ===============
   const engine = NeoChip.create();
@@ -321,8 +351,8 @@
   }
 
   // ---- fx panel
-  const fxVib = $('fx-vib'), fxEcho = $('fx-echo'), fxDuty = $('fx-duty'), fxSlide = $('fx-slide');
-  const fxCrush = $('fx-crush'), fxDiv = $('fx-echodiv'), fxFb = $('fx-echofb');
+  const fxVib = $('fx-vib'), fxEcho = $('fx-echo'), fxDuty = $('fx-duty'), fxSlide = $('fx-slide'), fxArp = $('fx-arp');
+  const fxCrush = $('fx-crush'), fxDiv = $('fx-echodiv'), fxFb = $('fx-echofb'), fxSwing = $('fx-swing');
   const LANE_NAME = { p1: 'Pulse 1', p2: 'Pulse 2', tr: 'Triangle', no: 'Noise' };
   function syncFx() {
     const f = pattern.fx[lane], melodic = lane !== 'no';
@@ -333,9 +363,13 @@
     fxVib.closest('.fx-row').hidden = !melodic;
     $('fx-duty-row').hidden = !(melodic && NeoChip.CHIPS[pattern.chip][lane].type === 'pulse');
     $('fx-slide-row').hidden = !melodic;
+    $('fx-arp-row').hidden = !melodic; fxArp.value = f.arp || '';
     fxCrush.value = Math.round(pattern.master.crush * 100); $('fx-crush-v').textContent = fxCrush.value;
     fxDiv.value = pattern.master.echoDiv; fxFb.value = Math.round(pattern.master.echoFb * 100); $('fx-echofb-v').textContent = fxFb.value;
+    fxSwing.value = Math.round(pattern.master.swing * 100); $('fx-swing-v').textContent = fxSwing.value;
   }
+  fxArp.addEventListener('change', () => { pattern.fx[lane].arp = fxArp.value || null; });
+  fxSwing.addEventListener('input', () => { pattern.master.swing = fxSwing.value / 100; $('fx-swing-v').textContent = fxSwing.value; });
   fxVib.addEventListener('input', () => { pattern.fx[lane].vib = fxVib.value / 100; $('fx-vib-v').textContent = fxVib.value; });
   fxEcho.addEventListener('input', () => { pattern.fx[lane].echo = fxEcho.value / 100; $('fx-echo-v').textContent = fxEcho.value; engine.setMix(pattern); });
   fxDuty.addEventListener('change', () => { pattern.fx[lane].duty = fxDuty.value ? +fxDuty.value : null; });
@@ -350,8 +384,8 @@
     syncLength();
     xSeed.textContent = seedUsed; xEngine.textContent = ENGINE_LABEL[engineUsed] || engineUsed;
     gChip.value = pattern.chip;
-    gSeed.value = seedUsed; gEngine.value = engineUsed;
-    gBars.value = String(pattern.steps / 16); engineBadge.textContent = `engine: 型 ${ENGINE_LABEL[engineUsed]}`;
+    if (ENGINES[engineUsed]) { gSeed.value = seedUsed; gEngine.value = engineUsed; }
+    gBars.value = String(pattern.steps / 16); engineBadge.textContent = ENGINES[engineUsed] ? `engine: 型 ${ENGINE_LABEL[engineUsed]}` : 'source: imported MIDI';
     syncFx(); syncMix(); syncLoop(); syncCopy(); renderSeeds(); historyUI(); resize();
   }
   gChip.addEventListener('change', () => { pattern.chip = gChip.value; syncUI(); });
@@ -675,6 +709,26 @@
   document.addEventListener('focusout', () => { activeControl = null; });
   window.addEventListener('pagehide', saveDraft);
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveDraft(); });
+
+  // =============== MIDI import ===============
+  async function importMidi(file) {
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const parsed = NeoMidi.parse(bytes);
+      const { pattern: p, parts, drums: hasDrums, truncated } = NeoMidi.toPattern(parsed, { chip: pattern.chip });
+      snapshot(); stop();
+      pattern = normalize(p); seedUsed = 'import'; engineUsed = 'import';
+      trackTitle = file.name.replace(/\.midi?$/i, '').slice(0, 60); xTitle.value = trackTitle;
+      syncUI(); start();
+      flash(`imported ${parts} part${parts === 1 ? '' : 's'}${hasDrums ? ' + drums' : ''}${truncated ? ' · first 16 bars' : ''} · ${parsed.bpm} bpm`);
+    } catch (error) { flash(`Import failed: ${error.message}`); }
+  }
+  $('t-import').addEventListener('click', () => $('midi-file').click());
+  $('midi-file').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importMidi(f); e.target.value = ''; });
+  const dropZone = document.querySelector('.roll-wrap');
+  for (const ev of ['dragenter', 'dragover']) dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  for (const ev of ['dragleave', 'drop']) dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+  dropZone.addEventListener('drop', (e) => { const f = [...e.dataTransfer.files].find((x) => /\.midi?$/i.test(x.name)); if (f) importMidi(f); else flash('Drop a .mid file'); });
 
   // =============== audio export ===============
   let exporting = false, downloadURL;

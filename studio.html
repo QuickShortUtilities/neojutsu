@@ -50,6 +50,7 @@
         <select id="g-engine">
           <option value="kataA">型 kata-A · motif &amp; variation</option>
           <option value="kataB">型 kata-B · chords &amp; sustain</option>
+          <option value="kataC">型 kata-C · arcade arps</option>
           <option value="neojutsu" disabled>術 NeoJutsu v1 · training…</option>
         </select>
       </label>
@@ -146,6 +147,8 @@
         <div class="loop-controls"><button class="mini" id="loop-toggle" type="button" aria-pressed="false" title="Toggle selected loop (L)">↻ Loop</button><label>From bar <select id="loop-start" aria-label="Loop start bar"></select></label><label>to <select id="loop-end" aria-label="Loop end bar"></select></label></div>
         <div class="copy-controls"><label class="sr-only" for="copy-target">Duplicate notes to voice</label><select id="copy-target"><option value="p2">To Pulse 2</option><option value="p1">To Pulse 1</option><option value="tr">To Triangle</option></select><button class="mini" id="t-duplicate" type="button" title="Replace the target voice with a copy of the selected voice; undo is available">Copy voice</button></div>
         <button class="mini" id="t-double" type="button" title="Repeat the full pattern, up to 16 bars">Double pattern</button>
+        <button class="mini" id="t-import" type="button" title="Load a .mid file onto the four chip voices (or drop one on the roll)">⇪ Import MIDI</button>
+        <input type="file" id="midi-file" accept=".mid,.midi,audio/midi" hidden>
       </div>
       <div class="roll-wrap">
         <div id="bar-ruler" class="bar-ruler" aria-label="Pattern bars"></div>
@@ -155,6 +158,7 @@
         <b>Click</b> places a note. <b>Drag right from a note</b> holds it (a sustained note).
         <b>Drag</b> across empty cells to paint. <b>Right-click</b> or <b>shift-click</b> erases.
         <b>Space</b> plays · <b>1–4</b> select a voice · <b>L</b> toggles the loop · <b>⌘/Ctrl Z</b> undoes.
+        <b>Drop any .mid</b> on the roll to hear it on the chips.
       </p>
       <section class="mixer" aria-label="Track mixer"><div class="mixer-heading"><h2>Mix your sound</h2><span>Volume · pan · mute · solo</span></div><div class="mixer-strips" id="mixer-strips"></div><label class="master-level">Master <input type="range" id="mix-master" min="0" max="100" value="100"><output id="mix-master-value">100%</output></label></section>
       <canvas id="scope" width="1200" height="70" aria-label="Oscilloscope"></canvas>
@@ -175,6 +179,18 @@
           </select>
         </label>
         <label class="fx-row fx-check" id="fx-slide-row"><span>Slide</span><input type="checkbox" id="fx-slide"><em>glide into each note</em></label>
+        <label class="fx-row" id="fx-arp-row"><span>Arpeggio</span>
+          <select id="fx-arp">
+            <option value="">off</option>
+            <option value="maj">major · 0 4 7</option>
+            <option value="min">minor · 0 3 7</option>
+            <option value="pow">power · 0 7 12</option>
+            <option value="sus">sus4 · 0 5 7</option>
+            <option value="dim">dim · 0 3 6</option>
+            <option value="maj7">maj7 · 0 4 7 11</option>
+            <option value="oct">octave · 0 12</option>
+          </select>
+        </label>
       </div>
       <div class="fx fx-master">
         <div class="fx-sub">master</div>
@@ -188,6 +204,7 @@
           </select>
         </label>
         <label class="fx-row"><span>Echo feedback</span><input type="range" id="fx-echofb" min="0" max="80" value="35"><b id="fx-echofb-v">35</b></label>
+        <label class="fx-row"><span>Swing</span><input type="range" id="fx-swing" min="0" max="100" value="0"><b id="fx-swing-v">0</b></label>
       </div>
 
       <h2 class="panel-title mt"><span class="k">出</span> Export</h2>
@@ -222,6 +239,7 @@
 
   <script src="chip.js"></script>
   <script src="audio-export.js"></script>
+  <script src="midi-import.js"></script>
   <script src="studio.js"></script>
 </body>
 </html>
