@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEO術 — NeoJutsu</title>
+  <meta name="description" content="NeoJutsu is a from-scratch AI model that composes original chiptune. Trained on 26,000 game soundtracks across 19 consoles. New art, old chips.">
+  <meta property="og:title" content="NEO術 — NeoJutsu">
+  <meta property="og:description" content="A from-scratch AI model that composes original chiptune. New art, old chips.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://neojutsu.com/">
+  <meta name="theme-color" content="#07060c">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2307060c'/%3E%3Ctext x='32' y='47' font-size='42' text-anchor='middle' font-family='serif' fill='%23ff2e88'%3E術%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Serif+JP:wght@700;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="scanlines" aria-hidden="true"></div>
+  <div class="grid-bg" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="#top" aria-label="NeoJutsu home">
+      <span class="brand-neo">NEO</span><span class="brand-kanji">術</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#listen">Listen</a>
+      <a href="#how">How it's made</a>
+      <a href="#consoles">Consoles</a>
+      <a href="#roadmap">Roadmap</a>
+      <a class="nav-gh" href="https://github.com/QuickShortUtilities/neojutsu" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-inner">
+        <p class="eyebrow">// chiptune composition model · v0 · in training</p>
+        <h1 class="logo" aria-label="NeoJutsu">
+          <span class="logo-neo">NEO</span><span class="logo-kanji">術</span>
+        </h1>
+        <p class="tagline">New art. Old chips.</p>
+        <p class="lede">
+          NeoJutsu is a music model built from zero weights to compose original chiptune.
+          It learns from 26,000 game soundtracks across 19 consoles, from the NES to the Neo-Geo,
+          and writes new tracks in the voice of the hardware.
+        </p>
+        <div class="cta-row">
+          <button class="btn btn-primary" id="hero-play" type="button">
+            <span class="btn-icon">▶</span> Hear the chips
+          </button>
+          <a class="btn btn-ghost" href="#how">How it's made</a>
+        </div>
+        <div class="hero-stats">
+          <div class="stat"><span class="stat-n" data-count="205191">0</span><span class="stat-l">MIDI files</span></div>
+          <div class="stat"><span class="stat-n" data-count="19">0</span><span class="stat-l">consoles</span></div>
+          <div class="stat"><span class="stat-n" data-count="4">0</span><span class="stat-l">hardware voices</span></div>
+          <div class="stat"><span class="stat-n">0</span><span class="stat-l">borrowed weights</span></div>
+        </div>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="tower t1"></div>
+        <div class="tower t2"></div>
+        <div class="tower t3"></div>
+        <div class="tower t4"></div>
+        <div class="tower t5"></div>
+        <div class="sign s1">音</div>
+        <div class="sign s2">新</div>
+        <div class="sign s3">8BIT</div>
+        <div class="horizon"></div>
+      </div>
+    </section>
+
+    <!-- LISTEN / DEMO -->
+    <section class="section" id="listen">
+      <div class="section-head">
+        <h2><span class="k">聴</span> Listen</h2>
+        <p>
+          The model isn't trained yet. This is the sound it's learning to speak:
+          a live four-voice chip synth running in your browser, playing a loop
+          in the style of the training data. Switch the hardware and hear the timbre change.
+        </p>
+      </div>
+
+      <div class="player">
+        <div class="player-top">
+          <button class="btn btn-primary" id="play" type="button" aria-pressed="false">
+            <span class="btn-icon" id="play-icon">▶</span> <span id="play-label">Play</span>
+          </button>
+          <div class="chip-select" role="radiogroup" aria-label="Sound chip">
+            <button class="chip active" data-chip="nes" role="radio" aria-checked="true">NES · 2A03</button>
+            <button class="chip" data-chip="gameboy" role="radio" aria-checked="false">Game Boy · LR35902</button>
+            <button class="chip" data-chip="genesis" role="radio" aria-checked="false">Genesis · YM2612</button>
+            <button class="chip" data-chip="c64" role="radio" aria-checked="false">C64 · SID</button>
+          </div>
+          <label class="tempo">
+            <span>BPM <b id="bpm-val">150</b></span>
+            <input type="range" id="bpm" min="90" max="220" value="150">
+          </label>
+        </div>
+        <canvas id="viz" width="1200" height="260" aria-label="Note visualizer"></canvas>
+        <div class="channels">
+          <div class="ch"><span class="dot p1"></span>Pulse 1</div>
+          <div class="ch"><span class="dot p2"></span>Pulse 2</div>
+          <div class="ch"><span class="dot tr"></span>Triangle</div>
+          <div class="ch"><span class="dot no"></span>Noise</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW -->
+    <section class="section" id="how">
+      <div class="section-head">
+        <h2><span class="k">術</span> How it's made</h2>
+        <p>No base model. No API underneath. Every parameter starts at random and is learned from the data.</p>
+      </div>
+
+      <ol class="steps">
+        <li class="step">
+          <span class="step-n">01</span>
+          <h3>Collect the chips</h3>
+          <p>
+            Every chiptune transcription on VGMusic, organised by console.
+            Plus NES-MDB: 5,278 tracks ripped straight from NES ROMs, already split into the
+            real hardware voices, two pulse, one triangle, one noise.
+          </p>
+          <code>21,352 fan transcriptions + 5,278 exact rips</code>
+        </li>
+        <li class="step">
+          <span class="step-n">02</span>
+          <h3>Learn what music is</h3>
+          <p>
+            Pretrain a transformer on the Lakh MIDI Dataset, 178,000 general MIDI files.
+            The model learns melody, harmony, rhythm and phrasing before it ever hears a square wave.
+          </p>
+          <code>178,561 files · ~8 hrs on one RTX 3090</code>
+        </li>
+        <li class="step">
+          <span class="step-n">03</span>
+          <h3>Learn to speak chip</h3>
+          <p>
+            Fine-tune on the chiptune corpus with a console tag on every track.
+            Ask for NES, Genesis or SID at generation time and get music shaped by that hardware's limits.
+          </p>
+          <code>26,630 files · ~2 hrs on one RTX 3090</code>
+        </li>
+        <li class="step">
+          <span class="step-n">04</span>
+          <h3>Render on real chips</h3>
+          <p>
+            Output is MIDI, so anything can play it. The site renders through emulated
+            sound chips so a generated track sounds like a cartridge, not a soundfont.
+          </p>
+          <code>MIDI → 2A03 / YM2612 / SID emulation</code>
+        </li>
+      </ol>
+    </section>
+
+    <!-- CONSOLES -->
+    <section class="section" id="consoles">
+      <div class="section-head">
+        <h2><span class="k">機</span> Consoles</h2>
+        <p>The training corpus, by system. Each console lives in its own folder so subsets can be chosen at training time.</p>
+      </div>
+      <div class="console-grid">
+        <div class="console"><span class="c-name">Super Nintendo</span><span class="c-n">6,707</span></div>
+        <div class="console"><span class="c-name">NES <em>+ NES-MDB</em></span><span class="c-n">9,482</span></div>
+        <div class="console"><span class="c-name">Sega Genesis</span><span class="c-n">2,411</span></div>
+        <div class="console"><span class="c-name">Game Boy</span><span class="c-n">2,034</span></div>
+        <div class="console"><span class="c-name">Game Boy Advance</span><span class="c-n">1,768</span></div>
+        <div class="console"><span class="c-name">Sega Master System</span><span class="c-n">1,585</span></div>
+        <div class="console"><span class="c-name">Arcade</span><span class="c-n">810</span></div>
+        <div class="console"><span class="c-name">Commodore 64</span><span class="c-n">317</span></div>
+        <div class="console"><span class="c-name">Atari 2600</span><span class="c-n">313</span></div>
+        <div class="console"><span class="c-name">Sega CD</span><span class="c-n">267</span></div>
+        <div class="console"><span class="c-name">Neo-Geo</span><span class="c-n">233</span></div>
+        <div class="console"><span class="c-name">Game Gear</span><span class="c-n">156</span></div>
+        <div class="console"><span class="c-name">Amiga</span><span class="c-n">153</span></div>
+        <div class="console"><span class="c-name">MSX</span><span class="c-n">106</span></div>
+        <div class="console"><span class="c-name">TurboGrafx-16</span><span class="c-n">98</span></div>
+        <div class="console"><span class="c-name">Intellivision</span><span class="c-n">90</span></div>
+        <div class="console"><span class="c-name">Sega 32X</span><span class="c-n">51</span></div>
+        <div class="console"><span class="c-name">Turbo Duo</span><span class="c-n">41</span></div>
+        <div class="console"><span class="c-name">Virtual Boy</span><span class="c-n">8</span></div>
+      </div>
+    </section>
+
+    <!-- ROADMAP -->
+    <section class="section" id="roadmap">
+      <div class="section-head">
+        <h2><span class="k">道</span> Roadmap</h2>
+        <p>Where the project is right now.</p>
+      </div>
+      <ul class="roadmap">
+        <li class="done"><span class="rm-mark">✓</span><div><b>Dataset</b><span>205,191 MIDI files collected, verified and organised by console.</span></div></li>
+        <li class="done"><span class="rm-mark">✓</span><div><b>neojutsu.com</b><span>This site. Live chip synth demo.</span></div></li>
+        <li class="now"><span class="rm-mark">●</span><div><b>Clean &amp; tokenize</b><span>Dedupe, filter, convert MIDI to token streams with console tags.</span></div></li>
+        <li><span class="rm-mark">○</span><div><b>Train</b><span>Pretrain on Lakh, fine-tune on chips. One overnight on the 3090.</span></div></li>
+        <li><span class="rm-mark">○</span><div><b>Generate</b><span>Type a console and a mood, get an original chiptune. Download the MIDI.</span></div></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-brand"><span class="brand-neo">NEO</span><span class="brand-kanji">術</span></div>
+    <p>NeoJutsu · a from-scratch chiptune model · <a href="https://github.com/QuickShortUtilities/neojutsu" target="_blank" rel="noopener">source on GitHub</a></p>
+    <p class="fine">Training data consists of fan transcriptions and public research datasets. Generated music is original output of the model.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
