@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Studio — NEO術</title>
+  <meta name="description" content="NeoJutsu Game Studio: build and play 8-bit games in the browser, scored with tracks from the Audio Studio.">
+  <meta name="theme-color" content="#07060c">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2307060c'/%3E%3Ctext x='32' y='47' font-size='42' text-anchor='middle' font-family='serif' fill='%23ff2e88'%3E術%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Serif+JP:wght@700;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="studio.css">
+  <link rel="stylesheet" href="video.css">
+  <link rel="stylesheet" href="game.css">
+</head>
+<body class="studio-body">
+  <div class="scanlines" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="index.html" aria-label="NeoJutsu home">
+      <span class="brand-neo">NEO</span><span class="brand-kanji">術</span>
+      <span class="brand-sub">GAME</span>
+    </a>
+    <nav class="nav-links">
+      <a href="studio.html">Audio Studio</a>
+      <a href="video.html">Video Studio</a>
+      <a class="nav-studio" href="game.html" aria-current="page">Game Studio</a>
+      <span class="nav-soon" title="Chain the studios into repeatable runs — in development">Automation Studio<i>soon</i></span>
+      <span class="engine-badge" id="g-badge" title="Output hardware">out: 型 Game Boy</span>
+      <a href="index.html#how">About</a>
+    </nav>
+  </header>
+
+  <main class="studio game-studio">
+    <section class="session-bar panel" aria-label="Session and transport">
+      <div class="session-name"><span class="eyebrow">YOUR GAME WORKSPACE</span>
+        <label class="sr-only" for="g-title">Game title</label><input id="g-title" value="neojutsu-game" maxlength="100" spellcheck="false" aria-label="Game title">
+        <span id="g-autosave" role="status">Autosave ready</span>
+      </div>
+      <div class="session-controls">
+        <button class="btn btn-primary" id="g-play" type="button" aria-pressed="false" title="Play / pause (Space)"><span id="g-play-icon">▶</span> <span id="g-play-label">Play</span></button>
+        <button class="mini" id="g-reset" type="button" title="Restart the level">↺ Restart</button>
+        <output id="g-readout" aria-label="Game state">READY</output>
+      </div>
+      <div class="session-actions"><button class="mini" id="g-toggle-inspector" aria-expanded="true" aria-controls="g-inspector" type="button">Pieces &amp; audio</button><button class="btn btn-export" id="g-open-share" type="button"><span class="k-glyph">出</span> Share</button></div>
+    </section>
+
+    <!-- ===== left: the game ===== -->
+    <aside class="panel gen">
+      <h2 class="panel-title"><span class="k">戯</span> Game</h2>
+      <label class="field"><span>Start from</span><select id="g-template"></select></label>
+      <label class="field"><span>Hero</span><select id="g-char"></select></label>
+      <div class="two-up">
+        <label class="field"><span>Lives</span>
+          <select id="g-lives"><option>1</option><option>2</option><option selected>3</option><option>5</option><option>9</option></select>
+        </label>
+        <label class="field"><span>To finish</span>
+          <select id="g-goal">
+            <option value="0">Just reach the flag</option>
+            <option value="5">Collect 5</option>
+            <option value="10">Collect 10</option>
+            <option value="12" selected>Collect 12</option>
+          </select>
+        </label>
+      </div>
+
+      <h2 class="panel-title"><span class="k">筆</span> Build</h2>
+      <p class="hint">Pick a piece, then draw on the game. Right-click or pick Erase to clear.</p>
+      <div class="tilebar" id="g-tiles"></div>
+      <div class="tilebar" id="g-entities"></div>
+      <div class="toggle-row">
+        <label class="chk"><input type="checkbox" id="g-edit" checked> <span>Build mode</span></label>
+        <label class="chk"><input type="checkbox" id="g-grid" checked> <span>Grid</span></label>
+      </div>
+    </aside>
+
+    <!-- ===== centre: the game ===== -->
+    <section class="panel stage" aria-label="Game">
+      <div class="stage-frame game-frame">
+        <canvas id="g-canvas" width="160" height="144" aria-label="Game"></canvas>
+      </div>
+      <div class="stage-bar">
+        <span class="stage-meta" id="g-meta">—</span>
+        <span class="stage-meta" id="g-help">Arrows or WASD to move · Z / Space to jump</span>
+      </div>
+      <div class="pad" id="g-pad" aria-hidden="true">
+        <div class="pad-dir">
+          <button data-key="left" aria-label="Left">◀</button>
+          <button data-key="up" aria-label="Up">▲</button>
+          <button data-key="down" aria-label="Down">▼</button>
+          <button data-key="right" aria-label="Right">▶</button>
+        </div>
+        <div class="pad-ab">
+          <button data-key="b" aria-label="B">B</button>
+          <button data-key="a" aria-label="A">A</button>
+        </div>
+      </div>
+
+      <div class="lookbar">
+        <h2 class="panel-title"><span class="k">型</span> Look</h2>
+        <div class="look-grid">
+          <label class="field"><span>Hardware</span>
+            <select id="g-chip">
+              <option value="gameboy" selected>Game Boy · DMG</option>
+              <option value="nes">NES · 2A03</option>
+              <option value="genesis">Genesis · YM2612</option>
+              <option value="c64">C64 · SID</option>
+              <option value="mono">1-bit · Macintosh</option>
+            </select>
+          </label>
+          <label class="field"><span>Dither</span>
+            <select id="g-dither">
+              <option value="none" selected>None · crisp</option>
+              <option value="bayer4">Bayer 4×4</option>
+              <option value="bayer2">Bayer 2×2</option>
+            </select>
+          </label>
+          <label class="field range"><span>Zoom <b id="g-zoom-v">3</b>×</span>
+            <input type="range" id="g-zoom" min="1" max="6" step="1" value="3" aria-label="Display zoom"></label>
+          <label class="field"><span>Sky</span>
+            <select id="g-sky">
+              <option value="day" selected>Day</option>
+              <option value="dusk">Dusk</option>
+              <option value="night">Night</option>
+              <option value="cave">Underground</option>
+            </select>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== right: pieces and audio ===== -->
+    <aside class="panel" id="g-inspector">
+      <h2 class="panel-title"><span class="k">音</span> Audio</h2>
+      <label class="field"><span>Soundtrack</span><select id="g-audio-src"><option value="none">Silent</option></select></label>
+      <p class="hint" id="g-audio-note">Tracks you save in the Audio Studio appear here.</p>
+      <div class="audio-actions">
+        <button class="mini" id="g-audio-refresh" type="button">Refresh tracks</button>
+        <a class="mini as-link" href="studio.html">Make a track</a>
+      </div>
+      <label class="field range"><span>Volume <b id="g-vol-v">70</b></span>
+        <input type="range" id="g-vol" min="0" max="100" step="1" value="70" aria-label="Music volume"></label>
+
+      <h2 class="panel-title"><span class="k">雲</span> Projects</h2>
+      <div id="g-cloud-out">
+        <p class="hint" id="g-cloud-status">Sign in to keep your games and share them by link.</p>
+      </div>
+      <div id="g-cloud" hidden>
+        <div class="cloud-actions">
+          <button class="mini" id="g-cloud-save" type="button">Save</button>
+          <button class="mini" id="g-cloud-new" type="button">Save as new</button>
+          <button class="mini" id="g-cloud-share" type="button">Share</button>
+        </div>
+        <div class="cloud-list" id="g-cloud-list"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="neo-palette.js"></script>
+  <script src="neo-select.js"></script>
+  <script src="neo-cloud.js"></script>
+  <script src="chip.js"></script>
+  <script src="video-gen.js"></script>
+  <script src="game-engine.js"></script>
+  <script src="game-templates.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

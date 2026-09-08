@@ -182,7 +182,7 @@ async function saveProject(request, user, env) {
   let payload;
   try { payload = await request.json(); } catch { return fail(400, 'bad_json', 'Body must be JSON.'); }
   const { id, kind, title, data } = payload || {};
-  if (kind !== 'audio' && kind !== 'video') return fail(400, 'bad_kind', 'kind must be "audio" or "video".');
+  if (!['audio', 'video', 'game'].includes(kind)) return fail(400, 'bad_kind', 'kind must be "audio", "video" or "game".');
   const body = JSON.stringify(data ?? {});
   if (body.length > MAX_PROJECT_BYTES) return fail(413, 'too_large', 'That project is too large to save.');
 

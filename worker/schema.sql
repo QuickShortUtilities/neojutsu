@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS projects (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  kind       TEXT NOT NULL CHECK (kind IN ('audio', 'video')),
+  kind       TEXT NOT NULL CHECK (kind IN ('audio', 'video', 'game')),
   title      TEXT NOT NULL,
   slug       TEXT NOT NULL,
   data       TEXT NOT NULL,
