@@ -66,6 +66,15 @@
     fmorgan: { label: 'FM organ',     type: 'fm', ratio: 1, index: .35 },
   };
   const ENVS = { hold: 'Hold', pluck: 'Pluck', pad: 'Pad', stab: 'Stab' };
+  // Percussion the era actually produced: noise-channel drums plus the pitched
+  // clicks and blips chips used for toms, cowbell and sound effects.
+  const DRUM_KIT = {
+    k: { label: 'Kick' },   s: { label: 'Snare' }, h: { label: 'Hat' },
+    H: { label: 'Open hat' }, t: { label: 'Tom lo' }, T: { label: 'Tom hi' },
+    c: { label: 'Crash' },  r: { label: 'Rim' },   b: { label: 'Cowbell' },
+    z: { label: 'Zap' },
+  };
+  const DRUM_KEYS = Object.keys(DRUM_KIT);
   const voiceCfg = (chip, ch) => CHIPS[chip][ch] || CHIPS[chip].p2;
 
   function create(context = null) {
@@ -242,26 +251,74 @@
     }
 
     function drum(chipName, kind, t, fx = {}) {
-      if (!kind) return;
+      if (!kind || !DRUM_KIT[kind]) return;
       const hi = CHIPS[chipName].noise === 'hifi';
-      const src = trackSource(ctx.createBufferSource()); src.buffer = noiseBuf;
       const g = ctx.createGain(), f = ctx.createBiquadFilter();
-      if (kind === 'k') {
-        const o = trackSource(ctx.createOscillator()); const og = ctx.createGain();
-        o.frequency.setValueAtTime(hi ? 160 : 120, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
-        og.gain.setValueAtTime(.5, t); og.gain.exponentialRampToValueAtTime(.001, t + 0.14);
-        o.connect(og); output(og, 'no'); o.start(t); o.stop(t + 0.16);
-        f.type = 'lowpass'; f.frequency.value = 800;
-        g.gain.setValueAtTime(.25, t); g.gain.exponentialRampToValueAtTime(.001, t + 0.05);
-      } else if (kind === 's') {
-        f.type = hi ? 'bandpass' : 'highpass'; f.frequency.value = hi ? 1800 : 1200; f.Q.value = hi ? .8 : .3;
-        g.gain.setValueAtTime(.32, t); g.gain.exponentialRampToValueAtTime(.001, t + (hi ? 0.16 : 0.11));
-      } else {
-        f.type = 'highpass'; f.frequency.value = 6000;
-        g.gain.setValueAtTime(.12, t); g.gain.exponentialRampToValueAtTime(.001, t + 0.035);
+      let noiseLen = 0.3, useNoise = true;
+
+      // pitched element, used by kick, toms, cowbell and zap
+      const tone = (from, to, dur, type, level) => {
+        const o = trackSource(ctx.createOscillator()), og = ctx.createGain();
+        o.type = type || 'sine';
+        o.frequency.setValueAtTime(from, t);
+        if (to !== from) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+        og.gain.setValueAtTime(level, t);
+        og.gain.exponentialRampToValueAtTime(.001, t + dur);
+        o.connect(og); output(og, 'no'); o.start(t); o.stop(t + dur + .02);
+      };
+
+      switch (kind) {
+        case 'k':                                            // kick: pitch drop + click
+          tone(hi ? 160 : 120, 40, .13, 'sine', .5);
+          f.type = 'lowpass'; f.frequency.value = 800;
+          g.gain.setValueAtTime(.25, t); g.gain.exponentialRampToValueAtTime(.001, t + .05);
+          break;
+        case 's':                                            // snare: filtered noise
+          f.type = hi ? 'bandpass' : 'highpass'; f.frequency.value = hi ? 1800 : 1200; f.Q.value = hi ? .8 : .3;
+          g.gain.setValueAtTime(.32, t); g.gain.exponentialRampToValueAtTime(.001, t + (hi ? .16 : .11));
+          break;
+        case 'h':                                            // closed hat
+          f.type = 'highpass'; f.frequency.value = 6000;
+          g.gain.setValueAtTime(.12, t); g.gain.exponentialRampToValueAtTime(.001, t + .035);
+          break;
+        case 'H':                                            // open hat: same colour, long tail
+          f.type = 'highpass'; f.frequency.value = 5200;
+          g.gain.setValueAtTime(.13, t); g.gain.exponentialRampToValueAtTime(.001, t + .34);
+          noiseLen = .45;
+          break;
+        case 't': case 'T': {                                // toms: pitched with a noise skin
+          const base = kind === 't' ? 150 : 260;
+          tone(base, base * .55, .22, 'triangle', .42);
+          f.type = 'lowpass'; f.frequency.value = kind === 't' ? 900 : 1500;
+          g.gain.setValueAtTime(.10, t); g.gain.exponentialRampToValueAtTime(.001, t + .07);
+          break;
+        }
+        case 'c':                                            // crash: bright, long
+          f.type = 'highpass'; f.frequency.value = 4000;
+          g.gain.setValueAtTime(.20, t); g.gain.exponentialRampToValueAtTime(.001, t + .9);
+          noiseLen = 1.1;
+          break;
+        case 'r':                                            // rim / click
+          f.type = 'bandpass'; f.frequency.value = 2400; f.Q.value = 6;
+          g.gain.setValueAtTime(.28, t); g.gain.exponentialRampToValueAtTime(.001, t + .022);
+          noiseLen = .05;
+          break;
+        case 'b':                                            // cowbell: two squares, the classic
+          tone(540, 540, .28, 'square', .13);
+          tone(800, 800, .28, 'square', .11);
+          useNoise = false;
+          break;
+        case 'z':                                            // zap: laser sweep, the chip sound effect
+          tone(1400, 180, .18, 'square', .16);
+          useNoise = false;
+          break;
       }
-      src.connect(f).connect(g); output(g, 'no');
-      src.start(t); src.stop(t + 0.3);
+
+      if (useNoise) {
+        const src = trackSource(ctx.createBufferSource()); src.buffer = noiseBuf;
+        src.connect(f).connect(g); output(g, 'no');
+        src.start(t); src.stop(t + noiseLen);
+      }
     }
 
     return {
@@ -371,5 +428,5 @@
     return offline.startRendering();
   }
 
-  window.NeoChip = { CHIPS, TIE, ARPS, VOICES, MELODIC, INSTRUMENTS, ENVS, voiceCfg, create, sequencer, midiToHz, noteLength, echoSeconds, loopBounds, swingOffset, render };
+  window.NeoChip = { CHIPS, TIE, ARPS, VOICES, MELODIC, INSTRUMENTS, ENVS, DRUM_KIT, DRUM_KEYS, voiceCfg, create, sequencer, midiToHz, noteLength, echoSeconds, loopBounds, swingOffset, render };
 })();

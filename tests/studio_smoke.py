@@ -41,6 +41,19 @@ with sync_playwright() as p:
  page.locator('#t-duplicate').click(); d=draft(); assert d['pattern']['p1']==d['pattern']['p2']
  page.locator('#t-undo').click(); assert draft()['pattern']['p2']==initial['pattern']['p2']
  page.locator('#t-double').click(); assert draft()['pattern']['steps']==128
+ # roll windowing: paging, zoom and follow
+ assert page.locator('#view-label').inner_text()=='bar 1–8 of 8'
+ assert page.locator('#view-prev').is_disabled()
+ assert page.locator('#view-next').is_disabled()   # whole pattern already visible
+ page.locator('#view-zoom').select_option('4'); assert page.locator('#view-label').inner_text()=='bar 1–4 of 8'
+ assert page.locator('#view-next').is_enabled()
+ page.locator('#view-next').click(); assert page.locator('#view-label').inner_text()=='bar 5–8 of 8'
+ assert page.locator('#bar-ruler span').count()==4
+ page.locator('#view-prev').click(); assert page.locator('#view-label').inner_text()=='bar 1–4 of 8'
+ page.locator('#view-zoom').select_option('8')
+ # the noise lane shows the full kit
+ page.locator('.lane[data-lane=no]').click()
+ page.locator('.lane[data-lane=p1]').click()
  page.locator('#t-undo').click(); assert draft()['pattern']['steps']==64
  page.locator('#x-save').click(); assert page.locator('.saved-item .name').inner_text()=='My test track'
  page.locator('#t-clear').click(); assert all(v is None for v in draft()['pattern']['p1'])
@@ -105,7 +118,10 @@ with sync_playwright() as p:
  page.keyboard.press('Digit5'); assert page.locator('.lane.active').get_attribute('data-lane')=='tr'
  page.set_viewport_size({'width':390,'height':844}); page.screenshot(path=str(ARTIFACTS/'neojutsu-studio-mobile.png'),full_page=True)
  assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'mobile page overflow'
- assert page.evaluate("document.querySelector('#roll').clientWidth >= 684"), 'notes too narrow on mobile'
+ # The roll pages instead of scrolling, so what matters is the width of one step.
+ step_px=page.evaluate("(()=>{const r=document.querySelector('#roll');const bars=document.querySelectorAll('#bar-ruler span').length;return (r.clientWidth-44)/(bars*16);})()")
+ assert step_px>=8, f'notes too narrow on mobile: {step_px}px per step'
+ assert page.locator('#bar-ruler span').count()<=4, 'mobile should show fewer bars'
  assert not errors,errors
  # Corrupt links and storage should leave a usable workspace.
  page.evaluate("localStorage.setItem('neojutsu.draft.v1','{bad');localStorage.setItem('neojutsu.saved','{}');localStorage.setItem('neojutsu.seeds','{}')")

@@ -100,7 +100,7 @@
         <label class="field">
           <span>Bars</span>
           <select id="g-bars">
-            <option value="2">2</option><option value="4" selected>4</option><option value="8">8</option><option value="16">16</option><option value="32">32</option>
+            <option value="2">2</option><option value="4" selected>4</option><option value="8">8</option><option value="16">16</option><option value="32">32</option><option value="64">64</option>
           </select>
         </label>
         <label class="field">
@@ -148,9 +148,21 @@
       <div class="edit-options">
         <div class="loop-controls"><button class="mini" id="loop-toggle" type="button" aria-pressed="false" title="Toggle selected loop (L)">↻ Loop</button><label>From bar <select id="loop-start" aria-label="Loop start bar"></select></label><label>to <select id="loop-end" aria-label="Loop end bar"></select></label></div>
         <div class="copy-controls"><label class="sr-only" for="copy-target">Duplicate notes to voice</label><select id="copy-target"></select><button class="mini" id="t-duplicate" type="button" title="Replace the target voice with a copy of the selected voice; undo is available">Copy voice</button></div>
-        <button class="mini" id="t-double" type="button" title="Repeat the full pattern, up to 32 bars">Double pattern</button>
+        <button class="mini" id="t-double" type="button" title="Repeat the full pattern, up to 64 bars">Double pattern</button>
         <button class="mini" id="t-import" type="button" title="Load a .mid file onto the four chip voices (or drop one on the roll)">⇪ Import MIDI</button>
         <input type="file" id="midi-file" accept=".mid,.midi,audio/midi" hidden>
+      </div>
+      <div class="view-controls">
+        <button class="mini" id="view-prev" type="button" aria-label="Previous bars">‹</button>
+        <span id="view-label" class="view-label">bar 1–8 of 4</span>
+        <button class="mini" id="view-next" type="button" aria-label="Next bars">›</button>
+        <label class="view-zoom-label">Show
+          <select id="view-zoom" aria-label="Bars visible">
+            <option value="2">2 bars</option><option value="4">4 bars</option>
+            <option value="8" selected>8 bars</option><option value="16">16 bars</option>
+          </select>
+        </label>
+        <button class="mini" id="view-follow" type="button" aria-pressed="true" title="Scroll with playback">↦ Follow</button>
       </div>
       <div class="roll-wrap">
         <div id="bar-ruler" class="bar-ruler" aria-label="Pattern bars"></div>

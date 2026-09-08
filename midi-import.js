@@ -74,7 +74,13 @@
     const SLOTS = { 1: ['p1'], 2: ['p1', 'tr'], 3: ['p1', 'p2', 'tr'], 4: ['p1', 'p2', 'p3', 'tr'], 5: ['p1', 'p2', 'p3', 'p4', 'tr'] };
     const slots = SLOTS[ranked.length] || SLOTS[5];
     ranked.forEach((g, i) => fill(p[slots[i]], g, slots[i] === 'tr' ? 'low' : 'high', steps));
-    for (const n of drumsIn) { if (n.s >= steps) continue; const k = drumKind(n.pitch); if (k && (!p.no[n.s] || k === 'k')) p.no[n.s] = k; }
+        const RANK = { k: 5, s: 4, c: 4, T: 3, t: 3, b: 2, H: 2, r: 1, h: 1, z: 1 };
+    for (const n of drumsIn) {
+      if (n.s >= steps) continue;
+      const k = drumKind(n.pitch); if (!k) continue;
+      const cur = p.no[n.s];
+      if (!cur || (RANK[k] || 0) > (RANK[cur] || 0)) p.no[n.s] = k;   // loudest piece wins the step
+    }
     return { pattern: p, parts: ranked.length, drums: drumsIn.length > 0, truncated: lastStep > steps };
   }
   function avg(g) { return g.reduce((a, n) => a + n.pitch, 0) / g.length; }
@@ -94,10 +100,20 @@
       for (let k = 1; k < len; k++) arr[s + k] = TIE;
     });
   }
+  // General MIDI percussion -> chip kit
   function drumKind(gm) {
-    if ([35, 36, 41, 43, 45, 47].includes(gm)) return 'k';        // kicks and low toms
-    if ([37, 38, 39, 40, 48, 49, 50, 52, 55, 57].includes(gm)) return 's'; // snares, claps, crashes
-    if ([42, 44, 46, 51, 53, 54, 56, 59, 69, 70].includes(gm)) return 'h'; // hats, rides, shakers
+    if ([35, 36].includes(gm)) return 'k';                    // kicks
+    if ([38, 40].includes(gm)) return 's';                    // snares
+    if ([37].includes(gm)) return 'r';                        // side stick
+    if ([42, 44].includes(gm)) return 'h';                    // closed / pedal hat
+    if ([46].includes(gm)) return 'H';                        // open hat
+    if ([41, 43, 45].includes(gm)) return 't';                // low toms
+    if ([47, 48, 50].includes(gm)) return 'T';                // high toms
+    if ([49, 52, 55, 57].includes(gm)) return 'c';            // crashes
+    if ([51, 53, 59].includes(gm)) return 'h';                // rides read as hats
+    if ([56, 54].includes(gm)) return 'b';                    // cowbell, tambourine
+    if ([39].includes(gm)) return 's';                        // hand clap
+    if ([76, 77, 75, 60, 61, 62, 63, 64].includes(gm)) return 'b'; // blocks, congas
     return null;
   }
 

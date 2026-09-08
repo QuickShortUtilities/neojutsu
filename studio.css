@@ -237,3 +237,13 @@ button[aria-pressed=true].mini { background: #2ef2ff18; border-color: var(--cyan
 .export-direct .mini { font-size: 10px; padding: 4px 10px; }
 .export-direct:hover { opacity: 1; }
 @media (max-width: 760px) { .export-grid { grid-template-columns: 1fr; } .mixer-strips { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- v0.6: roll navigation, bigger drum kit ---------- */
+.view-controls { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+.view-controls .mini { padding: 5px 11px; }
+#view-prev, #view-next { font-size: 15px; line-height: 1; padding: 3px 12px; }
+.view-label { font-family: var(--mono); font-size: 11px; color: var(--cyan); min-width: 132px; text-align: center; }
+.view-zoom-label { display: flex; align-items: center; gap: 6px; margin-left: auto; text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+.view-zoom-label select { background: var(--bg-3); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 5px 7px; font: 11px var(--mono); }
+.roll-wrap { overflow-x: hidden; }
+.bar-ruler { padding-left: 44px; }
