@@ -1,0 +1,6 @@
+name = "neojutsu"
+compatibility_date = "2026-09-08"
+
+# The site is flat static files at the repo root - no build step.
+[assets]
+directory = "."
