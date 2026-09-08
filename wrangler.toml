@@ -1,6 +1,26 @@
 name = "neojutsu"
+main = "worker/index.js"
 compatibility_date = "2026-09-08"
 
-# The site is flat static files at the repo root - no build step.
+# The Worker answers /api/* and hands everything else to the static site, so the
+# app and its API share one origin - no CORS, and session cookies just work.
 [assets]
 directory = "."
+binding = "ASSETS"
+
+# Accounts and saved projects. Uncomment once the database exists, otherwise a
+# placeholder id fails the deploy:
+#   wrangler d1 create neojutsu
+#   wrangler d1 execute neojutsu --file worker/schema.sql --remote
+# Until then the Worker answers /api/* with 503 and the studios simply hide
+# every cloud feature, which is the same as it behaves on static hosting.
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "neojutsu"
+# database_id = "PASTE_THE_ID_FROM_d1_create"
+
+[vars]
+# The client id is public by design; the secret and the session key are not.
+# Set those with:  wrangler secret put GOOGLE_CLIENT_SECRET
+#                  wrangler secret put SESSION_SECRET
+GOOGLE_CLIENT_ID = ""

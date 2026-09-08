@@ -249,3 +249,18 @@
 /* transport-side toggle, sized like the rest of the session bar */
 .transport-chk { letter-spacing: 1px; }
 .session-controls { flex-wrap: nowrap; }
+
+/* cloud projects */
+.cloud-actions { display: flex; gap: 6px; margin-bottom: 12px; }
+.cloud-actions .mini { flex: 1; white-space: nowrap; }
+.cloud-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 22px; }
+.cloud-item {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 6px; background: #0b0913;
+}
+.cloud-item:hover { border-color: var(--cyan); }
+.cloud-item.current { border-color: var(--magenta); }
+.cloud-item .name { flex: 1; font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cloud-item .when { font-family: var(--mono); font-size: 9px; color: var(--muted); }
+.cloud-item .del { background: none; border: 0; color: #4b4368; cursor: pointer; font-size: 11px; padding: 0 2px; }
+.cloud-item .del:hover { color: var(--magenta); }

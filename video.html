@@ -325,6 +325,17 @@
         <input type="range" id="v-vol" min="0" max="100" step="1" value="80" aria-label="Soundtrack volume">
       </label>
 
+      <div id="v-cloud" hidden>
+        <h2 class="panel-title"><span class="k">雲</span> Projects</h2>
+        <div class="cloud-actions">
+          <button class="mini" id="v-cloud-save" type="button">Save</button>
+          <button class="mini" id="v-cloud-new" type="button">Save as new</button>
+          <button class="mini" id="v-cloud-share" type="button" hidden>Share</button>
+        </div>
+        <p class="hint" id="v-cloud-status">Signed in. Your projects follow you between browsers.</p>
+        <div class="cloud-list" id="v-cloud-list"></div>
+      </div>
+
     </aside>
 
     <dialog class="export-dialog" id="v-export-dialog" aria-labelledby="v-export-title">
@@ -373,6 +384,7 @@
   </main>
 
   <script src="chip.js"></script>
+  <script src="neo-cloud.js"></script>
   <script src="video-gen.js"></script>
   <script src="video-fx.js"></script>
   <script src="video-rack.js"></script>

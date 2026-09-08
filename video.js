@@ -758,6 +758,106 @@
     pullLayerMotion(); renderLayers(); save();
   }
 
+  // ---------- cloud projects ----------
+  // The studio keeps working signed out and offline; this whole section stays
+  // hidden unless the API answers and someone is signed in.
+  let cloudId = null, cloudPublic = false;
+
+  const projectData = () => ({ look: look(), layers: layers.map(persistable), selected, rack, timeline });
+
+  function applyProject(d) {
+    if (!d) return;
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(d)); } catch {}
+    // Drop ?p= first, or a shared link would reload into itself forever.
+    const clean = location.pathname + location.hash;
+    history.replaceState(null, '', clean);
+    location.replace(clean);
+  }
+
+  function cloudStatus(msg) { const el = $('v-cloud-status'); if (el) el.textContent = msg; }
+
+  async function refreshCloudList() {
+    if (!window.NeoCloud || !window.NeoCloud.user) return;
+    const host = $('v-cloud-list'); host.innerHTML = '';
+    let items = [];
+    try { items = await window.NeoCloud.list('video'); }
+    catch (e) { cloudStatus('Could not reach your projects.'); return; }
+    if (!items.length) { cloudStatus('No saved projects yet. Save one and it will follow you between browsers.'); return; }
+    cloudStatus(`${items.length} project${items.length === 1 ? '' : 's'} in your account.`);
+    for (const it of items) {
+      const row = document.createElement('div');
+      row.className = 'cloud-item' + (it.id === cloudId ? ' current' : '');
+      const name = document.createElement('span');
+      name.className = 'name'; name.textContent = it.title;
+      const when = document.createElement('span');
+      when.className = 'when';
+      when.textContent = new Date(it.updated_at).toLocaleDateString();
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'del'; del.title = `Delete ${it.title}`; del.textContent = '✕';
+      del.addEventListener('click', async e => {
+        e.stopPropagation();
+        if (!confirm(`Delete "${it.title}"? This cannot be undone.`)) return;
+        try { await window.NeoCloud.remove(it.id); if (cloudId === it.id) cloudId = null; refreshCloudList(); }
+        catch { cloudStatus('Could not delete that project.'); }
+      });
+      row.addEventListener('click', async () => {
+        try {
+          const p = await window.NeoCloud.load(it.id);
+          cloudId = p.id; cloudPublic = !!p.public;
+          applyProject(p.data);
+        } catch { cloudStatus('Could not open that project.'); }
+      });
+      row.append(name, when, del);
+      host.append(row);
+    }
+  }
+
+  async function cloudSave(asNew) {
+    if (!window.NeoCloud || !window.NeoCloud.user) return;
+    cloudStatus('Saving…');
+    try {
+      const saved = await window.NeoCloud.save({
+        id: asNew ? undefined : cloudId || undefined,
+        kind: 'video', title: $('v-title').value.trim() || 'Untitled video', data: projectData(),
+      });
+      cloudId = saved.id;
+      cloudStatus(`Saved "${saved.title}".`);
+      $('v-cloud-share').hidden = false;
+      refreshCloudList();
+    } catch (e) { cloudStatus(e && e.message ? e.message : 'Could not save.'); }
+  }
+
+  async function cloudShare() {
+    if (!cloudId) return;
+    try {
+      const r = await window.NeoCloud.setPublic(cloudId, !cloudPublic);
+      cloudPublic = r.public;
+      if (cloudPublic) {
+        const link = `${location.origin}/video.html?p=${cloudId}`;
+        try { await navigator.clipboard.writeText(link); cloudStatus(`Link copied — ${link}`); }
+        catch { cloudStatus(`Shareable at ${link}`); }
+      } else cloudStatus('Sharing turned off.');
+    } catch { cloudStatus('Could not change sharing.'); }
+  }
+
+  function initCloud() {
+    if (!window.NeoCloud) return;
+    window.NeoCloud.onChange((u, ok) => {
+      $('v-cloud').hidden = !(ok && u);
+      if (ok && u) refreshCloudList();
+    });
+    $('v-cloud-save').addEventListener('click', () => cloudSave(false));
+    $('v-cloud-new').addEventListener('click', () => cloudSave(true));
+    $('v-cloud-share').addEventListener('click', cloudShare);
+    // A shared link opens straight into that project.
+    const shared = new URLSearchParams(location.search).get('p');
+    if (shared) {
+      window.NeoCloud.load(shared)
+        .then(p => { cloudId = p.id; cloudPublic = !!p.public; applyProject(p.data); })
+        .catch(() => {});
+    }
+  }
+
   // ---------- settings ----------
   const status = msg => { const el = $('v-status'); if (el) el.textContent = msg; };
   const GLOBAL_FIELDS = ['v-chip','v-res','v-format','v-pix','v-dither','v-dith','v-bright','v-contrast','v-react','v-len','v-fps','v-scale','v-vol','v-title','v-container','v-text','v-text-pos','v-text-col','v-text-size'];
@@ -938,6 +1038,7 @@
       if (e.code === 'Space' && !/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName)) { e.preventDefault(); toggle(); }
     });
     window.addEventListener('storage', e => { if (e.key === SAVED_KEY) fillTracks(); });
+    initCloud();
     requestAnimationFrame(frameLoop);
   }
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', init) : init();
