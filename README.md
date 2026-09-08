@@ -38,6 +38,7 @@ The model is trained separately and is not in this repo yet.
 
 Open `studio.html` directly or serve the repository with a static host. The studio includes:
 
+- A **stereo / mono output switch** beside the transport. The engines spread the voices across the image (the two lead pulses pulled apart, the counter-melody and pad wider still, bass and drums centred), and mono folds the whole mix down so you can check it survives. The setting is part of the pattern, so exports match what you hear.
 - A session bar with title, playback, tempo and an 出 Export dialog (format, quality, range, repeats, with a live summary of what you'll get).
 - MP3 at 128, 192 or 320 kbps, stereo WAV, and MIDI downloads. MP3/WAV render the same chip synth and effects used for playback, with full-pattern or selected-bar export and optional effects tails. MIDI includes volume/pan controllers; the receiving instrument determines its sound.
 - **Six voices** (Pulse 1-4, Triangle, Noise) with volume, pan, mute, solo, level meters and master volume.

@@ -19,7 +19,7 @@
 
   const voiceFx = () => ({ vib: 0, trem: 0, echo: 0, duty: null, slide: false, arp: null, env: 'hold', inst: null });
   const defaultFx = () => Object.fromEntries(LANES.map((l) => [l, l === 'no' ? { echo: 0 } : voiceFx()]));
-  const defaultMaster = () => ({ crush: 0, echoDiv: '8d', echoFb: 0.35, volume: 1, swing: 0 });
+  const defaultMaster = () => ({ crush: 0, echoDiv: '8d', echoFb: 0.35, volume: 1, swing: 0, mono: false });
   // chip-appropriate starting FX, applied on generate
   const CHIP_FX = {
     nes:     { p1: { duty: 0.125 }, p2: { duty: 0.5 } },
@@ -66,6 +66,7 @@
     p.master = Object.assign(defaultMaster(), p.master || {});
     p.master.crush = bounded(p.master.crush, 0, 1, 0); p.master.echoFb = bounded(p.master.echoFb, 0, .8, .35); p.master.volume = bounded(p.master.volume, 0, 1, 1);
     p.master.swing = bounded(p.master.swing, 0, 1, 0);
+    p.master.mono = !!p.master.mono;
     // Effects rack. Patterns from before the rack carry their crush and echo
     // settings across, then hand ownership to the rack.
     const hadRack = !!p.rack;
@@ -193,8 +194,11 @@
     p.fx.p3.env = 'pluck'; p.fx.p3.echo = Math.max(p.fx.p3.echo, .15);
     p.fx.p4.inst = mood.sustain ? 'fmorgan' : 'fmbass';
     p.fx.p4.env = 'pad'; p.fx.p4.trem = mood.sustain ? .2 : 0;
-    p.mix.p3.volume = .55; p.mix.p3.pan = -.35;
-    p.mix.p4.volume = .5;  p.mix.p4.pan = .35;
+    p.mix.p3.volume = .55; p.mix.p4.volume = .5;
+    // Spread the voices across the image. Real chips were mono, but two pulses
+    // pulled apart is what the trackers did the moment stereo was available.
+    const SPREAD = { p1: -.38, p2: .38, p3: -.65, p4: .65, tr: 0, no: 0 };
+    for (const [l, pan] of Object.entries(SPREAD)) p.mix[l].pan = pan;
   }
 
   function setup(opts) {
@@ -354,6 +358,21 @@
     flash(`generated · ${ENGINE_LABEL[engineUsed]} · seed ${seed}`);
   }
   gGo.addEventListener('click', run);
+
+  const outStereo = $('out-stereo'), outMono = $('out-mono');
+  function syncOutput() {
+    const mono = !!pattern.master.mono;
+    outMono.classList.toggle('is-on', mono); outMono.setAttribute('aria-pressed', String(mono));
+    outStereo.classList.toggle('is-on', !mono); outStereo.setAttribute('aria-pressed', String(!mono));
+    engine.setMono(mono);
+  }
+  function setOutput(mono) {
+    if (!!pattern.master.mono === mono) return;
+    snapshot(); pattern.master.mono = mono; syncOutput(); queueSave();
+    flash(mono ? 'folded to mono' : 'stereo output');
+  }
+  outStereo.addEventListener('click', () => setOutput(false));
+  outMono.addEventListener('click', () => setOutput(true));
 
   function setPlayUI(on) { playBtn.setAttribute('aria-pressed', on); playIcon.textContent = on ? '■' : '▶'; playLabel.textContent = on ? 'Stop' : 'Play'; }
   const start = () => { try { seq.start(); setPlayUI(true); } catch { flash('Audio could not start. Please try again.'); } };

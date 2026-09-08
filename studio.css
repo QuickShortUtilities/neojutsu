@@ -575,3 +575,16 @@ input[type=range].neo-range::-moz-range-thumb {
 }
 .neo-group:first-child { border-top: 0; margin-top: 0; }
 .neo-select-menu { max-height: 52vh; }
+
+/* ---- output mode switch ---- */
+.out-mode { display: flex; gap: 0; }
+.out-btn {
+  font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .08em;
+  background: #100d18; color: var(--muted); border: 0; padding: 8px 10px; cursor: pointer;
+  box-shadow: inset 0 0 0 2px #2a2340; white-space: nowrap;
+}
+.out-btn + .out-btn { margin-left: -2px; }
+.out-btn:hover { color: var(--text); }
+.out-btn.is-on { color: var(--cyan); box-shadow: inset 0 0 0 2px var(--cyan); background: rgba(46,242,255,.10); }
+.out-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; z-index: 1; }
+@media (max-width: 760px) { .out-btn { font-size: 8px; padding: 7px 8px; } }

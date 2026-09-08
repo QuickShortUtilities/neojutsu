@@ -80,6 +80,7 @@
   function create(context = null) {
     let ctx = null, master = null, analyser = null, noiseBuf = null, shaper = null;
     let delay = null, fbGain = null, wetGain = null, echoTone = null, rack = null;
+    let stereoPath = null, monoPath = null;
     const waveCache = {};
     const channels = {};
     const sources = new Set();
@@ -104,8 +105,22 @@
       shaper = ctx.createWaveShaper(); shaper.curve = crushCurve(crushBits);
       analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
       rack = window.NeoRack ? window.NeoRack.create(ctx, { meter: !context }) : null;
-      if (rack) master.connect(shaper).connect(rack.input), rack.output.connect(analyser).connect(ctx.destination);
-      else master.connect(shaper).connect(analyser).connect(ctx.destination);
+      // Output stage: the stereo mix, or the same mix folded to mono, chosen by
+      // crossfading two paths so switching is click-free.
+      const tail = ctx.createGain();
+      stereoPath = ctx.createGain(); monoPath = ctx.createGain();
+      stereoPath.gain.value = 1; monoPath.gain.value = 0;
+      const msplit = ctx.createChannelSplitter(2), mmerge = ctx.createChannelMerger(2);
+      const monoSum = ctx.createGain(); monoSum.gain.value = 0.5;
+      tail.connect(stereoPath);
+      tail.connect(msplit);
+      msplit.connect(monoSum, 0); msplit.connect(monoSum, 1);
+      monoSum.connect(mmerge, 0, 0); monoSum.connect(mmerge, 0, 1);
+      mmerge.connect(monoPath);
+      stereoPath.connect(analyser); monoPath.connect(analyser);
+      analyser.connect(ctx.destination);
+      if (rack) { master.connect(shaper).connect(rack.input); rack.output.connect(tail); }
+      else master.connect(shaper).connect(tail);
       // echo bus: send -> delay -> (feedback) -> wet -> master
       delay = ctx.createDelay(2.0); delay.delayTime.value = 0.2;
       fbGain = ctx.createGain(); fbGain.gain.value = 0.35;
@@ -325,6 +340,14 @@
       }
     }
 
+    function setMono(on, immediate) {
+      if (!stereoPath) return;
+      const now = ctx.currentTime;
+      const set = (p, v) => immediate ? p.setValueAtTime(v, now) : p.setTargetAtTime(v, now, 0.012);
+      set(stereoPath.gain, on ? 0 : 1);
+      set(monoPath.gain, on ? 1 : 0);
+    }
+
     function setRack(rackState, opts = {}) {
       if (!rack) return;
       rack.setState(rackState, opts);
@@ -340,7 +363,7 @@
     function echoDivision(p) { return (p.rack && p.rack.echo && p.rack.echo.div) || p.master?.echoDiv || '8d'; }
 
     return {
-      ensure, note, drum, midiToHz, setCrush, setEcho, setMix, silence, setRack, echoDivision,
+      ensure, note, drum, midiToHz, setCrush, setEcho, setMix, silence, setRack, setMono, echoDivision,
       get rackProbe() { return rack ? rack.probe : null; },
       channelAnalyser(ch) { return channels[ch]?.meter; },
       get ctx() { return ctx; },
@@ -380,6 +403,7 @@
       engine.setCrush(m.crush || 0);
       const div = (p.rack && p.rack.echo && p.rack.echo.div) || m.echoDiv || '8d';
       engine.setEcho(echoSeconds(p.bpm, div), m.echoFb == null ? 0.35 : m.echoFb);
+      engine.setMono(!!(p.master && p.master.mono));
       const key = JSON.stringify(p.rack) + ':' + p.bpm;
       if (key !== rackKey) { engine.setRack(p.rack, { bpm: p.bpm }); rackKey = key; }
     }
@@ -440,6 +464,7 @@
     const synth = create(offline); synth.ensure(); synth.setMix(p, true);
     synth.setCrush(p.master?.crush || 0); synth.setEcho(echo, feedback);
     synth.setRack(p.rack, { bpm: p.bpm, immediate: true, startAt: 0 });
+    synth.setMono(!!(p.master && p.master.mono), true);
     const prev = {};
     for (let i = bounds.start; i < bounds.end; i++) {
       const t = (i - bounds.start) * stepTime + swingOffset(p, i, stepTime);

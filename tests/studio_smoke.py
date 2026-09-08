@@ -72,6 +72,23 @@ with sync_playwright() as p:
  window_rate_default=page.evaluate("NeoRack.SPEC.phaser.params.rate.def")
  # --- effects rack: dock, windows, dials, motion ---
  assert page.locator('#fx-dock .rack-btn').count()==8
+ # --- output mode: the mix is genuinely stereo, and mono really folds ---
+ assert page.locator('#out-stereo').get_attribute('aria-pressed')=='true'
+ spread=page.evaluate("Object.fromEntries(['p1','p2','p3','p4','tr','no'].map(l=>[l,JSON.parse(localStorage.getItem('neojutsu.draft.v1')).pattern.mix[l].pan]))")
+ assert spread['p1']<0 and spread['p2']>0, f'voices should be spread across the image: {spread}'
+ chans=page.evaluate('''async()=>{
+   const base=JSON.parse(localStorage.getItem('neojutsu.draft.v1')).pattern;
+   const diff=async(mono)=>{const p=JSON.parse(JSON.stringify(base));p.master.mono=mono;
+     const b=await NeoChip.render(p,{tail:false});const l=b.getChannelData(0),r=b.getChannelData(1);
+     let d=0;for(let i=0;i<l.length;i++)d+=Math.abs(l[i]-r[i]);return d/l.length;};
+   return {stereo:await diff(false), mono:await diff(true)};}''')
+ assert chans['stereo']>1e-5, f'stereo render should differ between channels: {chans}'
+ assert chans['mono']<1e-12, f'mono render should be identical in both channels: {chans}'
+ page.locator('#out-mono').click(); page.wait_for_timeout(150)
+ assert draft()['pattern']['master']['mono'] is True
+ assert page.locator('#out-mono').get_attribute('aria-pressed')=='true'
+ page.locator('#t-undo').click(); page.wait_for_timeout(120)
+ assert draft()['pattern']['master']['mono'] is False, 'output mode should be undoable'
  # --- voice presets ---
  assert page.locator('#fx-preset-row').is_visible()
  groups=page.evaluate("[...document.querySelectorAll('#fx-preset optgroup')].map(g=>g.label)")
