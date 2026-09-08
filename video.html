@@ -121,6 +121,41 @@
       </div>
       <p class="layer-warn" id="v-layer-warn" hidden></p>
 
+      <details class="fold" id="v-transform-fold">
+        <summary><span class="k">位</span> Transform &amp; automation</summary>
+
+      <div class="two-up">
+        <label class="field range"><span>X <b id="v-lx-v">0</b></span>
+          <input type="range" id="v-lx" min="-100" max="100" step="1" value="0" aria-label="Layer X position"></label>
+        <label class="field range"><span>Y <b id="v-ly-v">0</b></span>
+          <input type="range" id="v-ly" min="-100" max="100" step="1" value="0" aria-label="Layer Y position"></label>
+      </div>
+      <div class="two-up">
+        <label class="field range"><span>Scale <b id="v-lscale-v">100</b></span>
+          <input type="range" id="v-lscale" min="20" max="300" step="1" value="100" aria-label="Layer scale"></label>
+        <label class="field range"><span>Rotate <b id="v-lrot-v">0</b></span>
+          <input type="range" id="v-lrot" min="-180" max="180" step="1" value="0" aria-label="Layer rotation"></label>
+      </div>
+
+      <div class="lmotion">
+        <div class="two-up">
+          <label class="field"><span>Automate</span>
+            <select id="v-lm-param">
+              <option value="x">X position</option><option value="y">Y position</option>
+              <option value="scale">Scale</option><option value="rotate">Rotate</option>
+              <option value="opacity">Opacity</option>
+            </select>
+          </label>
+          <label class="field"><span>Shape</span><select id="v-lm-shape"></select></label>
+        </div>
+        <div class="two-up">
+          <label class="field" id="v-lm-rate-wrap"><span>Rate</span><select id="v-lm-rate"></select></label>
+          <label class="field range" id="v-lm-depth-wrap"><span>Depth <b id="v-lm-depth-v">50</b></span>
+            <input type="range" id="v-lm-depth" min="0" max="100" step="1" value="50" aria-label="Automation depth"></label>
+        </div>
+      </div>
+
+      </details>
     </aside>
 
     <!-- ===== centre: preview ===== -->

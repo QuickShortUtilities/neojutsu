@@ -177,5 +177,18 @@
     return wrap;
   }
 
-  window.NeoVRack = { SPEC, ORDER, SHAPES, SHAPE_LABELS, RATES, defaults, normalize, evaluate, makeDial, norm, denorm };
+  // Shared motion maths, so layer automation and plugin automation behave
+  // identically instead of drifting apart.
+  function motionValue(m, base, min, max, t, env) {
+    if (!m || !m.shape || m.shape === 'off') return base;
+    let f;
+    if (m.shape === 'level') f = (env && env.level) || 0;
+    else if (m.shape === 'bass') f = (env && env.bass) || 0;
+    else if (m.shape === 'treble') f = (env && env.treble) || 0;
+    else f = (SHAPES[m.shape] || SHAPES.sine)(t * ((RATES.find(r => r.id === m.rate) || RATES[2]).hz));
+    const depth = (m.depth ?? 50) / 100;
+    return base + (max - base) * f * depth;
+  }
+
+  window.NeoVRack = { SPEC, ORDER, SHAPES, SHAPE_LABELS, RATES, defaults, normalize, evaluate, makeDial, norm, denorm, motionValue };
 })();

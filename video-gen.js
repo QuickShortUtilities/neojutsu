@@ -31,6 +31,68 @@
     biome:    { label: 'Biomes', kanji: '地' },
   };
 
+  // ---------- character sprites ----------
+  // One anatomy, many outfits. Every character is the same stack of blocks with
+  // a shared walk cycle, so a new one is a palette and a couple of flags rather
+  // than a new drawing routine.
+  const CHARS = {
+    hero:    { skin: '#f0c9a0', cloth: '#2ef2ff', trim: '#1a6f8c', hair: '#241a3a' },
+    knight:  { skin: '#f0c9a0', cloth: '#b8c2d0', trim: '#6f7a8c', hair: '#8a8f9c', helm: true, weapon: 'sword' },
+    mage:    { skin: '#f0c9a0', cloth: '#8b5cf6', trim: '#4c2f8c', hair: '#e8e0f0', hat: true, weapon: 'staff' },
+    ninja:   { skin: '#2a2438', cloth: '#1b1430', trim: '#ff2e88', hair: '#0d0a16', mask: true },
+    rogue:   { skin: '#e8b98a', cloth: '#3fbf4a', trim: '#1f6b28', hair: '#5a3a1a', cape: true },
+    robot:   { skin: '#8fa3b8', cloth: '#c0c8d8', trim: '#ffd23f', hair: '#5a6a7c', helm: true, robot: true },
+    beast:   { skin: '#7a4a28', cloth: '#5c3520', trim: '#ff8c42', hair: '#3a2414', horns: true },
+    princess:{ skin: '#f7d6b8', cloth: '#ff2e88', trim: '#ffd23f', hair: '#ffd23f', dress: true },
+  };
+  const CHAR_KEYS = Object.keys(CHARS);
+
+  // walk: phase in radians. facing: 1 right, -1 left. act: 0..1 attack pose.
+  function drawChar(g, c, cx, base, sc, walk, facing = 1, act = 0) {
+    const sw = Math.sin(walk), bob = Math.abs(Math.cos(walk)) * 1.1;
+    const P = (x, y, ww, hh, col) => {
+      const X = cx + (facing > 0 ? x : -x - ww) * sc;
+      g.fillStyle = '#0a0714';
+      g.fillRect(X - 1, base - (y + hh) * sc - 1, ww * sc + 2, hh * sc + 2);
+      g.fillStyle = col;
+      g.fillRect(X, base - (y + hh) * sc, ww * sc, hh * sc);
+    };
+    // legs
+    if (c.dress) { P(-3.5, 0 + bob, 7, 7, c.cloth); }
+    else {
+      P(-3, 0 + bob, 2.5, 5 + sw * 2, c.trim);
+      P(0.5, 0 + bob, 2.5, 5 - sw * 2, c.cloth);
+    }
+    if (c.cape) P(-4.5, 4 + bob, 3, 9, c.trim);
+    // torso
+    P(-3, 5 + bob, 6, 6, c.cloth);
+    P(-3, 5 + bob, 6, 2, c.trim);
+    // arms - the front one swings, or thrusts when acting
+    P(-5, 8 + bob, 2, 3 + sw, c.cloth);
+    const reach = act > 0 ? 3.5 + act * 2 : 3;
+    P(reach - 0.5, 8 + bob - act * 1.5, 2, 3 - sw, c.cloth);
+    if (c.weapon === 'sword') {
+      P(reach + 1, 9 + bob - act * 1.5, 1.2, 8 + act * 3, '#dfe6f0');
+      P(reach + 0.4, 8.6 + bob - act * 1.5, 2.4, 1, c.trim);
+    }
+    if (c.weapon === 'staff') {
+      P(reach + 1, 6 + bob, 1, 13, '#8a5a2a');
+      P(reach + 0.2, 18 + bob, 2.6, 2.6, act > .3 ? '#ffffff' : c.trim);
+    }
+    // head
+    P(-2.5, 11 + bob, 5, 4, c.mask ? c.cloth : c.skin);
+    if (c.helm) P(-3, 13.5 + bob, 6, 2.5, c.trim);
+    else if (c.hat) { P(-4, 14.5 + bob, 8, 1.5, c.cloth); P(-2, 16 + bob, 4, 3, c.cloth); }
+    else if (c.dress) { P(-3.5, 14 + bob, 7, 2.5, c.hair); P(-4, 11 + bob, 1.5, 4, c.hair); P(2.5, 11 + bob, 1.5, 4, c.hair); }
+    else P(-3, 14 + bob, 6, 2, c.hair);
+    if (c.horns) { P(-3.5, 15.5 + bob, 1.2, 2.5, '#e8d9b0'); P(2.3, 15.5 + bob, 1.2, 2.5, '#e8d9b0'); }
+    // eyes
+    const ey = base - (12.5 + bob) * sc;
+    g.fillStyle = c.robot ? '#ff2e88' : c.mask ? c.trim : '#0a0714';
+    const e1 = cx + (facing > 0 ? -1.5 : 0.5) * sc, e2 = cx + (facing > 0 ? 0.5 : -1.5) * sc;
+    g.fillRect(e1, ey, sc, sc); g.fillRect(e2, ey, sc, sc);
+  }
+
   const SCENES = {
     starfield: {
       label: 'Starfield · warp', cat: 'scifi',
@@ -642,28 +704,62 @@
             if (x > w) break;
           }
         }
-        // the beast: a stepping silhouette, taller than anything behind it
-        s.step += o.step * (1.6 + env.bass * 3);
+        // The beast: a stepping silhouette with a swinging tail and arms, and a
+        // breath weapon that fires on the low end.
+        s.step += o.step * (1.6 + env.bass * 3) * o.speed;
         const sway = Math.sin(s.step) * 3, lift = Math.abs(Math.sin(s.step * .5)) * 3;
+        const swing = Math.sin(s.step);
         const bx = w * .62 + sway, by = base - lift, bw = w * .17, bh2 = h * .52;
-        // Drawn twice: a rim one pixel proud, then the body inside it, so the
-        // silhouette still reads where it crosses a bright sky.
+
+        s.breath = Math.max(0, (s.breath || 0) - o.step * 1.6);
+        if (env.bass > .55 && s.breath <= 0) s.breath = 1;
+
         const beast = (grow, fill) => {
           g.fillStyle = fill;
-          g.fillRect(bx - bw / 2 - grow, by - bh2 - grow, bw + grow * 2, bh2 + grow * 2);
-          g.fillRect(bx - bw * .9 - grow, by - bh2 * .78 - grow, bw * .45 + grow * 2, bh2 * .30 + grow * 2);
-          g.fillRect(bx + bw * .45 - grow, by - bh2 * .72 - grow, bw * .45 + grow * 2, bh2 * .26 + grow * 2);
-          g.fillRect(bx - bw * .42 - grow, by - 2, bw * .34 + grow * 2, lift + 3 + grow);
-          g.fillRect(bx + bw * .08 - grow, by - 2, bw * .34 + grow * 2, 3 + grow);
-          for (let i = 0; i < 5; i++)
-            g.fillRect(bx - 1 - grow, by - bh2 - 3 - i * 5 - grow, 3 + grow * 2, 4 + grow * 2);
+          const R = (x, y, ww, hh) => g.fillRect(x - grow, y - grow, ww + grow * 2, hh + grow * 2);
+          // tail, drawn as a tapering chain of blocks
+          for (let i = 0; i < 7; i++) {
+            const f = i / 6;
+            const tx = bx - bw * .5 - f * bw * 1.5;
+            const ty = by - bh2 * .18 + Math.sin(s.step * 1.2 - f * 2.2) * 7 * f + f * 6;
+            R(tx, ty, bw * .30 * (1 - f * .7) + 2, bw * .26 * (1 - f * .7) + 2);
+          }
+          R(bx - bw / 2, by - bh2, bw, bh2 * .82);                       // torso
+          R(bx - bw * .40, by - bh2 * .22, bw * .80, bh2 * .24);         // hips
+          // arms swing opposite to the legs
+          R(bx - bw * .92, by - bh2 * .74 + swing * 4, bw * .46, bh2 * .30);
+          R(bx + bw * .46, by - bh2 * .70 - swing * 4, bw * .46, bh2 * .26);
+          // legs
+          R(bx - bw * .44, by - 2, bw * .36, lift + 4);
+          R(bx + bw * .08, by - 2, bw * .36, 4 - lift * .4);
+          // head on a short neck, jutting forward
+          R(bx - bw * .10, by - bh2 - bw * .40, bw * .30, bw * .30);
+          R(bx + bw * .12, by - bh2 - bw * .46, bw * .52, bw * .34);
+          // dorsal spines
+          for (let i = 0; i < 6; i++) {
+            const f = i / 5;
+            R(bx - bw * .48 - f * bw * .10, by - bh2 * .88 + f * (bh2 * .62), 4 + (1 - f) * 2, 5);
+          }
         };
         beast(2, '#ffd9a0');
         beast(0, '#050208');
-        const eye = env.treble > .25 ? '#fff' : '#ff2e88';
+
+        const hx = bx + bw * .64, hy = by - bh2 - bw * .30;
+        const eye = env.treble > .25 ? '#ffffff' : '#ff2e88';
         g.fillStyle = eye;
-        g.fillRect(bx - bw * .28, by - bh2 * .96, 3, 2);
-        g.fillRect(bx + bw * .12, by - bh2 * .96, 3, 2);
+        g.fillRect(hx - bw * .16, hy, 3, 2);
+        if (s.breath > 0) {
+          const reach = (1 - s.breath) * w * .5 + 8;
+          for (let i = 0; i < 16; i++) {
+            const f = i / 15;
+            const fx = hx + f * reach, fy = hy + 3 + Math.sin(f * 6 + s.step * 5) * f * 9;
+            const r = 2 + f * 9 * s.breath;
+            g.fillStyle = f < .35 ? `rgba(255,246,200,${s.breath})`
+                        : f < .7 ? `rgba(255,180,50,${s.breath * .9})`
+                                 : `rgba(255,90,30,${s.breath * .6})`;
+            g.fillRect(fx - r / 2, fy - r / 2, r, r);
+          }
+        }
       },
     },
 
@@ -964,52 +1060,105 @@
     walker: {
       label: 'Walker · character', cat: 'people', solid: true,
       init(r, w, h, density) {
+        const keys = CHAR_KEYS;
         return { r, off: 0, step: 0,
+          who: keys[Math.floor(r() * keys.length)],
           hills: Array.from({ length: 5 }, () => ({ x: r(), s: .5 + r() })),
-          extras: Math.round(lerp(0, 3, density)) };
+          extras: Array.from({ length: Math.round(lerp(0, 3, density)) },
+            () => ({ who: keys[Math.floor(r() * keys.length)], gap: 14 + r() * 10, ph: r() * 6.28 })) };
       },
       draw(g, w, h, t, env, s, o) {
         const sky = g.createLinearGradient(0, 0, 0, h);
         sky.addColorStop(0, '#241844'); sky.addColorStop(1, '#8a4a6a');
         if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
         s.off += o.speed * o.step * 24 * (1 + env.level * .6);
-        g.fillStyle = '#160f28';
-        for (const hl of s.hills) {
-          const x = ((hl.x * w - s.off * .3) % (w + 60) + w + 60) % (w + 60) - 30;
-          g.beginPath(); g.arc(x, h * .82, 26 * hl.s, Math.PI, 0); g.fill();
+        if (o.bg !== false) {
+          g.fillStyle = '#160f28';
+          for (const hl of s.hills) {
+            const x = ((hl.x * w - s.off * .3) % (w + 60) + w + 60) % (w + 60) - 30;
+            g.beginPath(); g.arc(x, h * .82, 26 * hl.s, Math.PI, 0); g.fill();
+          }
         }
         const base = h * .82;
-        g.fillStyle = '#0d0918'; g.fillRect(0, base, w, h - base);
-        g.fillStyle = '#2a1f3d';
-        for (let x = -(s.off % 12); x < w; x += 12) g.fillRect(x, base, 6, 2);
-
-        // A little sprite drawn from blocks, legs driven by a walk cycle.
+        if (o.bg !== false) {
+          g.fillStyle = '#0d0918'; g.fillRect(0, base, w, h - base);
+          g.fillStyle = '#2a1f3d';
+          for (let x = -(s.off % 12); x < w; x += 12) g.fillRect(x, base, 6, 2);
+        }
         s.step += o.step * (7 + env.level * 6) * o.speed;
-        const draw1 = (cx, scale, hue) => {
-          // Every block gets a dark outline drawn under it, otherwise a limb
-          // against dark ground disappears at four colours.
-          const P = (x, y, ww, hh, c) => {
-            g.fillStyle = '#0a0714';
-            g.fillRect(cx + x * scale - 1, base - (y + hh) * scale - 1, ww * scale + 2, hh * scale + 2);
-            g.fillStyle = c;
-            g.fillRect(cx + x * scale, base - (y + hh) * scale, ww * scale, hh * scale);
-          };
-          const swing = Math.sin(s.step), bob = Math.abs(Math.cos(s.step)) * 1.2;
-          P(-3, 0 + bob, 2, 5 + swing * 2, '#8b5cf6');          // back leg
-          P(1, 0 + bob, 2, 5 - swing * 2, '#b48bff');           // front leg
-          P(-3, 5 + bob, 6, 6, hue);                            // torso
-          P(-5, 8 + bob, 2, 3 + swing, hue);                    // arm
-          P(3, 8 + bob, 2, 3 - swing, hue);                     // arm
-          P(-2.5, 11 + bob, 5, 4, '#f0c9a0');                   // head
-          P(-3, 14 + bob, 6, 2, '#241a3a');                     // hair
-          g.fillStyle = '#0a0714';
-          g.fillRect(cx - 1.5 * scale, base - (13 + bob) * scale, scale, scale);
-          g.fillRect(cx + 0.5 * scale, base - (13 + bob) * scale, scale, scale);
-        };
-        const sc = Math.max(2, Math.round(h / 42));
-        draw1(w * .38, sc, '#2ef2ff');
-        for (let i = 0; i < s.extras; i++)
-          draw1(w * .38 + (i + 1) * sc * 14, Math.max(2, sc - 1), ['#ff2e88', '#ffd23f', '#3fbf4a'][i % 3]);
+        const sc = Math.max(2, Math.round(h / 52));
+        drawChar(g, CHARS[s.who], w * .30, base, sc, s.step, 1);
+        let x = w * .38;
+        for (const e of s.extras) {
+          x += (e.gap + 6) * sc;
+          drawChar(g, CHARS[e.who], x, base, Math.max(2, sc - 1), s.step + e.ph, 1);
+        }
+      },
+    },
+
+    crowd: {
+      label: 'Crowd · procession', cat: 'people', solid: true,
+      init(r, w, h, density) {
+        const n = Math.round(lerp(4, 16, density));
+        return { r, step: 0,
+          folk: Array.from({ length: n }, () => ({
+            who: CHAR_KEYS[Math.floor(r() * CHAR_KEYS.length)],
+            x: r() * 1.3, depth: .35 + r() * .65, ph: r() * 6.28, dir: r() > .35 ? 1 : -1 })) };
+      },
+      draw(g, w, h, t, env, s, o) {
+        const sky = g.createLinearGradient(0, 0, 0, h);
+        sky.addColorStop(0, '#100b26'); sky.addColorStop(.55, '#42246b'); sky.addColorStop(1, '#c9598a');
+        if (o.bg !== false) { g.fillStyle = sky; g.fillRect(0, 0, w, h); }
+        s.step += o.step * (6 + env.level * 8) * o.speed;
+        // far figures first so nearer ones overlap them
+        const sorted = [...s.folk].sort((a, b) => a.depth - b.depth);
+        for (const f of sorted) {
+          f.x += f.dir * o.speed * o.step * .06 * f.depth * (1 + env.level * .5);
+          if (f.x > 1.35) f.x = -.35; if (f.x < -.35) f.x = 1.35;
+          const base = h * (.58 + f.depth * .34);
+          const sc = Math.max(1, Math.round((h / 100) * (.55 + f.depth * .95)));
+          drawChar(g, CHARS[f.who], f.x * w, base, sc, s.step * f.depth + f.ph, f.dir);
+        }
+        if (o.bg !== false) { g.fillStyle = 'rgba(10,6,20,.55)'; g.fillRect(0, h * .93, w, h * .07); }
+      },
+    },
+
+    duel: {
+      label: 'Duel · standoff', cat: 'people', solid: true,
+      init(r, w, h, density) {
+        const keys = CHAR_KEYS;
+        const a = Math.floor(r() * keys.length);
+        let b = Math.floor(r() * keys.length); if (b === a) b = (b + 3) % keys.length;
+        return { r, a: keys[a], b: keys[b], step: 0, swing: 0, turn: 0, hit: 0 };
+      },
+      draw(g, w, h, t, env, s, o) {
+        const sky = g.createLinearGradient(0, 0, 0, h);
+        sky.addColorStop(0, '#1c0a2e'); sky.addColorStop(.6, '#8c2350'); sky.addColorStop(1, '#ffb347');
+        if (o.bg !== false) {
+          g.fillStyle = sky; g.fillRect(0, 0, w, h);
+          g.fillStyle = '#fff2c0';
+          g.beginPath(); g.arc(w / 2, h * .42, 18 + env.bass * 9, 0, 7); g.fill();
+          g.fillStyle = '#1a1030'; g.fillRect(0, h * .78, w, h * .22);
+        }
+        const base = h * .8, sc = Math.max(2, Math.round(h / 64));
+        // trade blows: whoever is attacking lunges, the other recoils
+        s.swing += o.step * (1.6 + env.bass * 3.5) * o.speed;
+        const cyc = (Math.sin(s.swing) + 1) / 2;
+        const aAct = Math.max(0, Math.sin(s.swing)), bAct = Math.max(0, -Math.sin(s.swing));
+        s.step += o.step * 2;
+        const gap = w * (.24 - cyc * .045);
+        drawChar(g, CHARS[s.a], w / 2 - gap, base, sc, s.step * .2, 1, aAct);
+        drawChar(g, CHARS[s.b], w / 2 + gap, base, sc, s.step * .2, -1, bAct);
+        // clash spark when the swings cross
+        const clash = Math.abs(Math.sin(s.swing));
+        if (clash > .93) {
+          const cx = w / 2, cy = base - 11 * sc;
+          g.fillStyle = `rgba(255,246,200,${(clash - .93) * 12})`;
+          for (let i = 0; i < 8; i++) {
+            const a = i * .785 + s.swing;
+            g.fillRect(cx + Math.cos(a) * 7 * sc, cy + Math.sin(a) * 7 * sc, sc, sc);
+          }
+        }
       },
     },
 
@@ -1411,5 +1560,5 @@
     },
   };
 
-  window.NeoScene = { SCENES, CATS, rng, randomSeed };
+  window.NeoScene = { SCENES, CATS, CHARS, drawChar, rng, randomSeed };
 })();
