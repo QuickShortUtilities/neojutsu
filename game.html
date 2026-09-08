@@ -44,7 +44,7 @@
         <button class="mini" id="g-reset" type="button" title="Restart the level">↺ Restart</button>
         <output id="g-readout" aria-label="Game state">READY</output>
       </div>
-      <div class="session-actions"><button class="mini" id="g-toggle-inspector" aria-expanded="true" aria-controls="g-inspector" type="button">Pieces &amp; audio</button><button class="btn btn-export" id="g-open-share" type="button"><span class="k-glyph">出</span> Share</button></div>
+      <div class="session-actions"><button class="mini" id="g-toggle-inspector" aria-expanded="true" aria-controls="g-inspector" type="button">Pieces &amp; audio</button><button class="btn btn-export" id="g-open-share" type="button"><span class="k-glyph">出</span> Package</button></div>
     </section>
 
     <!-- ===== left: the game ===== -->
@@ -64,6 +64,16 @@
             <option value="12" selected>Collect 12</option>
           </select>
         </label>
+      </div>
+
+      <h2 class="panel-title"><span class="k">技</span> Abilities</h2>
+      <div class="toggle-row">
+        <label class="chk"><input type="checkbox" id="g-double"> <span>Double jump</span></label>
+        <label class="chk"><input type="checkbox" id="g-wall"> <span>Wall jump</span></label>
+      </div>
+      <div class="toggle-row">
+        <label class="chk"><input type="checkbox" id="g-dash"> <span>Dash (B)</span></label>
+        <label class="chk"><input type="checkbox" id="g-attack"> <span>Shoot (B)</span></label>
       </div>
 
       <h2 class="panel-title"><span class="k">筆</span> Build</h2>
@@ -146,6 +156,8 @@
       <h2 class="panel-title"><span class="k">雲</span> Projects</h2>
       <div id="g-cloud-out">
         <p class="hint" id="g-cloud-status">Sign in to keep your games and share them by link.</p>
+        <button class="mini wide-mini" id="g-package" type="button">出 Package as one file</button>
+        <p class="hint">Everything is seed-based, so the whole game and its music travel as text in a single HTML file.</p>
       </div>
       <div id="g-cloud" hidden>
         <div class="cloud-actions">

@@ -19,15 +19,27 @@
   // Solid ground is kept dark and its lip bright. The palette snap reduces the
   // frame to a handful of tones, so a mid-brown floor under a mid-blue sky
   // collapses into one colour and the level stops reading as a level.
+  // Ids are base36 digits in the level string, so 0-9 then a-z.
   const TILES = {
-    0: { name: 'sky',      solid: false, draw: null },
-    1: { name: 'ground',   solid: true,  fill: '#241a0e', top: '#7bbf4a' },
-    2: { name: 'stone',    solid: true,  fill: '#26262f', top: '#9a9aab' },
-    3: { name: 'platform', solid: 'top', fill: '#3a2410', top: '#c08a4a' },
-    4: { name: 'hazard',   solid: false, hazard: true, fill: '#2a0808', top: '#ff5a3c' },
-    5: { name: 'ladder',   solid: false, ladder: true, fill: '#6a4a20' },
-    6: { name: 'water',    solid: false, hazard: true, fill: '#0e2a52', top: '#3f8fd0' },
-    7: { name: 'brick',    solid: true,  fill: '#2e1410', top: '#a85a3a' },
+    0:  { name: 'sky',       solid: false },
+    1:  { name: 'ground',    solid: true,  fill: '#241a0e', top: '#7bbf4a' },
+    2:  { name: 'stone',     solid: true,  fill: '#26262f', top: '#9a9aab' },
+    3:  { name: 'ledge',     solid: 'top', fill: '#3a2410', top: '#c08a4a' },
+    4:  { name: 'spikes',    solid: false, hazard: true, fill: '#2a0808', top: '#ff5a3c' },
+    5:  { name: 'ladder',    solid: false, ladder: true, fill: '#6a4a20' },
+    6:  { name: 'water',     solid: false, water: true,  fill: '#0e2a52', top: '#3f8fd0' },
+    7:  { name: 'brick',     solid: true,  breakable: true, fill: '#2e1410', top: '#a85a3a' },
+    8:  { name: 'ice',       solid: true,  ice: true,    fill: '#1b3550', top: '#9fe8ff' },
+    9:  { name: 'belt →',    solid: true,  belt: 60,     fill: '#2a2438', top: '#c060ff' },
+    10: { name: 'belt ←',    solid: true,  belt: -60,    fill: '#2a2438', top: '#c060ff' },
+    11: { name: 'spring',    solid: true,  spring: 1.7,  fill: '#243018', top: '#3fbf4a' },
+    12: { name: 'door',      solid: true,  door: true,   fill: '#3a2a10', top: '#ffd23f' },
+    13: { name: 'checkpoint',solid: false, checkpoint: true, fill: '#101a2e', top: '#2ef2ff' },
+    14: { name: 'lava',      solid: false, hazard: true, fill: '#3a0c04', top: '#ff8c1a' },
+    15: { name: 'crate',     solid: true,  breakable: true, fill: '#3a2a14', top: '#b98a4a' },
+    16: { name: 'grass',     solid: false, decor: true,  top: '#3fbf4a' },
+    17: { name: 'backwall',  solid: false, fill: '#1a1626' },
+    18: { name: 'exit',      solid: false, exit: true,   fill: '#0d2a16', top: '#3fbf4a' },
   };
 
   const rng = seedStr => {
@@ -56,28 +68,52 @@
   }
 
   const tileInfo = id => TILES[id] || TILES[0];
-  const solidAt = (lvl, tx, ty) => {
+  // A door is solid until it is opened, which is the only tile whose solidity
+  // depends on the state of the game rather than on the tile alone.
+  const solidAt = (lvl, tx, ty, ctx) => {
     const t = tileInfo(lvl.at(tx, ty));
+    if (t.door) return !(ctx && ctx.doorsOpen);
     return t.solid === true;
   };
   const oneWayAt = (lvl, tx, ty) => tileInfo(lvl.at(tx, ty)).solid === 'top';
 
+  // Every tile the body currently overlaps, which is how ladders, water, belts
+  // and checkpoints are detected without a separate trigger volume.
+  function tilesUnder(lvl, b) {
+    const out = [];
+    const x0 = Math.floor(b.x / TILE), x1 = Math.floor((b.x + b.w - 1) / TILE);
+    const y0 = Math.floor(b.y / TILE), y1 = Math.floor((b.y + b.h - 1) / TILE);
+    for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
+      const id = lvl.at(tx, ty);
+      if (id) out.push({ tx, ty, id, info: tileInfo(id) });
+    }
+    return out;
+  }
+
   // ---------- entities ----------
   const ENTITY = {
-    coin:  { w: 6, h: 6, collect: true, score: 1 },
-    heart: { w: 7, h: 6, collect: true, heal: 1 },
-    key:   { w: 6, h: 7, collect: true, key: true },
-    goal:  { w: 8, h: 12, goal: true },
-    walker:{ w: 8, h: 10, enemy: true, speed: 22, turns: true },
-    flyer: { w: 8, h: 8,  enemy: true, speed: 26, floats: true },
-    spike: { w: 8, h: 4,  enemy: true, speed: 0 },
+    coin:   { w: 6, h: 6,  collect: true, score: 1 },
+    gem:    { w: 7, h: 7,  collect: true, score: 5 },
+    heart:  { w: 7, h: 6,  collect: true, heal: 1 },
+    key:    { w: 6, h: 7,  collect: true, key: true },
+    goal:   { w: 8, h: 12, goal: true },
+    walker: { w: 8, h: 10, enemy: true, speed: 22, turns: true, hp: 1 },
+    flyer:  { w: 8, h: 8,  enemy: true, speed: 26, floats: true, hp: 1 },
+    chaser: { w: 8, h: 10, enemy: true, speed: 40, chases: true, sight: 90, hp: 2 },
+    jumper: { w: 9, h: 9,  enemy: true, speed: 14, hops: true, hp: 1 },
+    turret: { w: 8, h: 8,  enemy: true, speed: 0, fires: 1.4, hp: 3, still: true },
+    spike:  { w: 8, h: 4,  enemy: true, speed: 0, still: true, hp: 99 },
+    shot:   { w: 3, h: 3,  bullet: true, speed: 110 },
+    mover:  { w: 16, h: 4, platform: true, speed: 26, span: 48 },
   };
 
+  let entitySeq = 0;
   function makeEntity(e) {
     const def = ENTITY[e.type] || ENTITY.coin;
-    return { type: e.type, x: e.x, y: e.y, w: def.w, h: def.h, def,
-             vx: (def.speed || 0) * (e.dir === -1 ? -1 : 1), vy: 0,
-             home: { x: e.x, y: e.y }, alive: true, t: Math.random() * 6.28 };
+    return { id: ++entitySeq, type: e.type, x: e.x, y: e.y, w: def.w, h: def.h, def,
+             vx: (def.speed || 0) * (e.dir === -1 ? -1 : 1), vy: 0, hp: def.hp || 1,
+             home: { x: e.x, y: e.y }, alive: true, t: (e.x * 7 + e.y * 13) % 628 / 100,
+             life: 0, cool: 0, tag: e.tag || '' };
   }
 
   // ---------- collision ----------
@@ -85,15 +121,16 @@
 
   // Move on one axis at a time and resolve against the grid. Doing the axes
   // separately is what stops a body catching on the seam between two tiles.
-  function moveAxis(body, lvl, dx, dy, wasFalling) {
+  function moveAxis(body, lvl, dx, dy, wasFalling, ctx) {
+    const hit = { wall: 0, floor: null, ceil: null };
     if (dx) {
       body.x += dx;
       const y0 = Math.floor(body.y / TILE), y1 = Math.floor((body.y + body.h - 1) / TILE);
       const edge = dx > 0 ? Math.floor((body.x + body.w - 1) / TILE) : Math.floor(body.x / TILE);
       for (let ty = y0; ty <= y1; ty++) {
-        if (!solidAt(lvl, edge, ty)) continue;
+        if (!solidAt(lvl, edge, ty, ctx)) continue;
         body.x = dx > 0 ? edge * TILE - body.w : (edge + 1) * TILE;
-        body.vx = 0; break;
+        body.vx = 0; hit.wall = dx > 0 ? 1 : -1; break;
       }
     }
     if (dy) {
@@ -101,16 +138,17 @@
       const x0 = Math.floor(body.x / TILE), x1 = Math.floor((body.x + body.w - 1) / TILE);
       const edge = dy > 0 ? Math.floor((body.y + body.h - 1) / TILE) : Math.floor(body.y / TILE);
       for (let tx = x0; tx <= x1; tx++) {
-        const solid = solidAt(lvl, tx, edge);
+        const solid = solidAt(lvl, tx, edge, ctx);
         // One-way tiles only catch a body that is falling onto them from above.
         const oneWay = dy > 0 && oneWayAt(lvl, tx, edge) &&
                        wasFalling && (body.y + body.h - dy) <= edge * TILE + 1;
         if (!solid && !oneWay) continue;
-        if (dy > 0) { body.y = edge * TILE - body.h; body.grounded = true; }
-        else body.y = (edge + 1) * TILE;
+        if (dy > 0) { body.y = edge * TILE - body.h; body.grounded = true; hit.floor = { tx, ty: edge }; }
+        else { body.y = (edge + 1) * TILE; hit.ceil = { tx, ty: edge }; }
         body.vy = 0; break;
       }
     }
+    return hit;
   }
 
   // ---------- the game ----------
@@ -122,16 +160,23 @@
     const view = { w: canvas.width, h: canvas.height, x: 0, y: 0 };
 
     const P = Object.assign({ speed: 82, accel: 700, friction: 820, jump: 205, gravity: 560,
-                              maxFall: 240, char: 'hero' }, spec.player || {});
+                              maxFall: 240, char: 'hero',
+                              doubleJump: false, wallJump: false, dash: false, attack: false },
+                            spec.player || {});
     let player, entities, state, score, keys, lives, message, elapsed, won;
+    let doorsOpen, respawn, fired, effects, messageAt;
 
     function reset() {
       const start = spec.start || { x: TILE, y: TILE };
+      respawn = { x: start.x, y: start.y };
       player = { x: start.x, y: start.y, w: 6, h: 12, vx: 0, vy: 0, grounded: false,
-                 face: 1, coyote: 0, buffer: 0, walk: 0, hurt: 0 };
+                 face: 1, coyote: 0, buffer: 0, walk: 0, hurt: 0,
+                 wall: 0, dash: 0, dashLeft: P.dash ? 1 : 0, doubleLeft: P.doubleJump ? 1 : 0,
+                 shotCool: 0, shotHeld: false, bWasDown: false };
       entities = (spec.entities || []).map(makeEntity);
       score = 0; keys = 0; lives = spec.lives ?? 3; elapsed = 0; won = false;
-      state = 'play'; message = '';
+      state = 'play'; message = ''; messageAt = 0;
+      doorsOpen = false; fired = []; effects = [];
     }
     reset();
 
@@ -139,85 +184,283 @@
     let aWasDown = false;
 
     function die() {
-      lives--; player.hurt = 1;
+      if (player.hurt > 0) return;
+      lives--; player.hurt = 1.1;
+      effects.push({ kind: 'pop', x: player.x, y: player.y, t: 0 });
       if (lives <= 0) { state = 'over'; message = 'GAME OVER'; }
-      else { const s = spec.start || { x: TILE, y: TILE }; player.x = s.x; player.y = s.y; player.vx = player.vy = 0; }
+      else {
+        player.x = respawn.x; player.y = respawn.y;
+        player.vx = player.vy = 0; player.dash = 0;
+      }
     }
 
     function step(dt) {
       if (state !== 'play') return;
       elapsed += dt;
+      const ctx2 = { doorsOpen };
       const wasFalling = player.vy > 0;
+      const on = tilesUnder(lvl, player);
+      const has = k => on.some(t => t.info[k]);
+      const onLadder = has('ladder'), inWater = has('water');
+      const beltTile = on.find(t => t.info.belt);
+      let iceFloor = false;
 
-      // horizontal: accelerate toward the held direction, brake when nothing is held
+      // horizontal
       const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-      if (dir) { player.vx += dir * P.accel * dt; player.face = dir; }
-      else player.vx -= Math.sign(player.vx) * Math.min(Math.abs(player.vx), P.friction * dt);
-      player.vx = Math.max(-P.speed, Math.min(P.speed, player.vx));
+      const groundInfo = player.grounded ? tileInfo(lvl.at(Math.floor((player.x + player.w / 2) / TILE),
+                                                           Math.floor((player.y + player.h + 1) / TILE))) : null;
+      iceFloor = !!(groundInfo && groundInfo.ice);
+      // Ice keeps most of the steering but almost none of the braking, which is
+      // what makes it feel slippery instead of merely slow.
+      const grip = iceFloor ? 0.55 : 1;
+      const brake = iceFloor ? 0.06 : 1;
+      if (player.dash > 0) {
+        player.dash -= dt;
+        player.vx = player.face * P.speed * 2.4;
+      } else {
+        if (dir) { player.vx += dir * P.accel * grip * dt; player.face = dir; }
+        else player.vx -= Math.sign(player.vx) * Math.min(Math.abs(player.vx), P.friction * brake * dt);
+        const cap = inWater ? P.speed * 0.7 : P.speed;
+        player.vx = Math.max(-cap, Math.min(cap, player.vx));
+      }
+      // a dash is a short burst on B, and only once per airtime
+      if (P.dash && input.b && !player.bWasDown && player.dashLeft > 0 && player.dash <= 0) {
+        player.dash = 0.16; player.dashLeft--; player.vy = 0;
+      }
+      player.bWasDown = input.b;
 
       if (mode === 'platform') {
-        // Coyote time and a jump buffer: both are what make a jump feel fair
-        // rather than technically correct.
         player.coyote = player.grounded ? 0.09 : Math.max(0, player.coyote - dt);
         const jumpHeld = input.a || input.up;
         if (jumpHeld && !aWasDown) player.buffer = 0.12;
         else player.buffer = Math.max(0, player.buffer - dt);
-        if (player.buffer > 0 && player.coyote > 0) {
+
+        if (onLadder) {
+          // On a ladder gravity stops and up/down is direct movement.
+          player.vy = ((input.down ? 1 : 0) - (input.up ? 1 : 0)) * P.speed * 0.8;
+          player.doubleLeft = P.doubleJump ? 1 : 0;
+          player.dashLeft = P.dash ? 1 : 0;
+          if (player.buffer > 0 && jumpHeld && input.left === input.right) { /* hold still on the ladder */ }
+        } else if (player.buffer > 0 && player.coyote > 0) {
           player.vy = -P.jump; player.grounded = false; player.coyote = 0; player.buffer = 0;
+        } else if (player.buffer > 0 && P.wallJump && player.wall && !player.grounded) {
+          // Kick away from the wall, which is what makes a wall jump readable.
+          player.vy = -P.jump * 0.95; player.vx = -player.wall * P.speed * 1.1;
+          player.face = -player.wall; player.buffer = 0; player.doubleLeft = P.doubleJump ? 1 : 0;
+        } else if (player.buffer > 0 && player.doubleLeft > 0 && !player.grounded) {
+          player.vy = -P.jump * 0.86; player.doubleLeft--; player.buffer = 0;
         }
-        // releasing early cuts the jump short
         if (!jumpHeld && player.vy < -40) player.vy *= 0.55;
         aWasDown = jumpHeld;
-        player.vy = Math.min(P.maxFall, player.vy + P.gravity * dt);
+
+        if (!onLadder) {
+          const g = inWater ? P.gravity * 0.25 : P.gravity;
+          const maxFall = inWater ? 60 : P.maxFall;
+          player.vy = Math.min(maxFall, player.vy + g * dt);
+          // swimming: A gives a steady paddle upward rather than a jump
+          if (inWater && (input.a || input.up)) player.vy = -50;
+          // sliding down a wall is slower than falling
+          if (P.wallJump && player.wall && player.vy > 30 && !player.grounded) player.vy = 30;
+        }
       } else {
         const vdir = (input.down ? 1 : 0) - (input.up ? 1 : 0);
         player.vy = vdir * P.speed;
       }
 
       player.grounded = false;
-      moveAxis(player, lvl, player.vx * dt, 0, wasFalling);
-      moveAxis(player, lvl, 0, player.vy * dt, wasFalling);
+      const hx = moveAxis(player, lvl, player.vx * dt, 0, wasFalling, ctx2);
+      player.wall = (!player.grounded && hx.wall) ? hx.wall : 0;
+      const hy = moveAxis(player, lvl, 0, player.vy * dt, wasFalling, ctx2);
+      // Probe for ground rather than trusting the collision that just happened:
+      // a body resting flush on a tile does not collide every frame.
+      if (!player.grounded && player.vy >= 0) {
+        const fy = Math.floor((player.y + player.h + 1) / TILE);
+        for (let tx = Math.floor(player.x / TILE); tx <= Math.floor((player.x + player.w - 1) / TILE); tx++) {
+          if (solidAt(lvl, tx, fy, ctx2) || oneWayAt(lvl, tx, fy)) {
+            player.grounded = true;
+            if (!hy.floor) hy.floor = { tx, ty: fy };
+            break;
+          }
+        }
+      }
+      if (player.grounded) { player.doubleLeft = P.doubleJump ? 1 : 0; player.dashLeft = P.dash ? 1 : 0; }
       player.walk += Math.abs(player.vx) * dt * 0.35;
       if (player.hurt > 0) player.hurt = Math.max(0, player.hurt - dt);
 
-      // hazard tiles and falling out of the world
-      const cx = Math.floor((player.x + player.w / 2) / TILE);
-      const cy = Math.floor((player.y + player.h / 2) / TILE);
-      if (tileInfo(lvl.at(cx, cy)).hazard || player.y > lvl.h * TILE + 40) die();
+      // conveyor belts carry a body that is standing on them
+      if (player.grounded && hy.floor) {
+        const f = tileInfo(lvl.at(hy.floor.tx, hy.floor.ty));
+        if (f.belt) player.x += f.belt * dt;
+        if (f.spring) { player.vy = -P.jump * f.spring; player.grounded = false; effects.push({ kind: 'pop', x: hy.floor.tx * TILE + 4, y: hy.floor.ty * TILE, t: 0 }); }
+      }
+      // headbutting a breakable tile destroys it
+      if (hy.ceil) {
+        const c = tileInfo(lvl.at(hy.ceil.tx, hy.ceil.ty));
+        if (c.breakable) { breakTile(hy.ceil.tx, hy.ceil.ty); }
+      }
+      if (beltTile && !player.grounded) { /* belts only act underfoot */ }
 
+      // tile effects the body is standing inside
+      for (const t of on) {
+        if (t.info.hazard) { die(); break; }
+        if (t.info.checkpoint && (respawn.x !== t.tx * TILE || respawn.y !== t.ty * TILE)) {
+          respawn = { x: t.tx * TILE, y: t.ty * TILE };
+          message = 'CHECKPOINT'; messageAt = elapsed;
+        }
+        if (t.info.exit) finish();
+      }
+      if (player.y > lvl.h * TILE + 40) die();
+
+      // player shots
+      if (P.attack && input.b && !player.shotHeld && player.shotCool <= 0 && player.dash <= 0) {
+        entities.push(makeEntity({ type: 'shot', x: player.x + (player.face > 0 ? player.w : -3), y: player.y + 4 }));
+        entities[entities.length - 1].vx = player.face * ENTITY.shot.speed;
+        player.shotCool = 0.28;
+      }
+      player.shotHeld = input.b;
+      player.shotCool = Math.max(0, player.shotCool - dt);
+
+      updateEntities(dt, ctx2);
+      runTriggers();
+    }
+
+    function breakTile(tx, ty) {
+      lvl.tiles[ty * lvl.w + tx] = 0;
+      effects.push({ kind: 'break', x: tx * TILE, y: ty * TILE, t: 0 });
+    }
+
+    function finish() {
+      const need = (spec.rules && spec.rules.collect) || 0;
+      if (score >= need) { state = 'won'; won = true; message = 'CLEAR'; }
+      else { message = `${need - score} TO GO`; messageAt = elapsed; }
+    }
+
+    function updateEntities(dt, ctx2) {
       for (const e of entities) {
         if (!e.alive) continue;
-        if (e.def.enemy && e.def.speed) {
-          if (e.def.floats) {
-            e.t += dt; e.y = e.home.y + Math.sin(e.t * 2) * 10;
+        const d = e.def;
+
+        if (d.bullet) {
+          e.x += e.vx * dt; e.y += e.vy * dt; e.life += dt;
+          if (e.life > 2.2 || solidAt(lvl, Math.floor(e.x / TILE), Math.floor(e.y / TILE), ctx2)) { e.alive = false; continue; }
+        } else if (d.platform) {
+          // A moving platform carries whatever is riding it.
+          e.t += dt;
+          const nx = e.home.x + Math.sin(e.t * (e.def.speed / d.span) * 2) * d.span;
+          const carry = player.grounded && player.y + player.h <= e.y + 3 &&
+                        player.x + player.w > e.x && player.x < e.x + e.w;
+          const dxp = nx - e.x; e.x = nx;
+          if (carry) { player.x += dxp; player.y = e.y - player.h; }
+        } else if (d.enemy && !d.still) {
+          if (d.chases) {
+            const dx = (player.x + player.w / 2) - (e.x + e.w / 2);
+            const dy = (player.y + player.h / 2) - (e.y + e.h / 2);
+            const near = Math.hypot(dx, dy) < d.sight;
+            e.vx = near ? Math.sign(dx) * d.speed : 0;
+            if (mode === 'topdown') { e.vy = near ? Math.sign(dy) * d.speed : 0; e.y += e.vy * dt; }
             e.x += e.vx * dt;
-            if (solidAt(lvl, Math.floor((e.x + (e.vx > 0 ? e.w : 0)) / TILE), Math.floor(e.y / TILE))) e.vx *= -1;
+            if (solidAt(lvl, Math.floor((e.x + (e.vx > 0 ? e.w : 0)) / TILE), Math.floor((e.y + e.h / 2) / TILE), ctx2)) e.x -= e.vx * dt;
+          } else if (d.floats) {
+            e.t += dt; e.y = e.home.y + Math.sin(e.t * 2) * 10; e.x += e.vx * dt;
+            if (solidAt(lvl, Math.floor((e.x + (e.vx > 0 ? e.w : 0)) / TILE), Math.floor(e.y / TILE), ctx2)) e.vx *= -1;
+          } else if (d.hops) {
+            e.vy = Math.min(P.maxFall, e.vy + P.gravity * dt);
+            e.grounded = false;
+            moveAxis(e, lvl, e.vx * dt, 0, e.vy > 0, ctx2);
+            moveAxis(e, lvl, 0, e.vy * dt, e.vy > 0, ctx2);
+            if (e.grounded) { e.cool -= dt; if (e.cool <= 0) { e.vy = -150; e.cool = 0.9 + (e.id % 5) * 0.12; } }
           } else {
             e.x += e.vx * dt;
             const ahead = Math.floor((e.x + (e.vx > 0 ? e.w + 1 : -1)) / TILE);
             const foot = Math.floor((e.y + e.h + 1) / TILE);
             const mid = Math.floor((e.y + e.h / 2) / TILE);
-            // turn at a wall, and at the edge of the ground it is standing on
-            if (solidAt(lvl, ahead, mid) || (e.def.turns && !solidAt(lvl, ahead, foot))) {
+            if (solidAt(lvl, ahead, mid, ctx2) || (d.turns && !solidAt(lvl, ahead, foot, ctx2))) {
               e.vx *= -1; e.x += e.vx * dt;
             }
           }
         }
+        if (d.fires) {
+          e.cool -= dt;
+          if (e.cool <= 0) {
+            e.cool = d.fires;
+            const dx = (player.x + player.w / 2) - (e.x + e.w / 2);
+            const dy = (player.y + player.h / 2) - (e.y + e.h / 2);
+            const len = Math.hypot(dx, dy) || 1;
+            if (len < 140) {
+              const shot = makeEntity({ type: 'shot', x: e.x + 2, y: e.y + 2 });
+              shot.vx = dx / len * ENTITY.shot.speed * 0.7;
+              shot.vy = dy / len * ENTITY.shot.speed * 0.7;
+              shot.foe = true; entities.push(shot);
+            }
+          }
+        }
+
+        // player shots hurt enemies
+        if (d.bullet && !e.foe) {
+          for (const other of entities) {
+            if (!other.alive || !other.def.enemy || other.def.hp >= 99) continue;
+            if (!overlaps(e, other)) continue;
+            other.hp -= 1; e.alive = false;
+            if (other.hp <= 0) { other.alive = false; score += 1; effects.push({ kind: 'pop', x: other.x, y: other.y, t: 0 }); }
+            break;
+          }
+          if (!e.alive) continue;
+        }
+
         if (!overlaps(player, e)) continue;
-        if (e.def.collect) {
+        if (d.collect) {
           e.alive = false;
-          if (e.def.key) keys++; else if (e.def.heal) lives = Math.min(9, lives + 1); else score += e.def.score || 1;
-        } else if (e.def.goal) {
-          const need = spec.rules && spec.rules.collect;
-          if (!need || score >= need) { state = 'won'; won = true; message = 'CLEAR'; }
-          else message = `${need - score} TO GO`;
-        } else if (e.def.enemy && player.hurt <= 0) {
-          // landing on an enemy from above kills it, as it should
-          if (mode === 'platform' && player.vy > 40 && player.y + player.h - player.vy * dt <= e.y + 4) {
-            e.alive = false; player.vy = -P.jump * 0.7; score += 1;
+          if (d.key) keys++;
+          else if (d.heal) lives = Math.min(9, lives + 1);
+          else score += d.score || 1;
+          effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 });
+        } else if (d.goal) {
+          finish();
+        } else if ((d.enemy || (d.bullet && e.foe)) && player.hurt <= 0) {
+          if (d.bullet) { e.alive = false; die(); }
+          else if (mode === 'platform' && player.vy > 40 && player.y + player.h - player.vy * dt <= e.y + 4 && !d.still) {
+            e.hp -= 1;
+            player.vy = -P.jump * 0.7;
+            if (e.hp <= 0) { e.alive = false; score += 1; effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 }); }
           } else die();
         }
       }
+      entities = entities.filter(e => e.alive || !e.def.bullet);
+      for (const fx of effects) fx.t += dt;
+      effects = effects.filter(fx => fx.t < 0.35);
+    }
+
+    // ---------- triggers ----------
+    // The scriptable layer: a handful of conditions and consequences, declared
+    // in the game's own JSON. Small on purpose, so a person - or a model - can
+    // write one without learning a language.
+    function runTriggers() {
+      const list = spec.triggers || [];
+      for (let i = 0; i < list.length; i++) {
+        const tr = list[i];
+        if (fired[i] && tr.once !== false) continue;
+        const w = tr.when || {};
+        let ok = false;
+        if (w.score !== undefined) ok = score >= w.score;
+        else if (w.keys !== undefined) ok = keys >= w.keys;
+        else if (w.enemiesLeft !== undefined) ok = entities.filter(e => e.alive && e.def.enemy).length <= w.enemiesLeft;
+        else if (w.reach) ok = player.x >= (w.reach.x ?? 0) * TILE && player.y >= (w.reach.y ?? -1e9) * TILE;
+        else if (w.time !== undefined) ok = elapsed >= w.time;
+        if (!ok) continue;
+        fired[i] = true;
+        act(tr.do || {});
+      }
+      // doors open on their own once every key is held, which is the rule people expect
+      if (!doorsOpen && spec.rules && spec.rules.keys && keys >= spec.rules.keys) doorsOpen = true;
+    }
+    function act(a) {
+      if (a.openDoors) doorsOpen = true;
+      if (a.message) { message = String(a.message).slice(0, 24).toUpperCase(); messageAt = elapsed; }
+      if (a.win) { state = 'won'; won = true; message = 'CLEAR'; }
+      if (a.lose) { state = 'over'; message = 'GAME OVER'; }
+      if (a.spawn) entities.push(makeEntity(a.spawn));
+      if (a.setTile) lvl.tiles[a.setTile.y * lvl.w + a.setTile.x] = a.setTile.id;
+      if (a.give) score += a.give;
     }
 
     // ---------- drawing ----------
@@ -281,12 +524,21 @@
           const wave = Math.sin(elapsed * 6) * 1.5;
           ctx.fillStyle = (spec.rules && spec.rules.collect && score < spec.rules.collect) ? '#7a7a8a' : '#3fbf4a';
           ctx.fillRect(sx + 5, sy + 1 + wave, 8, 6);
+        } else if (e.def.bullet) {
+          ctx.fillStyle = e.foe ? '#ff5a3c' : '#2ef2ff';
+          ctx.fillRect(sx, sy, e.w, e.h);
+        } else if (e.def.platform) {
+          ctx.fillStyle = '#241a0e'; ctx.fillRect(sx, sy, e.w, e.h);
+          ctx.fillStyle = '#c08a4a'; ctx.fillRect(sx, sy, e.w, 2);
         } else {
           ctx.fillStyle = '#0a0714'; ctx.fillRect(sx - 1, sy - 1, e.w + 2, e.h + 2);
-          ctx.fillStyle = e.def.floats ? '#c060ff' : '#ff5a3c';
+          ctx.fillStyle = e.def.chases ? '#ff2e88' : e.def.fires ? '#c060ff'
+                        : e.def.hops ? '#ffd23f' : e.def.floats ? '#c060ff' : '#ff5a3c';
           ctx.fillRect(sx, sy, e.w, e.h);
+          if (e.def.fires) { ctx.fillStyle = '#0a0714'; ctx.fillRect(sx + 2, sy + 2, e.w - 4, e.h - 4); }
           ctx.fillStyle = '#fff';
           ctx.fillRect(sx + (e.vx > 0 ? e.w - 3 : 1), sy + 2, 2, 2);
+          if (e.hp > 1) { ctx.fillStyle = '#ffd23f'; ctx.fillRect(sx, sy - 3, Math.min(e.w, e.hp * 3), 1); }
         }
       }
 
@@ -297,6 +549,15 @@
         const chars = window.NeoScene && window.NeoScene.CHARS;
         if (chars && chars[P.char]) window.NeoScene.drawChar(ctx, chars[P.char], psx, psy, 1, player.walk, player.face);
         else { ctx.fillStyle = '#2ef2ff'; ctx.fillRect(psx - 3, psy - 12, 6, 12); }
+      }
+
+      for (const fx of effects) {
+        const a = 1 - fx.t / 0.35, r = 2 + fx.t * 22;
+        ctx.fillStyle = fx.kind === 'break' ? `rgba(200,150,90,${a})` : `rgba(255,246,200,${a})`;
+        for (let i = 0; i < 6; i++) {
+          const ang = i * 1.047;
+          ctx.fillRect(Math.round(fx.x - ox + Math.cos(ang) * r), Math.round(fx.y - oy + Math.sin(ang) * r), 2, 2);
+        }
       }
 
       if (opts.hud !== false) {
@@ -311,7 +572,8 @@
       if (state !== 'play' || message) {
         ctx.font = '8px "Press Start 2P", monospace';
         ctx.textAlign = 'center';
-        const text = state === 'won' ? 'CLEAR' : state === 'over' ? 'GAME OVER' : message;
+        const fresh = elapsed - messageAt < 1.6;
+        const text = state === 'won' ? 'CLEAR' : state === 'over' ? 'GAME OVER' : (fresh ? message : '');
         if (text) {
           ctx.fillStyle = '#000'; ctx.fillText(text, view.w / 2 + 1, view.h / 2 + 1);
           ctx.fillStyle = state === 'won' ? '#3fbf4a' : '#ffffff';

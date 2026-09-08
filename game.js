@@ -19,12 +19,10 @@
     cave:  ['#0d0a16', '#241a30'],
   };
 
-  const PIECES = [
-    { id: 0, name: 'Erase' }, { id: 1, name: 'Ground' }, { id: 2, name: 'Stone' },
-    { id: 3, name: 'Ledge' }, { id: 7, name: 'Brick' }, { id: 4, name: 'Spikes' },
-    { id: 6, name: 'Water' }, { id: 5, name: 'Ladder' },
-  ];
-  const PLACEABLE = ['coin', 'heart', 'key', 'walker', 'flyer', 'goal'];
+  // Every tile and piece the engine knows, in the order they are most used.
+  const PIECES = [0, 1, 2, 3, 7, 15, 4, 14, 6, 5, 8, 9, 10, 11, 12, 13, 18, 16, 17];
+  const PLACEABLE = ['coin', 'gem', 'heart', 'key', 'goal',
+                     'walker', 'flyer', 'chaser', 'jumper', 'turret', 'spike', 'mover'];
 
   let game = null, spec = null, brush = { kind: 'tile', id: 1 }, painting = false;
   let audio = null, gain = null, music = null, buffer = null, savedTracks = [];
@@ -45,6 +43,10 @@
     audioSrc: $('g-audio-src').value,
     vol: +$('g-vol').value / 100,
     title: $('g-title').value,
+    doubleJump: $('g-double').checked,
+    wallJump: $('g-wall').checked,
+    dash: $('g-dash').checked,
+    attack: $('g-attack').checked,
     edit: $('g-edit').checked,
     grid: $('g-grid').checked,
   });
@@ -85,6 +87,10 @@
     spec = JSON.parse(JSON.stringify(from));
     spec.player = { ...(spec.player || {}), char: c.char };
     spec.lives = c.lives;
+    spec.player.doubleJump = c.doubleJump;
+    spec.player.wallJump = c.wallJump;
+    spec.player.dash = c.dash;
+    spec.player.attack = c.attack;
     spec.rules = { ...(spec.rules || {}), collect: c.goal || 0 };
     [spec.sky0, spec.sky1] = SKIES[c.sky] || SKIES.day;
     sizeCanvas();
@@ -189,14 +195,15 @@
   }
   function buildPalette() {
     const tiles = $('g-tiles'); tiles.innerHTML = '';
-    for (const p of PIECES) {
-      const info = window.NeoGame.TILES[p.id] || {};
-      const btn = pieceButton(p.name, x => {
-        if (!info.fill) { x.strokeStyle = '#4b4368'; x.beginPath(); x.moveTo(4,4); x.lineTo(16,12); x.moveTo(16,4); x.lineTo(4,12); x.stroke(); return; }
-        x.fillStyle = info.fill; x.fillRect(2, 4, 16, 10);
-        if (info.top) { x.fillStyle = info.top; x.fillRect(2, 4, 16, 3); }
-      }, () => { brush = { kind: 'tile', id: p.id }; markCurrent(); });
-      btn.dataset.piece = `tile:${p.id}`;
+    for (const id of PIECES) {
+      const info = window.NeoGame.TILES[id] || {};
+      const label = id === 0 ? 'Erase' : (info.name || String(id));
+      const btn = pieceButton(label, x => {
+        if (id === 0) { x.strokeStyle = '#4b4368'; x.beginPath(); x.moveTo(4,4); x.lineTo(16,12); x.moveTo(16,4); x.lineTo(4,12); x.stroke(); return; }
+        if (info.fill) { x.fillStyle = info.fill; x.fillRect(2, 4, 16, 10); }
+        if (info.top) { x.fillStyle = info.top; x.fillRect(2, 4, 16, info.decor ? 10 : 3); }
+      }, () => { brush = { kind: 'tile', id }; markCurrent(); });
+      btn.dataset.piece = `tile:${id}`;
       tiles.append(btn);
     }
     const ents = $('g-entities'); ents.innerHTML = '';
@@ -287,6 +294,8 @@
       set('g-sky', d.look.sky); set('g-char', d.look.char); set('g-lives', d.look.lives);
       set('g-goal', d.look.goal); set('g-vol', Math.round((d.look.vol ?? .7) * 100));
       set('g-title', d.look.title);
+      for (const [id, k] of [['g-double','doubleJump'],['g-wall','wallJump'],['g-dash','dash'],['g-attack','attack']])
+        if ($(id)) $(id).checked = !!d.look[k];
       if ($('g-edit')) $('g-edit').checked = d.look.edit !== false;
       if ($('g-grid')) $('g-grid').checked = d.look.grid !== false;
     }
@@ -338,6 +347,102 @@
     } catch { cloudStatus('Could not share that game.'); }
   }
 
+  // ---------- send it to a friend ----------
+  // The package is one HTML file with the engine, the level and the track's
+  // pattern inlined. Because everything here is seed-based rather than
+  // rendered, the whole game - music included - is text.
+  async function packageGame() {
+    const c = cfg();
+    const btn = $('g-package');
+    btn.disabled = true; const was = btn.textContent; btn.textContent = 'Packing…';
+    try {
+      const files = ['neo-palette.js', 'chip.js', 'video-gen.js', 'game-engine.js'];
+      const src = [];
+      for (const f of files) {
+        const r = await fetch(f);
+        if (!r.ok) throw new Error(`could not read ${f}`);
+        src.push(`/* ${f} */\n` + await r.text());
+      }
+      const track = savedTracks.find(t => t.id === c.audioSrc);
+      const payload = {
+        spec: game.snapshot(),
+        title: c.title || 'neojutsu-game',
+        chip: c.chip, dither: c.dither, zoom: c.zoom,
+        pattern: track ? track.pattern : null,
+      };
+      const html = PACKAGE_HTML
+        .replace('/*__ENGINE__*/', src.join('\n'))
+        .replace('/*__PAYLOAD__*/', JSON.stringify(payload).replace(/</g, '\\u003c'));
+      const blob = new Blob([html], { type: 'text/html' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${(c.title || 'neojutsu-game').replace(/[^\w.-]+/g, '-')}.html`;
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      cloudStatus(`Packaged ${a.download} · ${(blob.size / 1024).toFixed(0)} KB · send it to anyone`);
+    } catch (e) {
+      cloudStatus(`Could not package: ${e.message}. Packaging needs the site to be served, not opened from a file.`);
+    } finally { btn.disabled = false; btn.textContent = was; }
+  }
+
+  const PACKAGE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEO術 game</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+ html,body{margin:0;height:100%;background:#07060c;color:#ece8f5;font-family:'Press Start 2P',monospace;
+   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+ h1{font-size:11px;letter-spacing:1px;color:#2ef2ff;margin:0}
+ canvas{image-rendering:pixelated;box-shadow:0 0 0 2px #2a2340,0 20px 60px #000a;border-radius:4px;touch-action:none}
+ p{font-size:7px;color:#9a92b3;margin:0;text-align:center;line-height:1.9}
+ button{font-family:inherit;font-size:9px;background:#14111f;color:#ece8f5;border:1px solid #2a2340;
+   border-radius:8px;padding:12px 14px;min-width:48px;touch-action:none;user-select:none}
+ button:active{border-color:#ff2e88;color:#ff2e88}
+ #pad{display:none;gap:26px;align-items:center}
+ #dpad{display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(2,40px);gap:4px}
+ #dpad button:nth-child(1){grid-area:1/1/3/2}#dpad button:nth-child(2){grid-area:1/2}
+ #dpad button:nth-child(3){grid-area:2/2}#dpad button:nth-child(4){grid-area:1/3/3/4}
+ #ab{display:flex;gap:10px}#ab button{width:54px;height:54px;border-radius:50%}
+ @media(hover:none),(max-width:760px){#pad{display:flex}}
+</style></head><body>
+<h1 id="t">NEO術</h1>
+<canvas id="c"></canvas>
+<div id="pad"><div id="dpad">
+ <button data-k="left">◀</button><button data-k="up">▲</button><button data-k="down">▼</button><button data-k="right">▶</button>
+</div><div id="ab"><button data-k="b">B</button><button data-k="a">A</button></div></div>
+<p id="h">ARROWS MOVE · Z / SPACE JUMP · X ACTION<br>MADE WITH NEOJUTSU</p>
+<script>/*__ENGINE__*/<\/script>
+<script>
+const D = /*__PAYLOAD__*/;
+document.getElementById('t').textContent = D.title;
+const P = window.NeoPalette.PALETTES[D.chip] || window.NeoPalette.PALETTES.gameboy;
+const low = document.createElement('canvas'); low.width = P.size[0]; low.height = P.size[1];
+const lctx = low.getContext('2d', {willReadFrequently:true});
+const c = document.getElementById('c'); c.width = P.size[0]*D.zoom; c.height = P.size[1]*D.zoom;
+const dctx = c.getContext('2d'); dctx.imageSmoothingEnabled = false;
+const present = () => { window.NeoPalette.snap(lctx, low.width, low.height, {chip:D.chip, dither:D.dither, dithAmt:.6});
+  dctx.drawImage(low,0,0,c.width,c.height); };
+const g = window.NeoGame.create(low, D.spec, {onFrame: present});
+present();
+const KEY={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',ArrowUp:'up',KeyW:'up',
+  ArrowDown:'down',KeyS:'down',Space:'a',KeyZ:'a',KeyX:'b',KeyK:'b'};
+addEventListener('keydown',e=>{const k=KEY[e.code];if(k){e.preventDefault();g.input[k]=true;}
+  if(e.code==='KeyR'){g.reset();present();}});
+addEventListener('keyup',e=>{const k=KEY[e.code];if(k)g.input[k]=false;});
+for(const b of document.querySelectorAll('#pad button')){const k=b.dataset.k;
+  const set=on=>{g.input[k]=on;};
+  b.addEventListener('pointerdown',e=>{e.preventDefault();set(true);});
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>set(false)));}
+let started=false;
+function begin(){ if(started) return; started=true; g.start();
+  if(D.pattern && window.NeoChip){ const ac=new (window.AudioContext||window.webkitAudioContext)();
+    window.NeoChip.render(D.pattern,{tail:false}).then(buf=>{ const src=ac.createBufferSource();
+      const gn=ac.createGain(); gn.gain.value=.7; src.buffer=buf; src.loop=true;
+      src.connect(gn).connect(ac.destination); src.start(); }).catch(()=>{}); } }
+addEventListener('keydown',begin,{once:true});
+c.addEventListener('pointerdown',begin,{once:true});
+document.getElementById('pad').addEventListener('pointerdown',begin,{once:true});
+<\/script></body></html>`;
+
   // ---------- wiring ----------
   function init() {
     const tsel = $('g-template');
@@ -365,7 +470,7 @@
       $('g-zoom-v').textContent = $('g-zoom').value;
       sizeCanvas(); present(); save();
     });
-    for (const id of ['g-char', 'g-lives', 'g-goal']) $(id).addEventListener('change', () => {
+    for (const id of ['g-char', 'g-lives', 'g-goal', 'g-double', 'g-wall', 'g-dash', 'g-attack']) $(id).addEventListener('change', () => {
       build(game ? game.snapshot() : spec); save();
     });
     for (const id of ['g-edit', 'g-grid']) $(id).addEventListener('change', () => {
@@ -381,7 +486,8 @@
       open ? $('g-inspector').removeAttribute('hidden') : $('g-inspector').setAttribute('hidden', '');
       $('g-toggle-inspector').setAttribute('aria-expanded', String(open));
     });
-    $('g-open-share').addEventListener('click', cloudShare);
+    $('g-open-share').addEventListener('click', packageGame);
+    $('g-package').addEventListener('click', packageGame);
     $('g-cloud-save').addEventListener('click', () => cloudSave(false));
     $('g-cloud-new').addEventListener('click', () => cloudSave(true));
     $('g-cloud-share').addEventListener('click', cloudShare);

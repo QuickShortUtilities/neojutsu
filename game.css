@@ -41,3 +41,4 @@
 @media (hover: none), (max-width: 760px) { .pad { display: flex; } }
 
 #g-readout { color: var(--cyan); font: 13px var(--mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wide-mini { width: 100%; margin-bottom: 10px; }
