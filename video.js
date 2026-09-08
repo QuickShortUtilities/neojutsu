@@ -54,6 +54,7 @@
     react: +$('v-react').value / 100, len: +$('v-len').value,
     audioSrc: $('v-audio-src').value, vol: +$('v-vol').value / 100,
     fps: +$('v-fps').value, scale: +$('v-scale').value, title: $('v-title').value,
+    container: $('v-container').value,
     fx: {
       bloom: +$('v-bloom').value / 100, glitch: +$('v-glitch').value / 100,
       chroma: +$('v-chroma').value / 100, vignette: +$('v-vig').value / 100,
@@ -83,7 +84,9 @@
 
   // ---------- audio envelope ----------
   const EMPTY = { level: 0, bass: 0, mid: 0, treble: 0, freq: [], wave: [] };
+  let offlineEnv = null;
   function envelope(cfg) {
+    if (offlineEnv) return offlineEnv;
     if (!analyser || !playing || !cfg.react) return EMPTY;
     analyser.getByteFrequencyData(freqData);
     analyser.getFloatTimeDomainData(waveData);
@@ -325,43 +328,86 @@
   const toggle = () => (playing ? stop() : play());
 
   // ---------- export ----------
+  const safeName = t => (t || 'neojutsu-video').replace(/[^\w.-]+/g, '-');
+  function download(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    status(`Exported ${name} · ${(blob.size / 1048576).toFixed(1)} MB`);
+  }
+  const seekTo = (v, t) => new Promise(res => {
+    if (Math.abs(v.currentTime - t) < 1e-3) return res();
+    const done = () => { v.removeEventListener('seeked', done); res(); };
+    v.addEventListener('seeked', done);
+    try { v.currentTime = t; } catch { done(); }
+  });
+
   async function exportVideo() {
     const cfg = look();
     if (!ready()) { status('Nothing to export yet.'); return; }
+    stop(); genTime = 0;
+    await loadSoundtrack(cfg);
+    const total = duration(cfg) || cfg.len;
     const [bw, bh] = baseSize(cfg);
     const out = document.createElement('canvas');
     out.width = bw * cfg.scale; out.height = bh * cfg.scale;
     const octx = out.getContext('2d'); octx.imageSmoothingEnabled = false;
-    stop(); genTime = 0; seekClips(0);
+
+    if (cfg.container === 'mp4' && window.NeoVideoExport.supported()) {
+      try { await exportMp4(cfg, out, octx, total, bw, bh); return; }
+      catch (e) { status(`MP4 export failed (${e.message}). Falling back to WebM…`); }
+    }
+    await exportWebm(cfg, out, octx, total);
+  }
+
+  // Frame-by-frame: no real-time playback, so this finishes faster than the
+  // video is long and the result is deterministic for a given seed.
+  async function exportMp4(cfg, out, octx, total, bw, bh) {
+    const fps = cfg.fps;
+    const envs = buffer ? window.NeoVideoExport.analyse(buffer, fps, total, cfg.react) : null;
+    const t0 = performance.now();
+    // Flat palette art with hard edges is exactly what H.264 hates, so spend
+    // bits generously - chroma subsampling smears the pixel grid otherwise.
+    const bitrate = Math.min(40e6, Math.max(1.2e7, Math.round(out.width * out.height * fps * 0.9)));
+    const blob = await window.NeoVideoExport.encode({
+      width: out.width, height: out.height, fps, total, buffer, quality: bitrate,
+      onProgress: p => status(`Rendering MP4 · ${Math.round(p * 100)}%`),
+      onFrame: async f => {
+        genTime = f / fps;
+        offlineEnv = envs ? envs[Math.min(f, envs.length - 1)] : EMPTY;
+        for (const L of layers) if (L.on && L._ready) await seekTo(L._video, genTime % (L._video.duration || 1));
+        processFrame(cfg, 1 / fps);
+        octx.drawImage(display, 0, 0, out.width, out.height);
+        return out;
+      },
+    });
+    offlineEnv = null;
+    const secs = ((performance.now() - t0) / 1000);
+    download(blob, `${safeName(cfg.title)}.mp4`);
+    status(`Exported ${safeName(cfg.title)}.mp4 · ${(blob.size / 1048576).toFixed(1)} MB · ${secs.toFixed(1)}s for ${Math.round(total)}s of video`);
+  }
+
+  async function exportWebm(cfg, out, octx, total) {
+    if (typeof MediaRecorder === 'undefined') { status('This browser cannot record video.'); return; }
     const ac = ctx();
     recorderDest = ac.createMediaStreamDestination();
-    await loadSoundtrack(cfg);
-    const total = duration(cfg) || cfg.len;
-    const paint = () => { octx.drawImage(display, 0, 0, out.width, out.height); if (running) requestAnimationFrame(paint); };
-    let running = true;
-
-    if (typeof MediaRecorder === 'undefined') { status('This browser cannot record video.'); return; }
+    seekClips(0);
     const stream = out.captureStream(cfg.fps);
     const type = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
       .find(t => MediaRecorder.isTypeSupported(t)) || '';
     const rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 6e6 } : undefined);
     const chunks = []; rec.ondataavailable = e => e.data.size && chunks.push(e.data);
     const stopped = new Promise(res => { rec.onstop = res; });
+    let running = true;
+    const paint = () => { octx.drawImage(display, 0, 0, out.width, out.height); if (running) requestAnimationFrame(paint); };
     rec.start(250); paint();
     for (const L of layers) if (L._ready && L.on) { try { await L._video.play(); } catch {} }
     setPlaying(true); startAudio(cfg);
     status(`Recording ${Math.round(total)}s… this runs in real time.`);
     await new Promise(res => setTimeout(res, total * 1000));
     running = false; rec.stop(); stop(); await stopped;
-    const blob = new Blob(chunks, { type: type || 'video/webm' });
-    download(blob, `${(cfg.title || 'neojutsu-video').replace(/[^\w.-]+/g, '-')}.webm`);
+    download(new Blob(chunks, { type: type || 'video/webm' }), `${safeName(cfg.title)}.webm`);
     recorderDest = null;
-  }
-  function download(blob, name) {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = name; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    status(`Exported ${name} · ${(blob.size / 1048576).toFixed(1)} MB`);
   }
 
   // ---------- layer UI ----------
@@ -413,7 +459,7 @@
 
   // ---------- settings ----------
   const status = msg => { $('v-status').textContent = msg; };
-  const GLOBAL_FIELDS = ['v-chip','v-res','v-format','v-pix','v-dither','v-dith','v-bright','v-contrast','v-react','v-len','v-fps','v-scale','v-vol','v-title','v-bloom','v-glitch','v-chroma','v-vig','v-curve','v-text','v-text-pos','v-text-col','v-text-size'];
+  const GLOBAL_FIELDS = ['v-chip','v-res','v-format','v-pix','v-dither','v-dith','v-bright','v-contrast','v-react','v-len','v-fps','v-scale','v-vol','v-title','v-container','v-bloom','v-glitch','v-chroma','v-vig','v-curve','v-text','v-text-pos','v-text-col','v-text-size'];
   const LAYER_FIELDS = ['v-mode','v-scene','v-seed','v-speed','v-density','v-cut','v-blend','v-opacity'];
 
   function save() {
@@ -434,7 +480,7 @@
     set('v-bright', l.bright); set('v-contrast', l.contrast); set('v-fps', l.fps); set('v-scale', l.scale);
     set('v-vol', l.vol != null ? Math.round(l.vol * 100) : null);
     set('v-react', l.react != null ? Math.round(l.react * 100) : null);
-    set('v-len', l.len); set('v-title', l.title);
+    set('v-len', l.len); set('v-title', l.title); set('v-container', l.container);
     if (l.fx) { set('v-bloom', Math.round(l.fx.bloom*100)); set('v-glitch', Math.round(l.fx.glitch*100));
       set('v-chroma', Math.round(l.fx.chroma*100)); set('v-vig', Math.round(l.fx.vignette*100)); set('v-curve', Math.round(l.fx.curve*100)); }
     if (l.text) { set('v-text', l.text.text); set('v-text-pos', l.text.pos); set('v-text-col', l.text.color);

@@ -255,6 +255,13 @@
 
       <h2 class="panel-title"><span class="k">出</span> Export</h2>
       <label class="field">
+        <span>File</span>
+        <select id="v-container">
+          <option value="mp4" selected>MP4 · H.264 · shareable</option>
+          <option value="webm">WebM · VP9</option>
+        </select>
+      </label>
+      <label class="field">
         <span>Frame rate</span>
         <select id="v-fps">
           <option value="30" selected>30 fps</option>
@@ -266,7 +273,7 @@
         <span>Upscale <b id="v-scale-v">4</b>×</span>
         <input type="range" id="v-scale" min="1" max="8" step="1" value="4" aria-label="Export upscale">
       </label>
-      <p class="hint" id="v-export-note">Recorded live, so an export takes as long as the clip runs.</p>
+      <p class="hint" id="v-export-note">MP4 renders frame by frame, faster than the clip runs. WebM records live.</p>
       <p class="hint" id="v-status" role="status"></p>
     </aside>
   </main>
@@ -274,6 +281,8 @@
   <script src="chip.js"></script>
   <script src="video-gen.js"></script>
   <script src="video-fx.js"></script>
+  <script src="vendor/mp4-muxer-5.2.1.min.js"></script>
+  <script src="video-export.js"></script>
   <script src="neo-select.js"></script>
   <script src="video.js"></script>
 </body>
