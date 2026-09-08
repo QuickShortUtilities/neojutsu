@@ -24,7 +24,6 @@
     <nav class="nav-links">
       <span class="engine-badge" id="engine-badge" title="The generator currently running">engine: 型 kata-A</span>
       <a href="index.html#how">About</a>
-      <a class="nav-gh" href="https://github.com/QuickShortUtilities/neojutsu" target="_blank" rel="noopener">GitHub</a>
     </nav>
   </header>
 
@@ -215,18 +214,12 @@
       </div>
       <div class="fx fx-master">
         <div class="fx-sub">master</div>
-        <label class="fx-row"><span>Crush</span><input type="range" id="fx-crush" min="0" max="100" value="0"><b id="fx-crush-v">0</b></label>
-        <label class="fx-row"><span>Echo time</span>
-          <select id="fx-echodiv">
-            <option value="16">1/16</option>
-            <option value="8">1/8</option>
-            <option value="8d" selected>1/8 dotted</option>
-            <option value="4">1/4</option>
-          </select>
-        </label>
-        <label class="fx-row"><span>Echo feedback</span><input type="range" id="fx-echofb" min="0" max="80" value="35"><b id="fx-echofb-v">35</b></label>
         <label class="fx-row"><span>Swing</span><input type="range" id="fx-swing" min="0" max="100" value="0"><b id="fx-swing-v">0</b></label>
       </div>
+
+      <h2 class="panel-title mt"><span class="k">機</span> Rack</h2>
+      <p class="rack-hint">Open a unit to turn it on and dial it in. Any dial with ◠ Motion can sweep itself in time with the track.</p>
+      <div class="fx-dock" id="fx-dock" aria-label="Effects rack"></div>
 
       <h2 class="panel-title mt"><span class="k">札</span> Track</h2>
       <div class="track-meta">
@@ -284,12 +277,14 @@
   </main>
 
   <footer class="footer studio-footer">
-    <p>NeoJutsu Studio · everything runs in your browser · nothing is uploaded<br>MP3 encoding by <a href="https://github.com/zhuker/lamejs">lamejs</a> / <a href="https://lame.sourceforge.net/">LAME</a> · <a href="vendor/LGPL-3.0.txt">LGPL license</a></p>
+    <p>NeoJutsu Studio · everything runs in your browser · nothing is uploaded · <a class="footer-licenses" href="vendor/README.md">Licenses</a></p>
   </footer>
 
+  <script src="fx-rack.js"></script>
   <script src="chip.js"></script>
   <script src="audio-export.js"></script>
   <script src="midi-import.js"></script>
+  <script src="fx-ui.js"></script>
   <script src="studio.js"></script>
 </body>
 </html>

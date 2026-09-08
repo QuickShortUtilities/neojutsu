@@ -24,8 +24,8 @@
   const CHIP_FX = {
     nes:     { p1: { duty: 0.125 }, p2: { duty: 0.5 } },
     gameboy: { p1: { duty: 0.25 } },
-    genesis: { p1: { vib: 0.4, slide: true, echo: 0.25 }, p2: { echo: 0.15 }, master: { echoDiv: '8d' } },
-    c64:     { p1: { vib: 0.25, echo: 0.2 }, p2: { duty: 0.25 }, master: { crush: 0.1 } },
+    genesis: { p1: { vib: 0.4, slide: true, echo: 0.25 }, p2: { echo: 0.15 }, rack: { reverb: { on: true, size: 1.4, mix: 18 } } },
+    c64:     { p1: { vib: 0.25, echo: 0.2 }, p2: { duty: 0.25 }, rack: { crush: { on: true, bits: 11, mix: 65 } } },
   };
 
   let pattern = normalize(blank(64, 150, 'nes'));
@@ -66,6 +66,17 @@
     p.master = Object.assign(defaultMaster(), p.master || {});
     p.master.crush = bounded(p.master.crush, 0, 1, 0); p.master.echoFb = bounded(p.master.echoFb, 0, .8, .35); p.master.volume = bounded(p.master.volume, 0, 1, 1);
     p.master.swing = bounded(p.master.swing, 0, 1, 0);
+    // Effects rack. Patterns from before the rack carry their crush and echo
+    // settings across, then hand ownership to the rack.
+    const hadRack = !!p.rack;
+    p.rack = NeoRack.normalize(p.rack);
+    if (!hadRack) {
+      if (p.master.crush > 0) { p.rack.crush.on = true; p.rack.crush.bits = Math.round(12 - p.master.crush * 9); }
+      p.rack.echo.on = true;
+      p.rack.echo.feedback = Math.round(p.master.echoFb * 100);
+      p.rack.echo.div = p.master.echoDiv;
+    }
+    p.master.crush = 0;                       // the rack owns crush now
     if (!['16', '8', '8d', '4'].includes(p.master.echoDiv)) p.master.echoDiv = '8d';
     const bars = p.steps / 16, loop = p.loop || {};
     const start = Math.round(bounded(loop.start, 1, bars, 1));
@@ -198,6 +209,7 @@
     const cf = CHIP_FX[opts.chip] || {};
     for (const l of LANES) Object.assign(p.fx[l], cf[l] || {});
     Object.assign(p.master, cf.master || {});
+    for (const [id, vals] of Object.entries(cf.rack || {})) Object.assign(p.rack[id], vals);
     return { r, steps, p, scale, mood, prog, degToMidi };
   }
 
@@ -402,7 +414,7 @@
   // ---- fx panel
   const fxVib = $('fx-vib'), fxTrem = $('fx-trem'), fxEcho = $('fx-echo'), fxDuty = $('fx-duty'), fxSlide = $('fx-slide'), fxArp = $('fx-arp');
   const fxInst = $('fx-inst'), fxEnv = $('fx-env');
-  const fxCrush = $('fx-crush'), fxDiv = $('fx-echodiv'), fxFb = $('fx-echofb'), fxSwing = $('fx-swing');
+  const fxSwing = $('fx-swing');
   for (const [id, label] of Object.entries(NeoChip.INSTRUMENTS)) fxInst.add(new Option(label.label, id));
   for (const [id, label] of Object.entries(NeoChip.ENVS)) fxEnv.add(new Option(label, id));
 
@@ -420,9 +432,8 @@
     $('fx-duty-row').hidden = !(melodic && effType === 'pulse' && !f.inst);
     $('fx-slide-row').hidden = !melodic;
     $('fx-arp-row').hidden = !melodic; fxArp.value = f.arp || '';
-    fxCrush.value = Math.round(pattern.master.crush * 100); $('fx-crush-v').textContent = fxCrush.value;
-    fxDiv.value = pattern.master.echoDiv; fxFb.value = Math.round(pattern.master.echoFb * 100); $('fx-echofb-v').textContent = fxFb.value;
     fxSwing.value = Math.round(pattern.master.swing * 100); $('fx-swing-v').textContent = fxSwing.value;
+    if (window.NeoFxUI) NeoFxUI.sync();
   }
   fxArp.addEventListener('change', () => { pattern.fx[lane].arp = fxArp.value || null; });
   fxTrem.addEventListener('input', () => { pattern.fx[lane].trem = fxTrem.value / 100; $('fx-trem-v').textContent = fxTrem.value; });
@@ -433,9 +444,7 @@
   fxEcho.addEventListener('input', () => { pattern.fx[lane].echo = fxEcho.value / 100; $('fx-echo-v').textContent = fxEcho.value; engine.setMix(pattern); });
   fxDuty.addEventListener('change', () => { pattern.fx[lane].duty = fxDuty.value ? +fxDuty.value : null; });
   fxSlide.addEventListener('change', () => { pattern.fx[lane].slide = fxSlide.checked; });
-  fxCrush.addEventListener('input', () => { pattern.master.crush = fxCrush.value / 100; $('fx-crush-v').textContent = fxCrush.value; });
-  fxDiv.addEventListener('change', () => { pattern.master.echoDiv = fxDiv.value; });
-  fxFb.addEventListener('input', () => { pattern.master.echoFb = fxFb.value / 100; $('fx-echofb-v').textContent = fxFb.value; });
+
 
   function syncUI() {
     bpmIn.value = pattern.bpm; bpmVal.textContent = pattern.bpm; gBpm.value = pattern.bpm; gBpmVal.textContent = pattern.bpm;
@@ -836,6 +845,20 @@
   for (const ev of ['dragenter', 'dragover']) dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
   for (const ev of ['dragleave', 'drop']) dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
   dropZone.addEventListener('drop', (e) => { const f = [...e.dataTransfer.files].find((x) => /\.midi?$/i.test(x.name)); if (f) importMidi(f); else flash('Drop a .mid file'); });
+
+  // =============== effects rack ===============
+  // Dial drags preview live; the commit at the end of a drag is what enters history.
+  let rackDirty = false;
+  NeoFxUI.init({
+    get: () => pattern.rack,
+    preview: () => { rackDirty = true; if (seq.playing) engine.setRack(pattern.rack, { bpm: pattern.bpm }); },
+    commit: () => {
+      if (!rackDirty) snapshot();                       // a toggle or select, not the end of a drag
+      rackDirty = false;
+      engine.ensure(); engine.setRack(pattern.rack, { bpm: pattern.bpm });
+      queueSave(); syncUI();
+    },
+  });
 
   // =============== export dialog ===============
   const dialog = $('export-dialog'), xFormat = $('x-format'), xRepeat = $('x-repeat');

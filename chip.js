@@ -79,7 +79,7 @@
 
   function create(context = null) {
     let ctx = null, master = null, analyser = null, noiseBuf = null, shaper = null;
-    let delay = null, fbGain = null, wetGain = null;
+    let delay = null, fbGain = null, wetGain = null, echoTone = null, rack = null;
     const waveCache = {};
     const channels = {};
     const sources = new Set();
@@ -103,14 +103,16 @@
       master = ctx.createGain(); master.gain.value = 0.9;
       shaper = ctx.createWaveShaper(); shaper.curve = crushCurve(crushBits);
       analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
-      master.connect(shaper).connect(analyser).connect(ctx.destination);
+      rack = window.NeoRack ? window.NeoRack.create(ctx) : null;
+      if (rack) master.connect(shaper).connect(rack.input), rack.output.connect(analyser).connect(ctx.destination);
+      else master.connect(shaper).connect(analyser).connect(ctx.destination);
       // echo bus: send -> delay -> (feedback) -> wet -> master
       delay = ctx.createDelay(2.0); delay.delayTime.value = 0.2;
       fbGain = ctx.createGain(); fbGain.gain.value = 0.35;
       wetGain = ctx.createGain(); wetGain.gain.value = 0.6;
-      const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 3200;
-      delay.connect(tone).connect(fbGain).connect(delay);
-      tone.connect(wetGain).connect(master);
+      echoTone = ctx.createBiquadFilter(); echoTone.type = 'lowpass'; echoTone.frequency.value = 3200;
+      delay.connect(echoTone).connect(fbGain).connect(delay);
+      echoTone.connect(wetGain).connect(master);
       for (const ch of VOICES) {
         const gain = ctx.createGain(), pan = ctx.createStereoPanner(), meter = ctx.createAnalyser(), send = ctx.createGain();
         meter.fftSize = 256; send.gain.value = 0;
@@ -130,10 +132,12 @@
       if (bits === crushBits) return; crushBits = bits;
       if (shaper) shaper.curve = crushCurve(bits);
     }
+    // Delay time is always set here. Feedback belongs to the rack's Echo unit when
+    // one exists, so only apply it when running rackless (the landing-page demo).
     function setEcho(time, feedback) {
       if (!delay) return;
       delay.delayTime.setTargetAtTime(Math.min(1.9, time), ctx.currentTime, 0.02);
-      fbGain.gain.setTargetAtTime(feedback, ctx.currentTime, 0.02);
+      if (!rack && feedback != null) fbGain.gain.setTargetAtTime(feedback, ctx.currentTime, 0.02);
     }
 
     function pulseWave(duty) {
@@ -321,8 +325,22 @@
       }
     }
 
+    function setRack(rackState, opts = {}) {
+      if (!rack) return;
+      rack.setState(rackState, opts);
+      const e = rack.echo;
+      if (e && wetGain) {
+        const now = ctx.currentTime;
+        const set = (p, v) => opts.immediate ? p.setValueAtTime(v, now) : p.setTargetAtTime(v, now, 0.02);
+        set(wetGain.gain, e.on ? e.mix / 100 : 0);
+        set(fbGain.gain, e.on ? e.feedback / 100 : 0);
+        set(echoTone.frequency, e.tone);
+      }
+    }
+    function echoDivision(p) { return (p.rack && p.rack.echo && p.rack.echo.div) || p.master?.echoDiv || '8d'; }
+
     return {
-      ensure, note, drum, midiToHz, setCrush, setEcho, setMix, silence,
+      ensure, note, drum, midiToHz, setCrush, setEcho, setMix, silence, setRack, echoDivision,
       channelAnalyser(ch) { return channels[ch]?.meter; },
       get ctx() { return ctx; },
       get analyser() { return analyser; },
@@ -354,11 +372,15 @@
     let playing = false, step = 0, nextTime = 0, timer = null;
     const lookahead = 0.12, interval = 25;
     const prev = {};
+    let rackKey = null;
     function applyMaster(p) {
       engine.setMix(p);
       const m = p.master || {};
       engine.setCrush(m.crush || 0);
-      engine.setEcho(echoSeconds(p.bpm, m.echoDiv || '8d'), m.echoFb == null ? 0.35 : m.echoFb);
+      const div = (p.rack && p.rack.echo && p.rack.echo.div) || m.echoDiv || '8d';
+      engine.setEcho(echoSeconds(p.bpm, div), m.echoFb == null ? 0.35 : m.echoFb);
+      const key = JSON.stringify(p.rack) + ':' + p.bpm;
+      if (key !== rackKey) { engine.setRack(p.rack, { bpm: p.bpm }); rackKey = key; }
     }
     function schedule() {
       const p = getPattern();
@@ -407,13 +429,16 @@
   async function render(p, { selection = false, tail = true } = {}) {
     const bounds = selection ? loopBounds(p) : { start: 0, end: p.steps };
     const stepTime = 60 / p.bpm / 4, duration = (bounds.end - bounds.start) * stepTime;
-    const echo = echoSeconds(p.bpm, p.master?.echoDiv || '8d');
+    const echo = echoSeconds(p.bpm, (p.rack && p.rack.echo && p.rack.echo.div) || p.master?.echoDiv || '8d');
     const feedback = Math.min(.8, p.master?.echoFb ?? .35);
     const hasEcho = Object.values(p.fx || {}).some(f => f.echo > 0);
-    const release = tail ? Math.max(.35, hasEcho ? echo * Math.ceil(Math.log(.001) / Math.log(Math.max(.01, feedback))) : 0) : 0;
+    const echoTail = hasEcho ? echo * Math.ceil(Math.log(.001) / Math.log(Math.max(.01, feedback))) : 0;
+    const verb = p.rack?.reverb?.on ? p.rack.reverb.size + .3 : 0;
+    const release = tail ? Math.max(.35, echoTail, verb) : 0;
     const offline = new OfflineAudioContext(2, Math.ceil((duration + release) * 44100), 44100);
     const synth = create(offline); synth.ensure(); synth.setMix(p, true);
     synth.setCrush(p.master?.crush || 0); synth.setEcho(echo, feedback);
+    synth.setRack(p.rack, { bpm: p.bpm, immediate: true, startAt: 0 });
     const prev = {};
     for (let i = bounds.start; i < bounds.end; i++) {
       const t = (i - bounds.start) * stepTime + swingOffset(p, i, stepTime);

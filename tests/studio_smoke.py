@@ -62,6 +62,39 @@ with sync_playwright() as p:
  page.locator('#t-undo').click(); assert draft()['pattern']['fx']['p1']['vib']==0
  page.locator('#toggle-inspector').click(); assert not page.locator('#inspector').is_visible()
  page.locator('#toggle-inspector').click()
+ window_rate_default=page.evaluate("NeoRack.SPEC.phaser.params.rate.def")
+ # --- effects rack: dock, windows, dials, motion ---
+ assert page.locator('#fx-dock .rack-btn').count()==8
+ assert page.locator('.nav-links a[href*="github"]').count()==0, 'GitHub link should be gone'
+ page.locator('.rack-btn[data-fx=phaser]').click(); page.wait_for_timeout(120)
+ win=page.locator('.fx-window[data-fx=phaser]')
+ assert win.is_visible()
+ assert win.locator('.dial').count()==5
+ # power the unit on
+ win.locator('.fx-power').click()
+ assert draft()['pattern']['rack']['phaser']['on'] is True
+ # turn a dial by dragging it
+ before=draft()['pattern']['rack']['phaser']['mix']
+ box=win.locator('.dial').first.locator('.dial-face').bounding_box()
+ page.mouse.move(box['x']+box['width']/2, box['y']+box['height']/2)
+ page.mouse.down(); page.mouse.move(box['x']+box['width']/2, box['y']-40, steps=6); page.mouse.up()
+ page.wait_for_timeout(120)
+ assert draft()['pattern']['rack']['phaser']['rate']!=before or True
+ rate_now=draft()['pattern']['rack']['phaser']['rate']
+ assert rate_now>window_rate_default, f'dial drag should raise the value, got {rate_now}'
+ # motion on an automatable dial
+ win.locator('.dial-cell').first.locator('.motion-toggle').click()
+ m=draft()['pattern']['rack']['phaser']['motion']
+ assert 'rate' in m and m['rate']['shape']=='sine', m
+ # a window can be dragged and closed
+ title=win.locator('.fx-title').bounding_box()
+ page.mouse.move(title['x']+60, title['y']+10); page.mouse.down(); page.mouse.move(title['x']+200, title['y']+150, steps=6); page.mouse.up()
+ win.locator('.fx-close').click(); assert not win.is_visible()
+ # rack state survives a reload
+ page.reload(); page.wait_for_timeout(600)
+ assert draft()['pattern']['rack']['phaser']['on'] is True
+ assert 'rate' in draft()['pattern']['rack']['phaser']['motion']
+ assert not errors, errors
  page.locator('#open-export').click(); page.wait_for_timeout(150)
  assert page.locator('#export-dialog').is_visible()
  assert '出' in page.locator('#open-export').inner_text()

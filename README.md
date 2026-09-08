@@ -48,10 +48,11 @@ Open `studio.html` directly or serve the repository with a static host. The stud
 - Browser autosave and named saves. A valid share link takes precedence over a draft. Storage failures are shown in the UI.
 - A collapsible effects/file panel and a responsive layout.
 - **MIDI import**: drop any `.mid` on the roll (or use Import MIDI). The busiest melodic parts map to Pulse 1-4 (highest first) and Triangle (lowest); channel 10 becomes Noise. Quantised to 16ths, durations kept as held notes, first 64 bars. `midi-import.js` is dependency-free.
+- A master **effects rack** of eight units in one chain: Equaliser, Compressor, Phaser, Flanger, Bitcrush, Reverb, Stereo width and Echo. Each opens in its own draggable window with drag-to-turn dials. 26 of the 29 dials support **motion**: a tempo-synced LFO (sine, triangle, square or saw) at 1/4 bar to 8 bars, with adjustable depth. Rack settings live in the pattern, so they save, share and export; motion runs identically in playback and in the offline MP3/WAV render.
 - Per-voice **instrument** (10: pulse widths, triangle, GB wave, SID saw, FM lead/bass/bell/organ), **envelope** (hold, pluck, pad, stab), **vibrato**, **tremolo**, **slide**, **arpeggio** (stepped at 60 Hz like the hardware trick) and **echo send**. **Swing** and **bit-crush** on the master.
 - Three rule engines: 型 kata-A (motif & variation), kata-B (chords & sustain), kata-C (arcade arps). Each arranges across all six voices, adding a counter-melody and a pad. The trained model plugs in as another engine.
 
-Audio stays in the browser. `audio-export.js` loads the bundled, unmodified `vendor/lame-1.2.1.min.js` on the first MP3 export; no encoding service is used. See `vendor/README.md` and the included LAME license files.
+Audio stays in the browser. `audio-export.js` loads the bundled, unmodified `vendor/lame-1.2.1.min.js` on the first MP3 export; no encoding service is used. The library is LGPL-3.0; see `vendor/README.md` and the included license files, linked from the studio footer as required.
 
 ### Browser checks
 
