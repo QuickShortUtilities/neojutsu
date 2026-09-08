@@ -221,6 +221,143 @@
         }
       },
     },
+
+    radial: {
+      label: 'Radial · spokes',
+      // Carried over from the Tranquilicy player, but driven by the real
+      // spectrum instead of a rolling sine, and seeded so it reproduces.
+      init(r, w, h, density) {
+        const n = Math.round(lerp(24, 96, density));
+        return { n, seeds: Array.from({ length: n }, () => r() * 6.28), spin: r() * 6.28 };
+      },
+      draw(g, w, h, t, env, s, o) {
+        g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h);
+        const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2;
+        s.spin += o.speed * o.step * 0.35;
+        const inner = R * 0.4, f = env.freq;
+        for (let i = 0; i < s.n; i++) {
+          const angle = (i / s.n) * 6.283 - 1.5708 + s.spin;
+          const amp = f.length
+            ? f[Math.floor((i / s.n) * f.length * 0.6)] / 255
+            : (Math.sin(t * 1.4 + s.seeds[i]) * 0.4 + 0.5);
+          const len = 3 + amp * R * 0.55;
+          const x1 = cx + Math.cos(angle) * inner, y1 = cy + Math.sin(angle) * inner;
+          const x2 = cx + Math.cos(angle) * (inner + len), y2 = cy + Math.sin(angle) * (inner + len);
+          g.strokeStyle = amp > .66 ? '#ffd23f' : amp > .33 ? '#2ef2ff' : '#ff2e88';
+          g.lineWidth = Math.max(1, w / s.n * 0.6);
+          g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+        }
+        g.fillStyle = '#ff2e88';
+        g.beginPath(); g.arc(cx, cy, inner * (0.5 + env.bass * 0.4), 0, 7); g.fill();
+      },
+    },
+
+    motes: {
+      label: 'Motes · drifting light',
+      init(r, w, h, density) {
+        const n = Math.round(lerp(24, 140, density));
+        const make = init => ({
+          x: r() * w, y: init ? r() * h : h + 4,
+          vx: (r() - .5) * 6, vy: -(4 + r() * 14),
+          rad: .5 + r() * 2, life: init ? r() : 0, span: 3 + r() * 5,
+        });
+        return { r, w, h, motes: Array.from({ length: n }, () => make(true)), make };
+      },
+      draw(g, w, h, t, env, s, o) {
+        g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h);
+        const lift = 1 + env.level * 2.2;
+        for (const m of s.motes) {
+          m.x += m.vx * o.step * o.speed; m.y += m.vy * o.step * o.speed * lift;
+          m.life += o.step / m.span;
+          if (m.life >= 1 || m.y < -4) {
+            m.life = 0; m.y = h + 4; m.x = s.r() * w;
+            m.vx = (s.r() - .5) * 6; m.vy = -(4 + s.r() * 14);
+          }
+          const a = m.life < .2 ? m.life / .2 : m.life > .8 ? (1 - m.life) / .2 : 1;
+          const rr = Math.max(1, m.rad * (1 + env.treble));
+          g.fillStyle = `rgba(255,210,63,${a})`;
+          g.fillRect((m.x - rr / 2) | 0, (m.y - rr / 2) | 0, rr | 0 || 1, rr | 0 || 1);
+        }
+      },
+    },
+
+    kaleido: {
+      label: 'Kaleido · mirror',
+      init(r, w, h, density) {
+        const n = Math.round(lerp(3, 12, density));
+        return { wedges: n < 3 ? 3 : n, spin: r() * 6.28,
+                 shapes: Array.from({ length: 7 }, () => ({ d: .1 + r() * .8, a: r() * 1.2, s: .04 + r() * .14, c: r() })) };
+      },
+      draw(g, w, h, t, env, s, o) {
+        g.fillStyle = '#05040a'; g.fillRect(0, 0, w, h);
+        s.spin += o.speed * o.step * 0.5;
+        const cx = w / 2, cy = h / 2, R = Math.max(w, h) * .7;
+        const cols = ['#ff2e88', '#2ef2ff', '#ffd23f', '#8b5cf6'];
+        for (let k = 0; k < s.wedges; k++) {
+          g.save(); g.translate(cx, cy); g.rotate(s.spin + (k / s.wedges) * 6.283);
+          if (k % 2) g.scale(1, -1);
+          for (const sh of s.shapes) {
+            const d = sh.d * R * (0.7 + env.level * 0.5);
+            const x = Math.cos(sh.a + t * 0.4) * d, y = Math.sin(sh.a * 1.7 + t * 0.3) * d;
+            const size = Math.max(1, sh.s * R * (0.6 + env.mid));
+            g.fillStyle = cols[Math.floor(sh.c * cols.length) % cols.length];
+            g.fillRect(x - size / 2, y - size / 2, size, size);
+          }
+          g.restore();
+        }
+      },
+    },
+
+    fire: {
+      label: 'Fire · demoscene',
+      // The classic heat-buffer fire: seed the bottom row, average upward.
+      init(r, w, h) { return { r, heat: new Uint8Array(w * h), w, h, acc: 0 }; },
+      draw(g, w, h, t, env, s, o) {
+        if (s.w !== w || s.h !== h) { s.heat = new Uint8Array(w * h); s.w = w; s.h = h; }
+        const heat = s.heat, bottom = (h - 1) * w;
+        const hot = 150 + env.level * 105;
+        for (let x = 0; x < w; x++) heat[bottom + x] = s.r() * hot + (env.bass * 100);
+        for (let y = 0; y < h - 1; y++) {
+          for (let x = 0; x < w; x++) {
+            const below = (y + 1) * w + x;
+            const v = (heat[below] + heat[below - 1 < 0 ? below : below - 1] + heat[below + 1] + heat[Math.min(heat.length - 1, below + w)]) / 4.015;
+            heat[y * w + x] = v < 0 ? 0 : v;
+          }
+        }
+        const img = g.getImageData(0, 0, w, h), d = img.data;
+        for (let i = 0, p = 0; i < heat.length; i++, p += 4) {
+          const v = heat[i];
+          d[p] = Math.min(255, v * 2.2); d[p + 1] = Math.min(255, v * 1.1); d[p + 2] = v * 0.35; d[p + 3] = 255;
+        }
+        g.putImageData(img, 0, 0);
+      },
+    },
+
+    waves: {
+      label: 'Waves · ribbons',
+      init(r, w, h, density) {
+        const n = Math.round(lerp(3, 14, density));
+        return { lines: Array.from({ length: n }, (_, i) => ({ off: r() * 6.28, k: .04 + r() * .09, amp: .05 + r() * .12 })) };
+      },
+      draw(g, w, h, t, env, s, o) {
+        const sky = g.createLinearGradient(0, 0, 0, h);
+        sky.addColorStop(0, '#0a0420'); sky.addColorStop(1, '#2a0f3a');
+        g.fillStyle = sky; g.fillRect(0, 0, w, h);
+        const cols = ['#ff2e88', '#2ef2ff', '#ffd23f', '#8b5cf6'];
+        s.lines.forEach((L, i) => {
+          const mid = h * (i + 1) / (s.lines.length + 1);
+          const amp = L.amp * h * (1 + env.level * 1.6);
+          g.strokeStyle = cols[i % cols.length]; g.lineWidth = Math.max(1, 2 + env.bass * 2);
+          g.beginPath();
+          for (let x = 0; x <= w; x++) {
+            const y = mid + Math.sin(x * L.k + t * o.speed * 1.6 + L.off) * amp
+                          + Math.sin(x * L.k * 0.37 - t * o.speed) * amp * 0.4;
+            x ? g.lineTo(x, y) : g.moveTo(x, y);
+          }
+          g.stroke();
+        });
+      },
+    },
   };
 
   window.NeoScene = { SCENES, rng, randomSeed };

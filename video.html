@@ -101,6 +101,18 @@
           <input type="range" id="v-len" min="5" max="300" step="5" value="30" aria-label="Generated length in seconds">
         </label>
         <p class="hint" id="v-len-note">A soundtrack sets the length automatically.</p>
+
+        <label class="field">
+          <span>Auto-cut</span>
+          <select id="v-cut">
+            <option value="0" selected>Off · one scene</option>
+            <option value="2">Every 2s</option>
+            <option value="4">Every 4s</option>
+            <option value="8">Every 8s</option>
+            <option value="16">Every 16s</option>
+          </select>
+        </label>
+        <p class="hint">Cuts between scenes as the track plays, seeded so the running order repeats.</p>
       </div>
 
       <h2 class="panel-title"><span class="k">型</span> Look</h2>
@@ -125,6 +137,17 @@
           <option value="320x224">320 × 224 · Genesis</option>
           <option value="320x200">320 × 200 · C64</option>
           <option value="480x360">480 × 360 · chunky</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Frame</span>
+        <select id="v-format">
+          <option value="native" selected>Native · hardware shape</option>
+          <option value="16:9">16 : 9 · widescreen</option>
+          <option value="1:1">1 : 1 · square post</option>
+          <option value="9:16">9 : 16 · reels &amp; shorts</option>
+          <option value="4:3">4 : 3 · CRT</option>
         </select>
       </label>
 
@@ -177,6 +200,45 @@
 
     <!-- ===== right: audio ===== -->
     <aside class="panel" id="v-inspector">
+      <h2 class="panel-title"><span class="k">効</span> Effects</h2>
+      <label class="field range"><span>Glow <b id="v-bloom-v">0</b></span>
+        <input type="range" id="v-bloom" min="0" max="100" step="1" value="0" aria-label="Glow"></label>
+      <label class="field range"><span>Glitch <b id="v-glitch-v">0</b></span>
+        <input type="range" id="v-glitch" min="0" max="100" step="1" value="0" aria-label="Glitch"></label>
+      <label class="field range"><span>Colour split <b id="v-chroma-v">0</b></span>
+        <input type="range" id="v-chroma" min="0" max="100" step="1" value="0" aria-label="Colour split"></label>
+      <label class="field range"><span>Vignette <b id="v-vig-v">0</b></span>
+        <input type="range" id="v-vig" min="0" max="100" step="1" value="0" aria-label="Vignette"></label>
+      <label class="field range"><span>Tube curve <b id="v-curve-v">0</b></span>
+        <input type="range" id="v-curve" min="0" max="100" step="1" value="0" aria-label="Tube curve"></label>
+
+      <h2 class="panel-title"><span class="k">字</span> Title</h2>
+      <label class="field">
+        <span>Text <small>| splits lines</small></span>
+        <input type="text" id="v-text" maxlength="80" spellcheck="false" placeholder="NEO術 | side a" aria-label="Overlay text">
+      </label>
+      <div class="two-up">
+        <label class="field"><span>Place</span>
+          <select id="v-text-pos">
+            <option value="bottom" selected>Bottom</option>
+            <option value="middle">Middle</option>
+            <option value="top">Top</option>
+          </select>
+        </label>
+        <label class="field"><span>Colour</span>
+          <select id="v-text-col">
+            <option value="#ffffff" selected>White</option>
+            <option value="#ffd23f">Yellow</option>
+            <option value="#2ef2ff">Cyan</option>
+            <option value="#ff2e88">Magenta</option>
+            <option value="#000000">Black</option>
+          </select>
+        </label>
+      </div>
+      <label class="field range"><span>Size <b id="v-text-size-v">10</b></span>
+        <input type="range" id="v-text-size" min="4" max="24" step="1" value="10" aria-label="Text size"></label>
+      <div class="toggle-row"><label class="chk"><input type="checkbox" id="v-text-shadow" checked> <span>Drop shadow</span></label></div>
+
       <h2 class="panel-title"><span class="k">音</span> Audio</h2>
 
       <label class="field">
@@ -219,6 +281,7 @@
 
   <script src="chip.js"></script>
   <script src="video-gen.js"></script>
+  <script src="video-fx.js"></script>
   <script src="neo-select.js"></script>
   <script src="video.js"></script>
 </body>

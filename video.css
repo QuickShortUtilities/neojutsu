@@ -46,3 +46,7 @@
 .as-link { display: inline-flex; align-items: center; text-decoration: none; }
 
 @media (max-width: 1100px) { .video-studio .stage { grid-column: 1 / -1; } }
+
+/* two controls sharing a row in the inspector */
+.two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.two-up .field { margin-bottom: 14px; }

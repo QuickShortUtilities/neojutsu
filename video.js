@@ -34,12 +34,13 @@
   let clipReady = false, objectURL = '', playing = false, lastFrame = 0;
   let audio = null, gain = null, analyser = null, trackNode = null, elementNode = null, recorderDest = null;
   let buffer = null, savedTracks = [], freqData = null, waveData = null;
-  let scene = null, sceneKey = '', sceneSig = '', genTime = 0;
+  let scene = null, sceneKey = '', sceneSig = '', genTime = 0, metaScene = '';
 
   const look = () => ({
     mode: $('v-mode').value,
     chip: $('v-chip').value,
     res: $('v-res').value,
+    format: $('v-format').value,
     pix: +$('v-pix').value,
     dither: $('v-dither').value,
     dithAmt: +$('v-dith').value / 100,
@@ -53,6 +54,17 @@
     density: +$('v-density').value / 100,
     react: +$('v-react').value / 100,
     len: +$('v-len').value,
+    cut: +$('v-cut').value,
+    fx: {
+      bloom: +$('v-bloom').value / 100, glitch: +$('v-glitch').value / 100,
+      chroma: +$('v-chroma').value / 100, vignette: +$('v-vig').value / 100,
+      curve: +$('v-curve').value / 100,
+    },
+    text: {
+      text: $('v-text').value.trim(), pos: $('v-text-pos').value,
+      color: $('v-text-col').value, size: +$('v-text-size').value / 100,
+      shadow: $('v-text-shadow').checked,
+    },
     audioSrc: $('v-audio-src').value,
     vol: +$('v-vol').value / 100,
     fps: +$('v-fps').value,
@@ -60,9 +72,16 @@
     title: $('v-title').value,
   });
 
-  const baseSize = cfg => cfg.res !== 'auto'
-    ? cfg.res.split('x').map(Number)
-    : (PALETTES[cfg.chip] || PALETTES.gameboy).size;
+  const AR = { '16:9': 16/9, '1:1': 1, '9:16': 9/16, '4:3': 4/3 };
+  function baseSize(cfg) {
+    const [w, h] = cfg.res !== 'auto'
+      ? cfg.res.split('x').map(Number)
+      : (PALETTES[cfg.chip] || PALETTES.gameboy).size;
+    const ar = AR[cfg.format];
+    // Keep the hardware's vertical resolution and reshape the width, so a
+    // vertical crop stays as chunky as the console it came from.
+    return ar ? [Math.max(2, Math.round(h * ar / 2) * 2), h] : [w, h];
+  }
 
   const ready = cfg => cfg.mode === 'generate' || clipReady;
   const duration = cfg => cfg.mode === 'import'
@@ -91,12 +110,24 @@
   }
 
   // ---------- scene ----------
-  function ensureScene(cfg, w, h) {
-    const sig = [cfg.scene, cfg.seed, cfg.density.toFixed(2), w, h].join('|');
+  // With auto-cut on, the running order is a seeded shuffle of every scene, so
+  // the same seed gives the same sequence of shots every time.
+  function cutOrder(seed) {
+    const keys = Object.keys(window.NeoScene.SCENES), r = window.NeoScene.rng(seed + ':order');
+    for (let i = keys.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [keys[i], keys[j]] = [keys[j], keys[i]]; }
+    return keys;
+  }
+  function activeScene(cfg) {
+    if (cfg.mode !== 'generate' || !cfg.cut) return cfg.scene;
+    const order = cutOrder(cfg.seed || 'neojutsu');
+    return order[Math.floor(genTime / cfg.cut) % order.length];
+  }
+  function ensureScene(cfg, key, w, h) {
+    const sig = [key, cfg.seed, cfg.density.toFixed(2), w, h].join('|');
     if (sig === sceneSig && scene) return;
-    const def = window.NeoScene.SCENES[cfg.scene] || Object.values(window.NeoScene.SCENES)[0];
+    const def = window.NeoScene.SCENES[key] || Object.values(window.NeoScene.SCENES)[0];
     scene = def.init(window.NeoScene.rng(cfg.seed || 'neojutsu'), w, h, cfg.density);
-    sceneKey = cfg.scene; sceneSig = sig;
+    sceneKey = key; sceneSig = sig;
   }
 
   // ---------- the 8-bit pipeline ----------
@@ -110,7 +141,7 @@
 
     const env = envelope(cfg);
     if (cfg.mode === 'generate') {
-      ensureScene(cfg, rw, rh);
+      ensureScene(cfg, activeScene(cfg), rw, rh);
       const def = window.NeoScene.SCENES[sceneKey];
       lctx.save();
       def.draw(lctx, rw, rh, genTime, env, scene, { speed: cfg.speed, density: cfg.density, step });
@@ -120,6 +151,9 @@
       lctx.imageSmoothingEnabled = true;
       lctx.drawImage(video, 0, 0, rw, rh);
     }
+
+    window.NeoFX.apply(lctx, rw, rh, cfg.fx, env, cfg.mode === 'import' ? video.currentTime : genTime);
+    window.NeoFX.drawText(lctx, rw, rh, cfg.text);
 
     const frame = lctx.getImageData(0, 0, rw, rh), data = frame.data;
     const pal = paletteRGB(cfg.chip), levels = pal.length;
@@ -174,6 +208,13 @@
 
     const d = duration(cfg), at = cfg.mode === 'import' ? video.currentTime : genTime;
     if (d) { $('v-scrub').value = Math.round((at / d) * 1000); $('v-position').textContent = clock(at); }
+    // Auto-cut changes the shot mid-playback, so the readout has to follow it
+    // rather than only refreshing when a control is touched.
+    if (cfg.mode === 'generate' && sceneKey !== metaScene) {
+      metaScene = sceneKey;
+      const [mw, mh] = baseSize(cfg);
+      $('v-meta').textContent = `${mw}×${mh} · ${(window.NeoScene.SCENES[sceneKey] || {}).label || ''}`;
+    }
   }
 
   // ---------- audio ----------
@@ -332,7 +373,7 @@
 
   // ---------- settings & labels ----------
   const status = msg => { $('v-status').textContent = msg; };
-  const FIELDS = ['v-chip','v-res','v-pix','v-dither','v-dith','v-bright','v-contrast','v-fps','v-scale','v-vol','v-title','v-scene','v-seed','v-speed','v-density','v-react','v-len'];
+  const FIELDS = ['v-chip','v-res','v-format','v-pix','v-dither','v-dith','v-bright','v-contrast','v-fps','v-scale','v-vol','v-title','v-scene','v-seed','v-speed','v-density','v-react','v-len','v-cut','v-bloom','v-glitch','v-chroma','v-vig','v-curve','v-text','v-text-pos','v-text-col','v-text-size'];
 
   function save() {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ look: look() })); $('v-autosave').textContent = 'Autosaved on this browser'; }
@@ -350,7 +391,12 @@
       set('v-speed', l.speed != null ? Math.round(l.speed * 100) : null);
       set('v-density', l.density != null ? Math.round(l.density * 100) : null);
       set('v-react', l.react != null ? Math.round(l.react * 100) : null);
-      set('v-len', l.len); set('v-title', l.title);
+      set('v-len', l.len); set('v-title', l.title); set('v-format', l.format); set('v-cut', l.cut);
+      if (l.fx) { set('v-bloom', Math.round(l.fx.bloom*100)); set('v-glitch', Math.round(l.fx.glitch*100));
+        set('v-chroma', Math.round(l.fx.chroma*100)); set('v-vig', Math.round(l.fx.vignette*100));
+        set('v-curve', Math.round(l.fx.curve*100)); }
+      if (l.text) { set('v-text', l.text.text); set('v-text-pos', l.text.pos); set('v-text-col', l.text.color);
+        set('v-text-size', Math.round(l.text.size*100)); $('v-text-shadow').checked = l.text.shadow !== false; }
       $('v-scanlines').checked = !!l.scanlines; $('v-loop').checked = l.loop !== false;
     } catch {}
   }
@@ -370,6 +416,12 @@
     $('v-scale-v').textContent = l.scale; $('v-vol-v').textContent = Math.round(l.vol * 100);
     $('v-speed-v').textContent = Math.round(l.speed * 100); $('v-density-v').textContent = Math.round(l.density * 100);
     $('v-react-v').textContent = Math.round(l.react * 100);
+    $('v-bloom-v').textContent = Math.round(l.fx.bloom * 100);
+    $('v-glitch-v').textContent = Math.round(l.fx.glitch * 100);
+    $('v-chroma-v').textContent = Math.round(l.fx.chroma * 100);
+    $('v-vig-v').textContent = Math.round(l.fx.vignette * 100);
+    $('v-curve-v').textContent = Math.round(l.fx.curve * 100);
+    $('v-text-size-v').textContent = Math.round(l.text.size * 100);
     $('v-badge').textContent = `out: 型 ${(PALETTES[l.chip] || PALETTES.gameboy).label.split(' · ')[0]}`;
     const [bw, bh] = baseSize(l);
     if (!ready(l)) { display.width = bw; display.height = bh; }
@@ -378,7 +430,7 @@
     $('v-empty').hidden = ready(l);
     $('v-scrub').disabled = !ready(l);
     $('v-meta').textContent = l.mode === 'generate'
-      ? `${bw}×${bh} · ${(window.NeoScene.SCENES[l.scene] || {}).label || ''}`
+      ? `${bw}×${bh} · ${(window.NeoScene.SCENES[activeScene(l)] || {}).label || ''}`
       : (clipReady ? `${video.videoWidth}×${video.videoHeight} · ${clock(video.duration)}` : '—');
     if (gain) gain.gain.value = l.vol;
     syncLen();
@@ -426,7 +478,7 @@
       stopTrack(); await loadSoundtrack(look()); if (playing) startAudio(look()); save();
     });
     for (const id of FIELDS) $(id).addEventListener('input', () => { syncLabels(); save(); });
-    for (const id of ['v-scanlines','v-loop']) $(id).addEventListener('change', () => { video.loop = look().loop; save(); });
+    for (const id of ['v-scanlines','v-loop','v-text-shadow']) $(id).addEventListener('change', () => { video.loop = look().loop; save(); });
     video.addEventListener('ended', () => { if (!look().loop) stop(); });
 
     document.addEventListener('keydown', e => {
