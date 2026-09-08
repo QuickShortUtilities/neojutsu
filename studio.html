@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Studio — NEO術</title>
-  <meta name="description" content="NeoJutsu Studio: generate, edit and export original chiptune. Four hardware voices, real MIDI out.">
+  <meta name="description" content="NeoJutsu Studio: generate, edit and export original chiptune. Four hardware voices, chip-style effects, real MIDI out.">
   <meta name="theme-color" content="#07060c">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2307060c'/%3E%3Ctext x='32' y='47' font-size='42' text-anchor='middle' font-family='serif' fill='%23ff2e88'%3E術%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,7 +22,7 @@
       <span class="brand-sub">STUDIO</span>
     </a>
     <nav class="nav-links">
-      <span class="engine-badge" id="engine-badge" title="The generator currently running">engine: procedural v0</span>
+      <span class="engine-badge" id="engine-badge" title="The generator currently running">engine: 型 kata-A</span>
       <a href="index.html#how">About</a>
       <a class="nav-gh" href="https://github.com/QuickShortUtilities/neojutsu" target="_blank" rel="noopener">GitHub</a>
     </nav>
@@ -32,6 +32,15 @@
     <!-- ===== left: generate ===== -->
     <aside class="panel gen">
       <h2 class="panel-title"><span class="k">生</span> Generate</h2>
+
+      <label class="field">
+        <span>Model</span>
+        <select id="g-engine">
+          <option value="kataA">型 kata-A · motif &amp; variation</option>
+          <option value="kataB">型 kata-B · chords &amp; sustain</option>
+          <option value="neojutsu" disabled>術 NeoJutsu v1 · training…</option>
+        </select>
+      </label>
 
       <label class="field">
         <span>Hardware</span>
@@ -92,15 +101,17 @@
         <div class="seed-row">
           <input type="text" id="g-seed" value="" placeholder="random" spellcheck="false">
           <button type="button" class="mini" id="g-dice" title="Random seed">⚄</button>
+          <button type="button" class="mini" id="g-mutate" title="Small variation of this seed">変</button>
         </div>
       </label>
+      <div class="seed-history" id="seed-history" aria-label="Recent seeds"></div>
 
       <button class="btn btn-primary wide" id="g-go" type="button"><span class="btn-icon">◆</span> Generate</button>
 
       <p class="gen-note">
-        The trained model isn't wired in yet. Until it is, <b>Generate</b> runs a rule-based engine
-        so the whole path works today: controls → pattern → chip synth → MIDI. When NeoJutsu
-        finishes training, only the engine changes.
+        <b>型 kata</b> engines are rule-based, so the whole path works today:
+        controls → pattern → chip synth → MIDI. <b>術 NeoJutsu</b> is the trained model
+        and slots in here when it's ready. Same controls, same seeds.
       </p>
     </aside>
 
@@ -132,20 +143,52 @@
         <canvas id="roll" aria-label="Piano roll editor"></canvas>
       </div>
       <p class="roll-help">
-        <b>Click</b> to place a note, <b>drag</b> to paint, <b>right-click</b> or <b>shift-click</b> to erase.
+        <b>Click</b> places a note. <b>Drag right from a note</b> holds it (a sustained note).
+        <b>Drag</b> across empty cells to paint. <b>Right-click</b> or <b>shift-click</b> erases.
         <b>Space</b> plays. One note per step per voice, the way the hardware works.
       </p>
       <canvas id="scope" width="1200" height="70" aria-label="Oscilloscope"></canvas>
     </section>
 
-    <!-- ===== right: track & export ===== -->
+    <!-- ===== right: fx, export, saved ===== -->
     <aside class="panel side">
-      <h2 class="panel-title"><span class="k">出</span> Export</h2>
+      <h2 class="panel-title"><span class="k">効</span> Effects <small id="fx-lane-name" class="fx-lane">Pulse 1</small></h2>
+      <div class="fx" id="fx-voice">
+        <label class="fx-row"><span>Vibrato</span><input type="range" id="fx-vib" min="0" max="100" value="0"><b id="fx-vib-v">0</b></label>
+        <label class="fx-row"><span>Echo send</span><input type="range" id="fx-echo" min="0" max="100" value="0"><b id="fx-echo-v">0</b></label>
+        <label class="fx-row" id="fx-duty-row"><span>Duty</span>
+          <select id="fx-duty">
+            <option value="">chip default</option>
+            <option value="0.125">12.5 % · thin</option>
+            <option value="0.25">25 % · classic</option>
+            <option value="0.5">50 % · square</option>
+          </select>
+        </label>
+        <label class="fx-row fx-check" id="fx-slide-row"><span>Slide</span><input type="checkbox" id="fx-slide"><em>glide into each note</em></label>
+      </div>
+      <div class="fx fx-master">
+        <div class="fx-sub">master</div>
+        <label class="fx-row"><span>Crush</span><input type="range" id="fx-crush" min="0" max="100" value="0"><b id="fx-crush-v">0</b></label>
+        <label class="fx-row"><span>Echo time</span>
+          <select id="fx-echodiv">
+            <option value="16">1/16</option>
+            <option value="8">1/8</option>
+            <option value="8d" selected>1/8 dotted</option>
+            <option value="4">1/4</option>
+          </select>
+        </label>
+        <label class="fx-row"><span>Echo feedback</span><input type="range" id="fx-echofb" min="0" max="80" value="35"><b id="fx-echofb-v">35</b></label>
+      </div>
+
+      <h2 class="panel-title mt"><span class="k">出</span> Export</h2>
       <div class="track-meta">
         <div><span>Title</span><input type="text" id="x-title" value="neojutsu-track" spellcheck="false"></div>
-        <div><span>Chip</span><b id="x-chip">NES · 2A03</b></div>
-        <div><span>Length</span><b id="x-len">4 bars · 64 steps</b></div>
-        <div><span>Seed</span><b id="x-seed">—</b></div>
+        <div class="meta-grid">
+          <div><span>Chip</span><b id="x-chip">NES · 2A03</b></div>
+          <div><span>Length</span><b id="x-len">4 bars</b></div>
+          <div><span>Seed</span><b id="x-seed">—</b></div>
+          <div><span>Model</span><b id="x-engine">kata-A</b></div>
+        </div>
       </div>
       <button class="btn btn-ghost wide" id="x-midi" type="button">⬇ Download MIDI</button>
       <button class="btn btn-ghost wide" id="x-link" type="button">⧉ Copy share link</button>
