@@ -68,6 +68,14 @@
       </label>
       <select id="g-template" hidden aria-hidden="true" data-neo="skip" tabindex="-1"></select>
       <label class="field"><span>Hero</span><select id="g-char"></select></label>
+      <div class="hero-row">
+        <canvas id="g-hero-view" width="32" height="32" aria-label="The hero as drawn"></canvas>
+        <div class="hero-actions">
+          <button class="mini" id="g-hero-open" type="button" title="Pick a sprite from the pack">姿 Sprite…</button>
+          <button class="mini" id="g-hero-drawn" type="button" title="Go back to the drawn character">Drawn</button>
+        </div>
+        <div class="tint-row" id="g-hero-tints" role="group" aria-label="Hero colour"></div>
+      </div>
       <div class="two-up lead-tight">
         <label class="field"><span>Lives</span>
           <select id="g-lives"><option>1</option><option>2</option><option selected>3</option><option>5</option><option>9</option></select>
@@ -185,6 +193,23 @@
       </div>
 
 
+      <div class="lookbar storybar">
+        <h2 class="panel-title"><span class="k">話</span> Story
+          <span class="code-hint">who says what, and when — beats are data, so they travel with the game</span>
+        </h2>
+        <p class="hint">A beat waits for a cue, then someone speaks. Drag a beat along the line to change when.</p>
+        <div class="timeline" id="g-story-line">
+          <div class="tl-track" id="g-story-track"></div>
+          <div class="tl-ticks" id="g-story-ticks"></div>
+        </div>
+        <div class="story-rows" id="g-story-rows"></div>
+        <div class="story-actions">
+          <button class="mini" id="g-story-add" type="button">+ Add beat</button>
+          <button class="mini" id="g-story-clear" type="button">Clear story</button>
+          <span class="picker-count" id="g-story-count"></span>
+        </div>
+      </div>
+
       <div class="lookbar codebar">
         <h2 class="panel-title"><span class="k">記</span> Rules &amp; script
           <span class="code-hint">a language for game logic, sealed inside the game so nothing you write can break anything else</span>
@@ -255,7 +280,7 @@
             <p class="ref-h">Ask about</p>
             <p class="ref-l"><b>score keys lives time x y vx vy enemies coins deaths grounded facing random</b></p>
             <p class="ref-h">Do</p>
-            <p class="ref-l"><b>message win lose open give heal hurt spawn tile warp push gravity speed shake print</b></p>
+            <p class="ref-l"><b>message talk win lose open give heal hurt spawn tile warp push gravity speed shake print</b></p>
             <p class="ref-h">Shape</p>
             <p class="ref-l"><b>set</b> name value · <b>if</b> … <b>else</b> … <b>end</b> · <b>while</b> … <b>end</b> · <b>every</b> 2 … <b>end</b></p>
           </div>

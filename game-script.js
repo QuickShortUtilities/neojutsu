@@ -21,15 +21,23 @@
                  'enemies', 'coins', 'deaths', 'grounded', 'facing', 'random'];
 
   // Actions a script may take, with how many arguments each expects.
+  // A number is an exact arity; a pair is a range, for commands that read
+  // better with an optional extra - `talk "hello"` and `talk "guard" "halt"`.
   const ACTIONS = {
     message: 1, win: 0, lose: 0, open: 0, give: 1, hurt: 0, heal: 1,
     spawn: 3, tile: 3, warp: 2, push: 2, gravity: 1, speed: 1, shake: 1, print: 1,
+    talk: [1, 2],
   };
 
   // ---------- tokeniser ----------
   function lex(src) {
     const out = [];
-    const re = /\s*("(?:[^"\\]|\\.)*"|>=|<=|==|!=|[-+*/%()<>]|\n|[A-Za-z_][A-Za-z_0-9]*|\d+(?:\.\d+)?|#[^\n]*)/g;
+    /* The skip is whitespace that is not a newline. With a plain \s* the
+       prefix ate every line break before the group could match one, so the
+       `\n` alternative never fired and skipNL() had nothing to skip - the
+       language looked line-based but was not. A statement that may take an
+       optional extra value needs the line ending to know where to stop. */
+    const re = /[^\S\n]*("(?:[^"\\]|\\.)*"|>=|<=|==|!=|[-+*/%()<>]|\n|[A-Za-z_][A-Za-z_0-9]*|\d+(?:\.\d+)?|#[^\n]*)/g;
     let m;
     while ((m = re.exec(src)) !== null) {
       const t = m[1];
@@ -120,8 +128,14 @@
       if (Object.prototype.hasOwnProperty.call(ACTIONS, t)) {
         const args = [];
         const want = ACTIONS[t];
-        for (let i = 0; i < want; i++) { if (peek() === '\n' || peek() === null) break; args.push(expr()); }
-        if (args.length !== want) errors.push(`${t} takes ${want} value${want === 1 ? '' : 's'}`);
+        const lo = Array.isArray(want) ? want[0] : want;
+        const hi = Array.isArray(want) ? want[1] : want;
+        for (let i = 0; i < hi; i++) { if (peek() === '\n' || peek() === null) break; args.push(expr()); }
+        if (args.length < lo || args.length > hi) {
+          errors.push(lo === hi
+            ? `${t} takes ${hi} value${hi === 1 ? '' : 's'}`
+            : `${t} takes ${lo} or ${hi} values`);
+        }
         return { k: 'call', name: t, args };
       }
       errors.push(`unknown command "${t}"`);

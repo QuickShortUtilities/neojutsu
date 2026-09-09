@@ -110,6 +110,7 @@
       onEvent: name => { if (cfg().sfx && window.NeoSfx) window.NeoSfx.play(name); },
     });
     if ($('g-script')) { $('g-script').value = spec.script || ''; showScriptState({ errors: [] }); }
+    buildStory(); drawHero();
     present(); readout(); meta();
   }
 
@@ -462,6 +463,217 @@
       window.NeoPalette.snap(t.ctx, t.w, t.h, { chip: c.chip, dither: c.dither, dithAmt: .6 });
     }
   }
+  // ---------- the hero ----------
+  /* A hero is a sprite and a colour, or the studio's own drawn character if
+     no sprite is chosen. Both live on the spec, so a hero travels with the
+     game the way the level does. */
+  function heroSprite() {
+    const sp = game ? game.snapshot() : spec;
+    return sp && sp.player && typeof sp.player.sprite === 'number' ? sp.player.sprite : null;
+  }
+  function setHero(patch) {
+    if (!game) return;
+    mark();
+    const sp = game.snapshot();
+    sp.player = { ...(sp.player || {}), ...patch };
+    build(sp); save(); drawHero();
+  }
+  function drawHero() {
+    const cv = $('g-hero-view'); if (!cv) return;
+    const x = cv.getContext('2d');
+    x.clearRect(0, 0, 32, 32);
+    x.fillStyle = '#0b0913'; x.fillRect(0, 0, 32, 32);
+    const sp = game ? game.snapshot() : spec;
+    const tint = (sp && sp.player && sp.player.tint) || '#2ef2ff';
+    const idx = heroSprite();
+    const auto = window.NeoSprites && sp
+      ? window.NeoSprites.playerFor(sp.mode, sp.cat) : null;
+    const show = idx ?? auto;
+    if (show != null && window.NeoSprites && window.NeoSprites.loaded) {
+      window.NeoSprites.drawFit(x, show, 0, 0, 32, 32, tint);
+    } else {
+      const chars = window.NeoScene && window.NeoScene.CHARS;
+      const key = sp && sp.player && sp.player.char;
+      if (chars && chars[key]) window.NeoScene.drawChar(x, chars[key], 16, 28, 1.6, 0, 1);
+    }
+    const drawnBtn = $('g-hero-drawn');
+    if (drawnBtn) drawnBtn.disabled = idx === null;
+  }
+  function buildHeroTints() {
+    const host = $('g-hero-tints'); if (!host) return;
+    host.innerHTML = '';
+    const sp = game ? game.snapshot() : spec;
+    const cur = (sp && sp.player && sp.player.tint) || '#2ef2ff';
+    for (const t of ['#2ef2ff', '#ff2e88', '#ffd23f', '#3fbf4a', '#c060ff', '#ff5a3c', '#ece8f5', '#7a7a8a']) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'tint' + (t === cur ? ' current' : '');
+      b.style.background = t; b.title = t;
+      b.setAttribute('aria-label', `Hero colour ${t}`);
+      b.addEventListener('click', () => { setHero({ tint: t }); buildHeroTints(); });
+      host.append(b);
+    }
+  }
+
+  // ---------- story ----------
+  /* Beats are kept on the spec, not in the DOM: the list you see is drawn
+     from the game, and every edit goes back through build() so a beat is
+     undoable, packageable and shareable like a tile is. */
+  const CUES = [
+    ['at', 'At time', 's', 0, 120, 0.5],
+    ['score', 'At score', '', 0, 99, 1],
+    ['keys', 'With keys', '', 0, 9, 1],
+    ['reach', 'Reaching x', ' tiles', 0, 200, 1],
+    ['on', 'On event', '', null, null, null],
+  ];
+  const STORY_MAX_T = 60;                       // the timeline's span, in seconds
+
+  function storyBeats() {
+    return (game ? (game.snapshot().story || []) : (spec && spec.story) || []).slice();
+  }
+  function writeStory(beats) {
+    if (!game) return;
+    mark();
+    const sp = game.snapshot();
+    sp.story = beats;
+    build(sp); save();
+  }
+  function cueOf(beat) {
+    for (const [key] of CUES) if (beat[key] !== undefined) return key;
+    return 'at';
+  }
+
+  function buildStory() {
+    const rows = $('g-story-rows'); if (!rows) return;
+    const beats = storyBeats();
+    rows.innerHTML = '';
+    beats.forEach((beat, i) => {
+      const row = document.createElement('div');
+      row.className = 'story-row';
+      const cue = cueOf(beat);
+
+      const sel = document.createElement('select');
+      sel.className = 'mini-select';
+      for (const [key, label] of CUES) {
+        const o = document.createElement('option'); o.value = key; o.textContent = label;
+        if (key === cue) o.selected = true;
+        sel.append(o);
+      }
+      sel.addEventListener('change', () => {
+        const next = { text: beat.text, who: beat.who };
+        next[sel.value] = sel.value === 'on' ? 'collect' : (sel.value === 'at' ? 2 : 1);
+        const all = storyBeats(); all[i] = next; writeStory(all);
+      });
+
+      let valueEl;
+      if (cue === 'on') {
+        valueEl = document.createElement('select');
+        valueEl.className = 'mini-select';
+        for (const ev of window.NeoScript.EVENTS) {
+          const o = document.createElement('option'); o.value = ev; o.textContent = ev;
+          if (ev === beat.on) o.selected = true;
+          valueEl.append(o);
+        }
+        valueEl.addEventListener('change', () => {
+          const all = storyBeats(); all[i] = { ...all[i], on: valueEl.value }; writeStory(all);
+        });
+      } else {
+        const def = CUES.find(c => c[0] === cue);
+        valueEl = document.createElement('input');
+        valueEl.type = 'number'; valueEl.className = 'story-num';
+        valueEl.min = def[3]; valueEl.max = def[4]; valueEl.step = def[5];
+        valueEl.value = beat[cue] ?? 0;
+        valueEl.addEventListener('change', () => {
+          const all = storyBeats();
+          const v = Math.max(def[3], Math.min(def[4], +valueEl.value || 0));
+          all[i] = { ...all[i], [cue]: v }; writeStory(all);
+        });
+      }
+
+      const who = document.createElement('select');
+      who.className = 'mini-select';
+      for (const [v, label] of [['player', 'P1'], ['p2', 'P2']]) {
+        const o = document.createElement('option'); o.value = v; o.textContent = label;
+        if ((beat.who || 'player') === v) o.selected = true;
+        who.append(o);
+      }
+      who.addEventListener('change', () => {
+        const all = storyBeats(); all[i] = { ...all[i], who: who.value }; writeStory(all);
+      });
+
+      const text = document.createElement('input');
+      text.type = 'text'; text.className = 'story-text'; text.maxLength = 120;
+      text.value = beat.text || '';
+      text.placeholder = 'What they say';
+      text.addEventListener('change', () => {
+        const all = storyBeats(); all[i] = { ...all[i], text: text.value }; writeStory(all);
+      });
+
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'mini'; del.textContent = '×';
+      del.title = 'Remove this beat';
+      del.addEventListener('click', () => {
+        const all = storyBeats(); all.splice(i, 1); writeStory(all);
+      });
+
+      row.append(sel, valueEl, who, text, del);
+      rows.append(row);
+    });
+    $('g-story-count').textContent = beats.length
+      ? `${beats.length} beat${beats.length === 1 ? '' : 's'}`
+      : 'No story yet';
+    buildStoryLine(beats);
+  }
+
+  // The line only shows beats that happen at a time; a beat cued by score or
+  // by an event has no place on a clock, and pretending otherwise would lie.
+  function buildStoryLine(beats) {
+    const track = $('g-story-track'); if (!track) return;
+    track.innerHTML = '';
+    $('g-story-ticks').innerHTML = '';
+    for (let sec = 0; sec <= STORY_MAX_T; sec += 10) {
+      const tick = document.createElement('span');
+      tick.className = 'tl-tick';
+      tick.style.left = `${(sec / STORY_MAX_T) * 100}%`;
+      tick.textContent = `${sec}s`;
+      $('g-story-ticks').append(tick);
+    }
+    beats.forEach((beat, i) => {
+      if (beat.at === undefined) return;
+      const pin = document.createElement('button');
+      pin.type = 'button'; pin.className = 'tl-pin';
+      pin.style.left = `${Math.max(0, Math.min(100, (beat.at / STORY_MAX_T) * 100))}%`;
+      pin.title = `${beat.at}s · ${beat.text || ''}`;
+      pin.textContent = String(i + 1);
+      const drag = e => {
+        const r = track.getBoundingClientRect();
+        const t = Math.max(0, Math.min(STORY_MAX_T, ((e.clientX - r.left) / r.width) * STORY_MAX_T));
+        pin.style.left = `${(t / STORY_MAX_T) * 100}%`;
+        pin.dataset.t = t.toFixed(1);
+      };
+      pin.addEventListener('pointerdown', e => {
+        e.preventDefault(); pin.setPointerCapture(e.pointerId); pin.dataset.dragging = '1'; drag(e);
+      });
+      pin.addEventListener('pointermove', e => { if (pin.dataset.dragging) drag(e); });
+      for (const ev of ['pointerup', 'pointercancel']) pin.addEventListener(ev, () => {
+        if (!pin.dataset.dragging) return;
+        delete pin.dataset.dragging;
+        const all = storyBeats();
+        all[i] = { ...all[i], at: +(+pin.dataset.t || 0).toFixed(1) };
+        writeStory(all);
+      });
+      track.append(pin);
+    });
+  }
+
+  function addBeat() {
+    const all = storyBeats();
+    if (all.length >= 60) return;
+    const last = all.filter(b => b.at !== undefined).map(b => b.at).sort((a, b) => a - b).pop();
+    all.push({ at: last === undefined ? 1 : Math.min(STORY_MAX_T, +(last + 4).toFixed(1)),
+               who: 'player', text: '' });
+    writeStory(all);
+  }
+
   // ---------- decor ----------
   function decorButton(idx, host) {
     const S = window.NeoSprites;
@@ -533,6 +745,7 @@
       S.drawFit(x, idx, 0, 0, 32, 32, decorTint);
       b.append(c);
       b.addEventListener('click', () => {
+        if (decorPick) { const fn = decorPick; closeDecor(); fn(idx); return; }
         brush = { kind: 'prop', id: idx };
         if (!$('g-props').querySelector(`[data-piece="prop:${idx}"]`)) {
           const host = $('g-props');
@@ -576,12 +789,18 @@
     build(sp); save(); meta();
   }
 
-  function openDecor() {
+  // The same grid serves two jobs: choosing decor to paint, and choosing what
+  // the hero looks like. Whoever opened it says where the choice goes.
+  let decorPick = null;
+  function openDecor(onPick, cat) {
     if (!window.NeoSprites || !window.NeoSprites.loaded) return;
+    decorPick = typeof onPick === 'function' ? onPick : null;
+    if (cat) decorCat = cat;
     decorOpen = true; $('g-decor').hidden = false;
+    $('g-decor').querySelector('.eyebrow').textContent = decorPick ? 'CHOOSE A HERO' : 'CHOOSE DECOR';
     buildDecorCats(); buildDecorGrid();
   }
-  function closeDecor() { decorOpen = false; $('g-decor').hidden = true; }
+  function closeDecor() { decorOpen = false; decorPick = null; $('g-decor').hidden = true; }
 
   function openPicker() {
     pickerOpen = true; pLast = 0;
@@ -662,7 +881,7 @@ end`;
   const past = [], future = [];
   function snapState() {
     const sp = game.snapshot();
-    return JSON.stringify({ tiles: Array.from(game.level.tiles), entities: sp.entities, props: sp.props });
+    return JSON.stringify({ tiles: Array.from(game.level.tiles), entities: sp.entities, props: sp.props, story: sp.story });
   }
   function mark() {
     if (!game) return;
@@ -678,6 +897,7 @@ end`;
     const sp = game.snapshot();
     sp.entities = st.entities;
     sp.props = st.props || [];
+    sp.story = st.story || [];
     sp.level = { w: lvl.w, h: lvl.h, tiles: Array.from(lvl.tiles) };
     build(sp);
   }
@@ -1086,6 +1306,7 @@ present();
     fillTracks();
     build(saved || window.NeoGameTemplates[tsel.value]);
     buildPalette(); wireInput(); wireBuild();
+    buildStory(); drawHero();
     buildTints();
     // The atlas decodes an inlined image, so the decor strip and the entity
     // previews are filled in when it is ready rather than assumed present.
@@ -1103,6 +1324,11 @@ present();
       o.value = key; o.textContent = key[0].toUpperCase() + key.slice(1);
       themeSel.append(o);
     }
+    $('g-hero-open').addEventListener('click', () => openDecor(idx => setHero({ sprite: idx }), 'people'));
+    $('g-hero-drawn').addEventListener('click', () => setHero({ sprite: undefined }));
+    buildHeroTints();
+    $('g-story-add').addEventListener('click', addBeat);
+    $('g-story-clear').addEventListener('click', () => writeStory([]));
     $('g-decor-fill').addEventListener('click', dressLevel);
     $('g-decor-clear').addEventListener('click', clearDecor);
     $('g-decor-close').addEventListener('click', closeDecor);

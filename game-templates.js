@@ -121,7 +121,8 @@
       "collect": 12
     },
     "cat": "platformer",
-    "props": [{"i":99,"x":60,"y":120,"t":"#cfe6ff"}, {"i":53,"x":252,"y":120,"t":"#cfe6ff"}, {"i":53,"x":292,"y":120,"t":"#cfe6ff"}]
+    "props": [{"i":99,"x":60,"y":120,"t":"#cfe6ff"}, {"i":53,"x":252,"y":120,"t":"#cfe6ff"}, {"i":53,"x":292,"y":120,"t":"#cfe6ff"}],
+    "story": [{"at":0.6,"text":"Coins first. The flag will wait."}, {"score":6,"text":"Halfway. Mind the spikes."}]
   },
   "dungeon": {
     "name": "Dungeon crawl",
@@ -228,7 +229,8 @@
       "collect": 10
     },
     "cat": "dungeon",
-    "props": [{"i":107,"x":28,"y":83,"t":"#383448","b":1}, {"i":107,"x":28,"y":179,"t":"#383448","b":1}, {"i":106,"x":60,"y":179,"t":"#383448","b":1}, {"i":106,"x":116,"y":155,"t":"#383448","b":1}, {"i":107,"x":156,"y":179,"t":"#383448","b":1}, {"i":106,"x":220,"y":83,"t":"#383448","b":1}, {"i":103,"x":36,"y":80,"t":"#6f6890"}, {"i":105,"x":60,"y":176,"t":"#6f6890"}, {"i":620,"x":76,"y":176,"t":"#6f6890"}, {"i":105,"x":84,"y":80,"t":"#6f6890"}, {"i":103,"x":108,"y":176,"t":"#6f6890"}, {"i":103,"x":132,"y":56,"t":"#6f6890"}, {"i":103,"x":188,"y":136,"t":"#6f6890"}, {"i":105,"x":188,"y":176,"t":"#6f6890"}, {"i":620,"x":204,"y":80,"t":"#6f6890"}]
+    "props": [{"i":107,"x":28,"y":83,"t":"#383448","b":1}, {"i":107,"x":28,"y":179,"t":"#383448","b":1}, {"i":106,"x":60,"y":179,"t":"#383448","b":1}, {"i":106,"x":116,"y":155,"t":"#383448","b":1}, {"i":107,"x":156,"y":179,"t":"#383448","b":1}, {"i":106,"x":220,"y":83,"t":"#383448","b":1}, {"i":103,"x":36,"y":80,"t":"#6f6890"}, {"i":105,"x":60,"y":176,"t":"#6f6890"}, {"i":620,"x":76,"y":176,"t":"#6f6890"}, {"i":105,"x":84,"y":80,"t":"#6f6890"}, {"i":103,"x":108,"y":176,"t":"#6f6890"}, {"i":103,"x":132,"y":56,"t":"#6f6890"}, {"i":103,"x":188,"y":136,"t":"#6f6890"}, {"i":105,"x":188,"y":176,"t":"#6f6890"}, {"i":620,"x":204,"y":80,"t":"#6f6890"}],
+    "story": [{"at":0.6,"text":"It is darker than the map promised."}, {"on":"hurt","text":"That hurt. Something lives down here."}]
   },
   "ice": {
     "name": "Ice cavern",
@@ -578,7 +580,8 @@
     },
     "script": "on start\n message \"CLEAR THEM ALL\"\nend\non tick\n if enemies == 0\n  open\n  message \"THE WAY IS OPEN\"\n end\nend\non kill\n shake 4\nend",
     "cat": "shooter",
-    "props": [{"i":106,"x":44,"y":75,"t":"#60251d","b":1}, {"i":106,"x":156,"y":75,"t":"#60251d","b":1}, {"i":106,"x":172,"y":75,"t":"#60251d","b":1}, {"i":107,"x":172,"y":107,"t":"#60251d","b":1}, {"i":106,"x":188,"y":107,"t":"#60251d","b":1}, {"i":622,"x":36,"y":104,"t":"#c04a3a"}, {"i":622,"x":108,"y":120,"t":"#c04a3a"}, {"i":622,"x":132,"y":104,"t":"#c04a3a"}, {"i":622,"x":148,"y":104,"t":"#c04a3a"}]
+    "props": [{"i":106,"x":44,"y":75,"t":"#60251d","b":1}, {"i":106,"x":156,"y":75,"t":"#60251d","b":1}, {"i":106,"x":172,"y":75,"t":"#60251d","b":1}, {"i":107,"x":172,"y":107,"t":"#60251d","b":1}, {"i":106,"x":188,"y":107,"t":"#60251d","b":1}, {"i":622,"x":36,"y":104,"t":"#c04a3a"}, {"i":622,"x":108,"y":120,"t":"#c04a3a"}, {"i":622,"x":132,"y":104,"t":"#c04a3a"}, {"i":622,"x":148,"y":104,"t":"#c04a3a"}],
+    "story": [{"at":0.6,"text":"It knows we are here."}, {"on":"kill","text":"One down."}]
   },
   "maze": {
     "name": "Key maze",
@@ -1329,7 +1332,8 @@
     "script": "on start\n  message \"GOOD LUCK\"\n  message \"FIND THE KEY\"\n  set solid 1\nend\n\non collect\n  if keys >= 1\n    open\n    message \"IT OPENS\"\n  end\n  if score >= 10\n    message \"RUN\"\n    shake 5\n    speed 120\n    spawn \"chaser\" 4 12\n  end\nend\n\non tick\n  every 2\n    if solid == 1\n      tile 20 14 0\n      set solid 0\n    else\n      tile 20 14 1\n      set solid 1\n    end\n  end\nend",
     "kanji": "\u5192",
     "cat": "adventure",
-    "props": [{"i":108,"x":92,"y":163,"t":"#405462","b":1}, {"i":109,"x":108,"y":99,"t":"#405462","b":1}, {"i":108,"x":156,"y":163,"t":"#405462","b":1}, {"i":107,"x":188,"y":51,"t":"#405462","b":1}, {"i":12,"x":84,"y":160,"t":"#7fa8c4"}, {"i":57,"x":156,"y":160,"t":"#7fa8c4"}, {"i":567,"x":172,"y":160,"t":"#7fa8c4"}, {"i":61,"x":188,"y":48,"t":"#7fa8c4"}, {"i":61,"x":204,"y":160,"t":"#7fa8c4"}]
+    "props": [{"i":108,"x":92,"y":163,"t":"#405462","b":1}, {"i":109,"x":108,"y":99,"t":"#405462","b":1}, {"i":108,"x":156,"y":163,"t":"#405462","b":1}, {"i":107,"x":188,"y":51,"t":"#405462","b":1}, {"i":12,"x":84,"y":160,"t":"#7fa8c4"}, {"i":57,"x":156,"y":160,"t":"#7fa8c4"}, {"i":567,"x":172,"y":160,"t":"#7fa8c4"}, {"i":61,"x":188,"y":48,"t":"#7fa8c4"}, {"i":61,"x":204,"y":160,"t":"#7fa8c4"}],
+    "story": [{"at":0.6,"text":"The relic is behind a locked door."}, {"keys":1,"text":"Got it. Now find the door."}]
   },
   "warren": {
     "name": "The warren",
@@ -1618,7 +1622,8 @@
     },
     "script": "on start\n  message \"BEGIN\"\n  set solid 1\n  message \"FIND THE FLAG\"\nend\n\non tick\n  every 2\n    if solid == 1\n      tile 20 14 0\n      set solid 0\n    else\n      tile 20 14 1\n      set solid 1\n    end\n  end\nend\n\non hurt\n  message \"TRY AGAIN\"\nend\n\non collect\n  if coins == 1\n    message \"ONE LEFT\"\n  end\nend",
     "kanji": "\u8d70",
-    "cat": "racing"
+    "cat": "racing",
+    "story": [{"at":0.6,"text":"Green light."}]
   },
   "rally": {
     "name": "Night rally",
@@ -1815,7 +1820,8 @@
     "script": "on start\n  message \"GO\"\n  set wave 0\nend\n\non tick\n  every 6\n    set wave wave + 1\n    spawn \"walker\" 30 12\n    if wave >= 2\n      spawn \"flyer\" 24 8\n    end\n    message \"WAVE \" + wave\n  end\nend",
     "kanji": "\u6483",
     "cat": "shooter",
-    "props": [{"i":106,"x":20,"y":427,"t":"#3d3d45","b":1}, {"i":108,"x":76,"y":547,"t":"#3d3d45","b":1}, {"i":829,"x":28,"y":424,"t":"#7a7a8a"}, {"i":829,"x":36,"y":240,"t":"#7a7a8a"}, {"i":9,"x":44,"y":424,"t":"#7a7a8a"}, {"i":9,"x":60,"y":456,"t":"#7a7a8a"}, {"i":829,"x":76,"y":544,"t":"#7a7a8a"}, {"i":10,"x":100,"y":272,"t":"#7a7a8a"}]
+    "props": [{"i":106,"x":20,"y":427,"t":"#3d3d45","b":1}, {"i":108,"x":76,"y":547,"t":"#3d3d45","b":1}, {"i":829,"x":28,"y":424,"t":"#7a7a8a"}, {"i":829,"x":36,"y":240,"t":"#7a7a8a"}, {"i":9,"x":44,"y":424,"t":"#7a7a8a"}, {"i":9,"x":60,"y":456,"t":"#7a7a8a"}, {"i":829,"x":76,"y":544,"t":"#7a7a8a"}, {"i":10,"x":100,"y":272,"t":"#7a7a8a"}],
+    "story": [{"at":0.6,"text":"Contact. Hold the line."}]
   },
   "voidrun": {
     "name": "Void run",
@@ -2065,7 +2071,8 @@
       "keys": 0
     },
     "script": "on start\n  message \"TWO PLAYERS\"\nend\n\non win\n  message \"TOGETHER\"\nend",
-    "cat": "twoplayer"
+    "cat": "twoplayer",
+    "story": [{"at":0.6,"text":"Two of us. One set of lives."}, {"at":2.4,"who":"p2","text":"So do not fall."}]
   }
 };
 })();

@@ -23,6 +23,8 @@
     lose:       { type: 'square', duty: .5, chord: [392, 330, 262, 196], time: .6, gain: .16 },
     land:       { type: 'noise', from: 1, to: 0, time: .05, gain: .08 },
     break:      { type: 'noise', from: 1, to: 0, time: .12, gain: .16 },
+    // A speech blip: short and quiet, because a story can be chatty.
+    talk:       { type: 'square', duty: .25, from: 440, to: 560, time: .05, gain: .06, step: true },
   };
 
   let ctx = null, master = null, noiseBuf = null, muted = false;

@@ -185,6 +185,10 @@
     const input2 = { left: false, right: false, up: false, down: false, a: false, b: false };
     let player, players, entities, state, score, keys, lives, message, elapsed, won;
     let doorsOpen, respawn, fired, effects, messageAt, shake = 0;
+    /* Speech. A message is the game talking to the room; a bubble is a
+       character talking, anchored to whoever said it and gone a few seconds
+       later. Stories are made of these. */
+    let bubbles = [], toldBeats;
 
     function reset() {
       scroll = scrollCfg.speed;
@@ -194,10 +198,13 @@
       }
       const start = spec.start || { x: TILE, y: TILE };
       respawn = { x: start.x, y: start.y };
+      // What the player looks like: whatever the game asked for, else the
+      // avatar the mode implies, else the studio's drawn characters.
+      const auto = (window.NeoSprites && window.NeoSprites.playerFor(mode, spec.cat)) ?? null;
       const body = (n, inp, dx) => ({
         n, input: inp, tint: n === 2 ? (P.tint2 || '#ff2e88') : (P.tint || '#2ef2ff'),
         char: n === 2 ? (P.char2 || 'ninja') : P.char,
-        sprite: n === 2 ? P.sprite2 : P.sprite,
+        sprite: (n === 2 ? P.sprite2 : P.sprite) ?? auto,
         x: start.x + dx, y: start.y, w: 6, h: 12, vx: 0, vy: 0, grounded: false,
         face: 1, coyote: 0, buffer: 0, walk: 0,
         wall: 0, dash: 0, dashLeft: P.dash ? 1 : 0, doubleLeft: P.doubleJump ? 1 : 0,
@@ -210,6 +217,8 @@
       // inside one another.
       players = coop ? [body(1, input, 0), body(2, input2, 10)] : [body(1, input, 0)];
       player = players[0];
+      bubbles = [];
+      toldBeats = new Set();
       entities = (spec.entities || []).map(makeEntity);
       score = 0; keys = 0; lives = spec.lives ?? 3; elapsed = 0; won = false;
       state = 'play'; message = ''; messageAt = 0;
@@ -273,13 +282,38 @@
           case 'gravity': P.gravity = Math.max(0, Math.min(2000, n(args[0]))); break;
           case 'speed': P.speed = Math.max(10, Math.min(400, n(args[0]))); break;
           case 'shake': shake = Math.max(0, Math.min(8, n(args[0]))); break;
+          // talk "hello"  -  the player speaks
+          // talk "guard" "halt"  -  whoever carries that tag speaks
+          case 'talk':
+            if (args.length >= 2) speak(args[1], String(args[0]));
+            else speak(args[0], 'player');
+            break;
           case 'print': if (scriptLog.length < 50) scriptLog.push(String(args[0]).slice(0, 80)); break;
         }
       },
       fault(msg) { if (!scriptFault) scriptFault = msg; },
     };
+    // Who is talking: a body, an entity with a matching tag, or the player.
+    function speaker(who) {
+      if (!who || who === 'player' || who === 'p1') return players[0];
+      if (who === 'p2') return players[1] || players[0];
+      const tagged = entities.find(e => e.alive && e.tag === who);
+      return tagged || players[0];
+    }
+    function speak(text, who, secs) {
+      const t = String(text ?? '').slice(0, 120);
+      if (!t) return;
+      const from = speaker(who);
+      // One voice at a time per speaker, so a chatty script cannot stack
+      // bubbles into a wall of text.
+      bubbles = bubbles.filter(b => b.from !== from);
+      if (bubbles.length >= 4) bubbles.shift();
+      bubbles.push({ from, text: t, t: 0, life: Math.max(1, Math.min(12, secs || 2.6)) });
+      say('talk');
+    }
+
     const say = name => { if (opts.onEvent) opts.onEvent(name); };
-    const fire = name => { say(name); if (program) window.NeoScript.run(program, name, scriptEnv); };
+    const fire = name => { say(name); storyEvent(name); if (program) window.NeoScript.run(program, name, scriptEnv); };
 
     // Only now, because reset fires the script's start event.
     reset();
@@ -312,6 +346,9 @@
       if (scrolling && view.y <= 0) { view.y = 0; finish(); }
       updateEntities(dt, ctx2);
       runTriggers();
+      runStory();
+      for (const b of bubbles) b.t += dt;
+      bubbles = bubbles.filter(b => b.t < b.life);
       fire('tick');
       if (shake > 0) shake = Math.max(0, shake - dt * 12);
     }
@@ -605,6 +642,36 @@
     // The scriptable layer: a handful of conditions and consequences, declared
     // in the game's own JSON. Small on purpose, so a person - or a model - can
     // write one without learning a language.
+    /* A story is a list of beats, each with one condition and one line. It
+       is data, not code: it packages, validates and travels like the level
+       does, and a person writing one never has to learn the script. */
+    function runStory() {
+      const beats = spec.story;
+      if (!Array.isArray(beats)) return;
+      for (let i = 0; i < beats.length && i < 60; i++) {
+        const s = beats[i];
+        if (!s || toldBeats.has(i)) continue;
+        let due = false;
+        if (s.at !== undefined) due = elapsed >= s.at;
+        else if (s.score !== undefined) due = score >= s.score;
+        else if (s.keys !== undefined) due = keys >= s.keys;
+        else if (s.reach !== undefined) due = players.some(b => b.x >= s.reach * TILE);
+        else if (s.on !== undefined) due = false;                  // fired by event, below
+        if (!due) continue;
+        toldBeats.add(i);
+        speak(s.text, s.who, s.secs);
+      }
+    }
+    // Beats that wait for something to happen rather than for a number.
+    function storyEvent(name) {
+      const beats = spec.story;
+      if (!Array.isArray(beats)) return;
+      for (let i = 0; i < beats.length && i < 60; i++) {
+        const s = beats[i];
+        if (s && s.on === name && !toldBeats.has(i)) { toldBeats.add(i); speak(s.text, s.who, s.secs); }
+      }
+    }
+
     function runTriggers() {
       const list = spec.triggers || [];
       for (let i = 0; i < list.length; i++) {
@@ -785,14 +852,69 @@
         if (b.hurt > 0 && Math.floor(b.hurt * 20) % 2) continue;      // blink while stunned
         const psx = Math.round(b.x + b.w / 2 - ox), psy = Math.round(b.y + b.h - oy);
         const pStep = b.grounded && Math.abs(b.vx) > 6 ? (Math.floor(elapsed * 10) % 2) * -1 : 0;
+        // A vehicle steers, it does not turn around, so it is never mirrored.
+        const vehicle = useArt && art.VEHICLES.has(b.sprite);
         const pArt = useArt && typeof b.sprite === 'number'
           && art.draw(ctx, b.sprite, psx, psy + pStep,
-                      { colour: b.tint, outline: '#0a0714', flip: b.face < 0 });
+                      { colour: b.tint, outline: '#0a0714', flip: !vehicle && b.face < 0 });
         if (pArt) { /* drawn from the atlas */ }
         else if (chars && chars[b.char]) window.NeoScene.drawChar(ctx, chars[b.char], psx, psy, 1, b.walk, b.face);
         else { ctx.fillStyle = b.tint; ctx.fillRect(psx - 3, psy - 12, 6, 12); }
         // A marker over player two, so nobody has to ask which one they are.
         if (coop && b.n === 2) { ctx.fillStyle = b.tint; ctx.fillRect(psx - 1, psy - b.h - 5, 2, 2); }
+      }
+
+      /* Speech bubbles. Drawn after the cast so nothing stands in front of a
+         line of dialogue, and clamped into the frame so a character speaking
+         at the edge of the screen is still readable. */
+      const placed = [];
+      for (const bub of bubbles) {
+        const who = bub.from;
+        if (!who) continue;
+        ctx.font = '5px "Press Start 2P", monospace';
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        const maxW = Math.min(96, view.w - 8);
+        const words = bub.text.split(/\s+/);
+        const lines = [];
+        let line = '';
+        for (const w of words) {
+          const next = line ? line + ' ' + w : w;
+          if (ctx.measureText(next).width > maxW - 8 && line) { lines.push(line); line = w; }
+          else line = next;
+          if (lines.length >= 3) break;
+        }
+        if (line && lines.length < 3) lines.push(line);
+        if (!lines.length) continue;
+        const bw = Math.min(maxW, Math.max(...lines.map(l => ctx.measureText(l).width)) + 8);
+        const bh = lines.length * 7 + 6;
+        let bx = Math.round(who.x + who.w / 2 - ox - bw / 2);
+        let by = Math.round(who.y - oy - bh - 6);
+        bx = Math.max(2, Math.min(bx, view.w - bw - 2));
+        by = Math.max(2, Math.min(by, view.h - bh - 2));
+        // Two characters standing together would otherwise talk over each
+        // other. Stack the later line above the earlier one.
+        for (let guard = 0; guard < 4; guard++) {
+          const clash = placed.find(q => bx < q.x + q.w + 2 && bx + bw + 2 > q.x
+                                      && by < q.y + q.h + 2 && by + bh + 2 > q.y);
+          if (!clash) break;
+          by = clash.y - bh - 3;
+          if (by < 2) { by = clash.y + clash.h + 3; break; }
+        }
+        placed.push({ x: bx, y: by, w: bw, h: bh });
+        const fade = Math.min(1, (bub.life - bub.t) / 0.4);
+        ctx.globalAlpha = Math.max(0, fade);
+        ctx.fillStyle = '#0a0714';
+        ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+        ctx.fillStyle = '#ece8f5';
+        ctx.fillRect(bx, by, bw, bh);
+        // a tail pointing back at whoever is speaking
+        const tx = Math.max(bx + 2, Math.min(Math.round(who.x + who.w / 2 - ox) - 2, bx + bw - 6));
+        ctx.fillRect(tx, by + bh, 4, 2);
+        ctx.fillRect(tx + 1, by + bh + 2, 2, 2);
+        ctx.fillStyle = '#14111f';
+        for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], bx + 4, by + 4 + i * 7);
+        ctx.globalAlpha = 1;
       }
 
       for (const fx of effects) {
@@ -853,6 +975,8 @@
       get lives() { return lives; },
       get player() { return player; },
       get players() { return players; },
+      get bubbles() { return bubbles; },
+      speak(text, who, secs) { speak(text, who, secs); },
       get coop() { return coop; },
       get level() { return lvl; },
       get view() { return view; },
@@ -953,6 +1077,24 @@
       if (lvl && lvl.w) {
         const off = ents.filter(e => e && (e.x < 0 || e.y < 0 || e.x > lvl.w * TILE || e.y > lvl.h * TILE));
         if (off.length) warnings.push(`${off.length} piece(s) sit outside the level`);
+      }
+    }
+
+    const story = spec.story;
+    if (story !== undefined) {
+      if (!Array.isArray(story)) bad('story must be a list');
+      else {
+        if (story.length > 60) bad(`too many story beats (${story.length})`);
+        const KEYS = ['at', 'score', 'keys', 'reach', 'on'];
+        story.forEach((beat, i) => {
+          if (!beat || typeof beat !== 'object') { bad(`story beat ${i + 1} is not a beat`); return; }
+          if (typeof beat.text !== 'string' || !beat.text.trim()) bad(`story beat ${i + 1} has no line to say`);
+          else if (beat.text.length > 120) bad(`story beat ${i + 1} is too long`);
+          const cues = KEYS.filter(k => beat[k] !== undefined);
+          if (cues.length !== 1) bad(`story beat ${i + 1} needs exactly one cue, has ${cues.length}`);
+          if (beat.on !== undefined && !window.NeoScript.EVENTS.includes(beat.on))
+            bad(`story beat ${i + 1} waits for an event that never happens: ${beat.on}`);
+        });
       }
     }
 

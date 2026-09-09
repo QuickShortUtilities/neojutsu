@@ -220,6 +220,29 @@
     return out;
   }
 
+  /* ---- what the player is ----
+     A racing game whose player is a walking man is not a racing game. The
+     avatar follows the mode first - you are a car in a race and a ship in
+     space whatever the level is called - and the category after. Anything
+     not listed here keeps the studio's own drawn characters, which are
+     better at being people than a 1-bit silhouette is. */
+  // The mode owns the vehicles, because the mode is the vehicle: you are a
+  // car in a race and a ship in space whatever the level is called.
+  const PLAYER_BY_MODE = { racer: 990, shmup: 1041 };
+  // A category may only ask for a body that walks. A shooter played as a
+  // platformer is a person with a gun, not a rocket standing on a ledge.
+  const PLAYER_BY_CAT = { scifi: 324, strategy: 1022 };
+  function playerFor(mode, cat) {
+    const byMode = PLAYER_BY_MODE[mode];
+    if (byMode !== undefined) return byMode;
+    const byCat = PLAYER_BY_CAT[cat];
+    return byCat === undefined ? null : byCat;
+  }
+
+  // Sprites that are vehicles rather than bodies. A car does not turn around
+  // to drive left, it steers.
+  const VEHICLES = new Set([989, 990, 991, 992, 1036, 1037, 1038, 1039, 1040, 1041, 736, 942, 943]);
+
   function castFor(cat) { return CAST[cat] || BASE; }
 
   // Sprite for one entity, chosen from its category cast and pinned by the
@@ -233,7 +256,8 @@
     TS, COLS, ROWS, COUNT,
     ready(fn) { if (loaded) fn(); else waiters.push(fn); },
     get loaded() { return loaded; },
-    box, draw, drawFit, pick, castFor, forEntity, group,
+    box, draw, drawFit, pick, castFor, forEntity, group, playerFor,
+    PLAYER_BY_MODE, PLAYER_BY_CAT, VEHICLES,
     CAST, ITEM, BASE, BANDS, HANDY,
   };
 })();

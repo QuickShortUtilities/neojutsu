@@ -146,3 +146,64 @@
   color: var(--text); font-family: var(--mono); font-size: 10px; padding: 5px 7px;
 }
 .mini-select:focus { outline: none; border-color: var(--cyan); }
+
+/* ---------- story ---------- */
+.storybar .hint { margin-bottom: 10px; }
+.timeline {
+  position: relative; margin: 0 0 14px; padding: 0 4px 18px;
+  background: #0b0913; border: 1px solid var(--line); border-radius: 8px;
+}
+.tl-track { position: relative; height: 34px; }
+.tl-track::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 17px; height: 2px;
+  background: var(--line);
+}
+.tl-ticks { position: relative; height: 10px; }
+.tl-tick {
+  position: absolute; transform: translateX(-50%);
+  font-family: var(--mono); font-size: 8px; color: var(--muted);
+}
+.tl-pin {
+  position: absolute; top: 8px; transform: translateX(-50%);
+  width: 18px; height: 18px; border-radius: 50%; cursor: grab; padding: 0;
+  background: var(--bg-3); border: 1px solid var(--magenta); color: var(--magenta);
+  font-family: var(--mono); font-size: 9px; line-height: 1;
+}
+.tl-pin:hover { background: var(--magenta); color: #07060c; }
+.tl-pin[data-dragging] { cursor: grabbing; background: var(--cyan); border-color: var(--cyan); color: #07060c; }
+
+.story-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.story-row { display: flex; align-items: center; gap: 6px; }
+/* Sized by position, because a <select> here is swapped for a .neo-select
+   wrapper at runtime and a class on the original never reaches the box that
+   actually gets laid out. Cue, value, speaker, line, remove. */
+.story-row > *:nth-child(1) { flex: 0 0 118px; }
+.story-row > *:nth-child(2) { flex: 0 0 86px; }
+.story-row > *:nth-child(3) { flex: 0 0 74px; }
+.story-row > *:nth-child(4) { flex: 1 1 auto; min-width: 0; }
+.story-row > *:nth-child(5) { flex: 0 0 auto; }
+.story-row .neo-select { width: 100%; }
+.story-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.story-actions .mini { flex: 0 0 auto; }
+.story-num {
+  width: 62px; flex: none;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 5px;
+  color: var(--text); font-family: var(--mono); font-size: 11px; padding: 5px 6px;
+}
+.story-text {
+  flex: 1; min-width: 0;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 5px;
+  color: var(--text); font-family: var(--mono); font-size: 11px; padding: 6px 8px;
+}
+.story-num:focus, .story-text:focus { outline: none; border-color: var(--cyan); }
+.story-row .mini { flex: none; padding: 5px 9px; }
+
+/* ---------- the hero ---------- */
+.hero-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -6px 0 14px; }
+#g-hero-view {
+  width: 40px; height: 40px; flex: none; image-rendering: pixelated;
+  background: #0b0913; border: 1px solid var(--line); border-radius: 6px;
+}
+.hero-actions { display: flex; gap: 6px; }
+.hero-actions .mini { padding: 6px 8px; }
+.hero-row .tint-row { flex-basis: 100%; }
