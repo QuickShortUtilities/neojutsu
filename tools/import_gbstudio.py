@@ -32,13 +32,24 @@ T = 8
 MODES = {'TOPDOWN': 'topdown', 'PLATFORM': 'platform', 'SHMUP': 'shmup'}
 
 
-def decode_collisions(s):
+def decode_collisions(s, cells=None):
     """GB Studio 4 packs a collision layer as run-length hex.
 
     A run is a two-digit value then a hex count then '+'; a single tile is a
     value then '!'. Verified against every scene in a project: each one
     decodes to exactly width x height cells.
+
+    Some projects write the layer plainly instead - one hex digit per tile and
+    no markers at all. The run-length form always carries a '!' or a '+', so
+    their absence from a string of exactly the right length says which this
+    is. Reading one as the other threw thirty-six scenes away, and on one of
+    them asked Python for a list of 10^47 items on the way.
     """
+    if cells is not None and len(s) == cells and '!' not in s and '+' not in s:
+        try:
+            return [int(c, 16) for c in s]
+        except ValueError:
+            pass
     out, i, n = [], 0, len(s)
     while i < n:
         val = int(s[i:i + 2], 16)
@@ -51,6 +62,10 @@ def decode_collisions(s):
         cnt = int(s[i:j], 16) if j > i else 1
         if j < n and s[j] == '+':
             j += 1
+        # A count read out of something that was never run-length can be
+        # astronomically large; refuse it rather than trying to build it.
+        if cnt < 0 or cnt > 40000 or len(out) + cnt > 40000:
+            return out
         out.extend([val] * cnt)
         i = j
     return out
@@ -76,7 +91,7 @@ def scene_to_grid(scene):
     # A scene with no collision layer at all - a title card, a menu - is not a
     # broken one, it is an empty one, and saying so keeps the reject list
     # honest about what is actually wrong.
-    cells = [0] * (w * h) if not raw else decode_collisions(raw)
+    cells = [0] * (w * h) if not raw else decode_collisions(raw, w * h)
     if len(cells) != w * h:
         return None, w, h
     grid = [[tile_for(cells[y * w + x]) for x in range(w)] for y in range(h)]
@@ -161,11 +176,14 @@ def decode_bitfield(col, n):
     return [0] * n
 
 
+# Editors on Windows leave a byte-order mark at the head of a JSON file, and
+# strict utf-8 refuses it - 34 published projects were unreadable for one
+# invisible character. utf-8-sig accepts the mark and accepts its absence.
 def load_legacy(path):
     """A whole project in one file: scenes, actors, triggers and scripts all
     inline. Everything before GB Studio 3 is shaped this way, which is most of
     what is published."""
-    d = json.loads(path.read_text(encoding='utf-8'))
+    d = json.loads(path.read_text(encoding='utf-8-sig'))
     scenes, names = [], {}
     for sc in d.get('scenes') or []:
         w, h = int(sc.get('width') or 0), int(sc.get('height') or 0)
@@ -205,7 +223,7 @@ def find_projects(src):
     out = []
     for f in sorted(src.rglob('*.gbsproj')):
         try:
-            d = json.loads(f.read_text(encoding='utf-8'))
+            d = json.loads(f.read_text(encoding='utf-8-sig'))
         except Exception:
             continue
         if isinstance(d.get('scenes'), list) and d['scenes']:
@@ -220,13 +238,13 @@ def read_scripts(src):
     actors, routines, defs = {}, {}, {}
     for f in src.rglob('scenes/**/actors/*.gbsres'):
         try:
-            a = json.loads(f.read_text(encoding='utf-8'))
+            a = json.loads(f.read_text(encoding='utf-8-sig'))
             actors[a.get('id')] = gbs_script.slug(a.get('name'))
         except Exception:
             pass
     for f in src.rglob('scripts/**/*.gbsres'):
         try:
-            c = json.loads(f.read_text(encoding='utf-8'))
+            c = json.loads(f.read_text(encoding='utf-8-sig'))
             if c.get('_resourceType') in (None, 'customEvent') or 'script' in c:
                 routines[c.get('id')] = gbs_script.slug(c.get('name'))
                 defs[gbs_script.slug(c.get('name'))] = c.get('script') or []
@@ -236,7 +254,7 @@ def read_scripts(src):
     scenes = {}
     for f in src.rglob('scenes/**/scene.gbsres'):
         try:
-            d = json.loads(f.read_text(encoding='utf-8'))
+            d = json.loads(f.read_text(encoding='utf-8-sig'))
             scenes[d.get('id')] = d.get('name') or f.parent.name
         except Exception:
             pass
@@ -263,19 +281,19 @@ def read_scripts(src):
 
     for f in src.rglob('scenes/**/scene.gbsres'):
         try:
-            d = json.loads(f.read_text(encoding='utf-8'))
+            d = json.loads(f.read_text(encoding='utf-8-sig'))
         except Exception:
             continue
         take(d.get('script'), 'start', '', d.get('name') or f.parent.name)
     for f in src.rglob('scenes/**/triggers/*.gbsres'):
         try:
-            d = json.loads(f.read_text(encoding='utf-8'))
+            d = json.loads(f.read_text(encoding='utf-8-sig'))
         except Exception:
             continue
         take(d.get('script'), 'start', '', f'trigger {d.get("name") or f.stem}')
     for f in src.rglob('scenes/**/actors/*.gbsres'):
         try:
-            d = json.loads(f.read_text(encoding='utf-8'))
+            d = json.loads(f.read_text(encoding='utf-8-sig'))
         except Exception:
             continue
         tag = gbs_script.slug(d.get('name'))
@@ -347,7 +365,7 @@ def main():
     # The split layout that GB Studio 3 and 4 write.
     for f in split:
         try:
-            scene = json.loads(f.read_text(encoding='utf-8'))
+            scene = json.loads(f.read_text(encoding='utf-8-sig'))
         except Exception as e:
             rejects.append({'scene': str(f), 'why': f'unreadable: {e}'}); continue
         name = scene.get('name') or f.parent.name

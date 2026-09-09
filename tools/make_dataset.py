@@ -121,6 +121,19 @@ BUILD = r"""
   function drive(g, seconds) {
     const info = (tx, ty) => TILES[g.level.at(tx, ty)] || {};
     const steps = Math.round(seconds * 60);
+    /* Furthest, not final. Dying puts the bot back where it started, so
+       measuring where it ended up called a game it had played for ten
+       seconds "0px into it" - which threw out one generated game in
+       twenty-five for being unplayable after watching it be played. In a
+       scroller the player is held in the frame and the world moves, so
+       progress is whichever of the two actually travelled. */
+    const x0 = g.player.x, y0 = g.player.y, vx0 = g.view.x, vy0 = g.view.y;
+    let far = 0;
+    const mark = () => {
+      const d = Math.max(Math.abs(g.player.x - x0), Math.abs(g.player.y - y0),
+                         Math.abs(g.view.x - vx0), Math.abs(g.view.y - vy0));
+      if (d > far) far = d;
+    };
     for (let i = 0; i < steps; i++) {
       if (g.state !== 'play') break;
       const p = g.player;
@@ -156,7 +169,9 @@ BUILD = r"""
       }
       g.tick(1 / 60);
       g.input.a = false;
+      mark();
     }
+    return far;
   }
 
   /* Readability, judged after the palette has had its way.
@@ -266,15 +281,7 @@ BUILD = r"""
       if (v.ok) {
         const cv = document.createElement('canvas'); cv.width = 160; cv.height = 144;
         const g = window.NeoGame.create(cv, JSON.parse(JSON.stringify(spec)), { hud: false });
-        const x0 = g.player.x, y0 = g.player.y;
-        const vx0 = g.view.x, vy0 = g.view.y;
-        drive(g, 14);
-        // In a scroller the player is held in the frame and the world moves,
-        // so their own displacement is near zero however well it is going.
-        // Progress is whichever of the two actually travelled.
-        out.moved = Math.round(Math.max(
-          Math.abs(g.player.x - x0), Math.abs(g.player.y - y0),
-          Math.abs(g.view.x - vx0), Math.abs(g.view.y - vy0)));
+        out.moved = Math.round(drive(g, 14));
         out.state = g.state;
         out.scored = g.score;
         out.lost = (spec.lives ?? 3) - g.lives;

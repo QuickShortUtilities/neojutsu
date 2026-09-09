@@ -55,6 +55,31 @@ if len(kinds) < 3:
     issues.append(f'collision faces all collapse to the same tile: {kinds}')
 report['tile_kinds'] = sorted(kinds)
 
+# ---- the split-file layer, in both of its shapes ----
+# Run-length hex, and the plain one-digit-per-tile string that carries no
+# markers at all. Reading one as the other loses the scene, and on a bad day
+# asks for a list of 10^47 items.
+plain = '110011'
+got = G.decode_collisions(plain, len(plain))
+if got != [1, 1, 0, 0, 1, 1]:
+    issues.append(f'a plain collision string decoded as {got}')
+report['plain_string'] = got == [1, 1, 0, 0, 1, 1]
+
+rle = '0f03+00!0f01+'          # three solid, one open, one solid
+got = G.decode_collisions(rle, 5)
+if got != [15, 15, 15, 0, 15]:
+    issues.append(f'a run-length collision string decoded as {got}')
+report['run_length'] = got == [15, 15, 15, 0, 15]
+
+# A run-length read of something that never was one must not try to build it.
+try:
+    huge = G.decode_collisions('1' * 40, None)
+    report['no_runaway'] = len(huge) <= 40000
+    if len(huge) > 40000:
+        issues.append('a bogus run length built a huge list')
+except (MemoryError, OverflowError) as e:
+    issues.append(f'a bogus run length raised {type(e).__name__}')
+
 # ---- and the whole path, on a project shaped like the ones that broke ----
 # A legacy project whose collision layer is one value per tile. What comes out
 # has to be the shape that went in, tile for tile.
