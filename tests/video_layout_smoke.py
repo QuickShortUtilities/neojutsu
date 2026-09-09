@@ -63,6 +63,57 @@ with sync_playwright() as p2:
     reads={v['readout'] for v in bars.values()}
     if len(reads)!=1: issues.append(f'readouts styled differently: {reads}')
 
+    # ---- controls must fit the box they are drawn in ----
+    # A grid item's automatic minimum size is its content, so `1fr 1fr` is not
+    # two halves: a column holding a long option grows past its share and
+    # squeezes its neighbour. That crushed Lives to 47px and an intro slider
+    # to 25px before anyone noticed.
+    b3=p2.chromium.launch(headless=True)
+    fits={}
+    pg=b3.new_context(viewport={"width":1512,"height":1100}).new_page()
+    for f in ['game.html','video.html']:
+        pg.goto(ROOT.as_uri()+'/'+f); pg.wait_for_timeout(400)
+        pg.evaluate("localStorage.clear()"); pg.reload(); pg.wait_for_timeout(1500)
+        fits[f]=pg.evaluate("""()=>{
+          const rows=[...document.querySelectorAll('.two-up')].map((row,i)=>{
+            const kids=[...row.children].map(k=>({
+              cls:(k.className||'').toString().split(' ')[0],
+              w:Math.round(k.getBoundingClientRect().width),
+              label:(k.querySelector('span')?.textContent||'').trim().slice(0,18),
+            }));
+            const cls=(row.className||'').toString();
+            const even = !/lead-tight|lead-short|trail-tight/.test(cls);
+            return {i, cols:getComputedStyle(row).gridTemplateColumns, kids, even};
+          });
+          // any control too narrow to use, and any button its content spills out of
+          // A slider needs room to drag; a select needs room for a value and
+          // its caret. Different controls, different floors.
+          const floor = e => e.tagName === 'INPUT' && e.type === 'range' ? 64 : 48;
+          const tiny=[...document.querySelectorAll('.two-up input[type=range], .two-up .neo-select-btn, .two-up input[type=number]')]
+            .map(e=>({w:Math.round(e.getBoundingClientRect().width), min:floor(e),
+                      what:e.tagName.toLowerCase()+(e.type?'['+e.type+']':'')}))
+            .filter(x=>x.w>0 && x.w<x.min);
+          const spill=[...document.querySelectorAll('.neo-select-btn')]
+            .filter(b=>b.scrollWidth > b.clientWidth+1)
+            .map(b=>b.querySelector('.neo-select-value')?.textContent||'?');
+          return {rows, tiny, spill};
+        }""")
+    pg.close(); b3.close()
+    report['control_fit']=fits
+    for f,d in fits.items():
+        for t in d['tiny']:
+            issues.append(f"{f}: a {t['what']} in a two-up row is only {t['w']}px wide, needs {t['min']}")
+        for sp in d['spill']:
+            issues.append(f"{f}: the select button cannot hold its own content ({sp!r})")
+        for row in d['rows']:
+            ws=[k['w'] for k in row['kids'] if k['w']>0]
+            # An unmarked row is meant to be halves. A row marked lead-tight,
+            # lead-short or trail-tight is uneven on purpose, and only has to
+            # keep its controls usable - checked above.
+            if row['even'] and len(ws)==2 and abs(ws[0]-ws[1])>8:
+                labels=[k['label'] for k in row['kids']]
+                issues.append(f"{f}: two-up row {row['i']} {labels} split {ws[0]}/{ws[1]}px")
+
 print(json.dumps({'viewports':report,'issues':issues}, indent=2))
 if issues: print('\nFAILED'); sys.exit(1)
 print('\nLayout holds at every viewport.')

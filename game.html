@@ -68,13 +68,13 @@
       </label>
       <select id="g-template" hidden aria-hidden="true" data-neo="skip" tabindex="-1"></select>
       <label class="field"><span>Hero</span><select id="g-char"></select></label>
-      <div class="two-up">
+      <div class="two-up lead-tight">
         <label class="field"><span>Lives</span>
           <select id="g-lives"><option>1</option><option>2</option><option selected>3</option><option>5</option><option>9</option></select>
         </label>
         <label class="field"><span>To finish</span>
           <select id="g-goal">
-            <option value="0">Just reach the flag</option>
+            <option value="0">Just the flag</option>
             <option value="5">Collect 5</option>
             <option value="10">Collect 10</option>
             <option value="12" selected>Collect 12</option>
@@ -112,18 +112,18 @@
           <input type="checkbox" id="g-decor-back"><span>Behind</span>
         </label>
       </div>
-      <div class="two-up">
+      <div class="two-up lead-short">
         <label class="field"><span>Facing</span>
           <select id="g-dir"><option value="1" selected>Right</option><option value="-1">Left</option></select>
         </label>
         <label class="field"><span>Level size</span>
           <select id="g-size">
             <option value="">Keep as is</option>
-            <option value="24x14">24 × 14 · small</option>
-            <option value="40x18">40 × 18 · wide</option>
-            <option value="64x18">64 × 18 · long</option>
-            <option value="20x40">20 × 40 · tall</option>
-            <option value="32x24">32 × 24 · room</option>
+            <option value="24x14">24×14 small</option>
+            <option value="40x18">40×18 wide</option>
+            <option value="64x18">64×18 long</option>
+            <option value="20x40">20×40 tall</option>
+            <option value="32x24">32×24 room</option>
           </select>
         </label>
       </div>
@@ -310,14 +310,14 @@
       <p class="hint">A scene from the Video Studio plays before the game and after
         you finish it. Scenes are generated from a seed, so they cost almost nothing
         to carry.</p>
-      <div class="two-up">
+      <div class="two-up trail-tight">
         <label class="field"><span>Opening</span><select id="g-intro"></select></label>
         <label class="field range"><span>Hold <b id="g-intro-secs-v">4</b>s</span>
           <input type="range" id="g-intro-secs" min="0" max="12" step="1" value="4" aria-label="Intro seconds"></label>
       </div>
       <label class="field"><span>Opening caption <small>| splits lines</small></span>
         <input type="text" id="g-intro-text" maxlength="60" spellcheck="false" placeholder="NEO術 | press a key"></label>
-      <div class="two-up">
+      <div class="two-up trail-tight">
         <label class="field"><span>Ending</span><select id="g-outro"></select></label>
         <label class="field range"><span>Hold <b id="g-outro-secs-v">5</b>s</span>
           <input type="range" id="g-outro-secs" min="0" max="12" step="1" value="5" aria-label="Outro seconds"></label>

@@ -333,7 +333,7 @@
     const need = String((spec.rules && spec.rules.collect) || 0);
     if (![...$('g-goal').options].some(o => o.value === need)) {
       const o = document.createElement('option'); o.value = need;
-      o.textContent = need === '0' ? 'Just reach the flag' : `Collect ${need}`;
+      o.textContent = need === '0' ? 'Just the flag' : `Collect ${need}`;
       $('g-goal').append(o);
     }
     $('g-goal').value = need;

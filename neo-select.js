@@ -59,7 +59,11 @@
 
     // ---- keep the button label in step with the real select
     const refresh = () => {
-      button.querySelector('.neo-select-value').textContent = labelOf(select);
+      const label = labelOf(select);
+      button.querySelector('.neo-select-value').textContent = label;
+      // These sit in a 200px sidebar, so a long option is going to be cut.
+      // The full text stays reachable rather than simply lost.
+      button.title = label;
       button.disabled = select.disabled;
       wrap.classList.toggle('is-disabled', select.disabled);
       if (!menu.hidden) buildMenu();
