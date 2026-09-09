@@ -164,16 +164,24 @@
     const coop = !!(spec.coop || spec.players === 2);
     const scrollCfg = Object.assign({ speed: 46, accel: 2.6, max: 130 }, spec.scroll || {});
     let scroll = 0;
-    const lvl = makeLevel(spec.level || { w: 20, h: 18, tiles: '' });
+    /* A game is a run of stages, not one room. A spec may carry `levels` - a
+       list of them - or the older single `level`, which becomes a run of one
+       so nothing that already exists has to change. Score, lives and keys
+       carry across; the level, its cast, its scenery and its story do not. */
+    const stageList = (Array.isArray(spec.levels) && spec.levels.length
+      ? spec.levels.slice(0, 24)
+      : [{ name: spec.name, level: spec.level, entities: spec.entities,
+           props: spec.props, story: spec.story, start: spec.start,
+           rules: spec.rules, cut: spec.cut }]);
+    let stageIndex = 0, stageStory = [], scoreAtStage = 0;
+    let cutT = 0, cutLines = [];
+    let lvl = makeLevel(stageList[0].level || { w: 20, h: 18, tiles: '' });
 
     /* Decor. Props are scenery drawn from the sprite atlas and nothing else:
        no collision, no rules, no script access. That is deliberate - it means
        a level can be dressed with any of the atlas's 1078 drawings without any
        of them being able to change how the game plays. */
-    let props = (spec.props || []).map(p => ({
-      i: p.i | 0, x: Math.round(p.x) || 0, y: Math.round(p.y) || 0,
-      t: typeof p.t === 'string' ? p.t.slice(0, 24) : '', b: !!p.b,
-    })).slice(0, 600);
+    let props = [];
     const rand = rng(spec.seed || 'neojutsu');
     const view = { w: canvas.width, h: canvas.height, x: 0, y: 0 };
 
@@ -190,16 +198,9 @@
        later. Stories are made of these. */
     let bubbles = [], toldBeats;
 
-    function reset() {
-      scroll = scrollCfg.speed;
-      if (scrolling) {
-        view.y = Math.max(0, lvl.h * TILE - view.h);
-        view.x = Math.max(0, Math.min(view.x, lvl.w * TILE - view.w));
-      }
-      const start = spec.start || { x: TILE, y: TILE };
-      respawn = { x: start.x, y: start.y };
-      // What the player looks like: whatever the game asked for, else the
-      // avatar the mode implies, else the studio's drawn characters.
+    // Bodies are made wherever a stage says to start, so arriving in stage
+    // three works the same way as arriving in stage one.
+    function spawnBodies(start) {
       const auto = (window.NeoSprites && window.NeoSprites.playerFor(mode, spec.cat)) ?? null;
       const body = (n, inp, dx) => ({
         n, input: inp, tint: n === 2 ? (P.tint2 || '#ff2e88') : (P.tint || '#2ef2ff'),
@@ -217,13 +218,47 @@
       // inside one another.
       players = coop ? [body(1, input, 0), body(2, input2, 10)] : [body(1, input, 0)];
       player = players[0];
-      bubbles = [];
+    }
+
+    // Everything a stage owns. What the player has earned is not here, which
+    // is the whole point of stages: the room changes, the run continues.
+    function loadStage(i) {
+      stageIndex = Math.max(0, Math.min(stageList.length - 1, i | 0));
+      const st = stageList[stageIndex] || {};
+      lvl = makeLevel(st.level || { w: 20, h: 18, tiles: '' });
+      props = (st.props || []).map(pr => ({
+        i: pr.i | 0, x: Math.round(pr.x) || 0, y: Math.round(pr.y) || 0,
+        t: typeof pr.t === 'string' ? pr.t.slice(0, 24) : '', b: !!pr.b,
+      })).slice(0, 600);
+      entities = (st.entities || []).map(makeEntity);
+      stageStory = Array.isArray(st.story) ? st.story : [];
       toldBeats = new Set();
-      entities = (spec.entities || []).map(makeEntity);
+      bubbles = [];
+      scoreAtStage = score;
+      const start = st.start || { x: TILE, y: TILE };
+      respawn = { x: start.x, y: start.y };
+      spawnBodies(start);
+      view.x = 0; view.y = 0;
+      scroll = scrollCfg.speed;
+      if (scrolling) {
+        view.y = Math.max(0, lvl.h * TILE - view.h);
+        view.x = Math.max(0, Math.min(view.x, lvl.w * TILE - view.w));
+      }
+      doorsOpen = false; effects = []; shake = 0;
+      message = ''; messageAt = 0;
+    }
+
+    function stageRules() {
+      const st = stageList[stageIndex] || {};
+      return st.rules || spec.rules || {};
+    }
+
+    function reset() {
       score = 0; keys = 0; lives = spec.lives ?? 3; elapsed = 0; won = false;
-      state = 'play'; message = ''; messageAt = 0;
-      doorsOpen = false; fired = []; effects = []; shake = 0;
+      state = 'play'; cutT = 0; cutLines = [];
+      fired = [];
       if (scriptEnv) { scriptEnv.vars = {}; scriptFault = ''; scriptLog = []; }
+      loadStage(0);
       if (program) fire('start');
     }
     // The script sees numbers and may call actions. It never sees the engine,
@@ -334,6 +369,14 @@
     }
 
     function step(dt) {
+      // A card between stages: nothing moves, the clock still runs, and when
+      // it is done the next stage is standing there ready.
+      if (state === 'cut') {
+        cutT += dt; elapsed += dt;
+        for (const b of bubbles) b.t += dt;
+        if (cutT >= CUT_SECS) { loadStage(stageIndex + 1); state = 'play'; cutT = 0; }
+        return;
+      }
       if (state !== 'play') return;
       elapsed += dt;
       const ctx2 = { doorsOpen };
@@ -518,10 +561,32 @@
       effects.push({ kind: 'break', x: tx * TILE, y: ty * TILE, t: 0 });
     }
 
+    const CUT_SECS = 2.4;
+
+    // What the card between two stages says. A stage may write its own line;
+    // otherwise it is told where it is, which is the least a game owes you.
+    function cutTextFor(st, n) {
+      const own = st && st.cut;
+      if (Array.isArray(own)) return own.slice(0, 3).map(t => String(t).slice(0, 28).toUpperCase());
+      if (typeof own === 'string' && own.trim()) {
+        return own.split('|').slice(0, 3).map(t => t.trim().slice(0, 28).toUpperCase());
+      }
+      const lines = [`STAGE ${n + 1}`];
+      if (st && st.name) lines.push(String(st.name).slice(0, 28).toUpperCase());
+      return lines;
+    }
+
     function finish() {
-      const need = (spec.rules && spec.rules.collect) || 0;
-      if (score >= need) { state = 'won'; won = true; message = 'CLEAR'; say('win'); }
-      else { message = `${need - score} TO GO`; messageAt = elapsed; }
+      const need = stageRules().collect || 0;
+      const got = score - scoreAtStage;
+      if (got < need) { message = `${need - got} TO GO`; messageAt = elapsed; return; }
+      if (stageIndex + 1 < stageList.length) {
+        // Not won - moved on. Lives, score and keys come with you.
+        cutLines = cutTextFor(stageList[stageIndex + 1], stageIndex + 1);
+        cutT = 0; state = 'cut'; say('checkpoint');
+      } else {
+        state = 'won'; won = true; message = 'CLEAR'; say('win');
+      }
     }
 
     // With two on screen an enemy has to choose. It chooses the nearer one,
@@ -646,7 +711,7 @@
        is data, not code: it packages, validates and travels like the level
        does, and a person writing one never has to learn the script. */
     function runStory() {
-      const beats = spec.story;
+      const beats = stageStory;
       if (!Array.isArray(beats)) return;
       for (let i = 0; i < beats.length && i < 60; i++) {
         const s = beats[i];
@@ -664,7 +729,7 @@
     }
     // Beats that wait for something to happen rather than for a number.
     function storyEvent(name) {
-      const beats = spec.story;
+      const beats = stageStory;
       if (!Array.isArray(beats)) return;
       for (let i = 0; i < beats.length && i < 60; i++) {
         const s = beats[i];
@@ -917,6 +982,27 @@
         ctx.globalAlpha = 1;
       }
 
+      /* The card between stages. Drawn over the frame rather than instead of
+         it, so you can see the place you just finished behind the words - the
+         cheapest way to make a run feel like one journey rather than a series
+         of unrelated rooms. */
+      if (state === 'cut') {
+        const fade = Math.min(1, cutT / 0.25) * Math.min(1, (CUT_SECS - cutT) / 0.35);
+        ctx.fillStyle = `rgba(5,4,10,${0.72 * Math.max(0, fade)})`;
+        ctx.fillRect(0, 0, view.w, view.h);
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        const top = Math.round(view.h / 2 - (cutLines.length * 12) / 2);
+        cutLines.forEach((line, i) => {
+          ctx.fillStyle = '#000';
+          ctx.fillText(line, view.w / 2 + 1, top + i * 12 + 1);
+          ctx.fillStyle = i === 0 ? '#ffd23f' : '#ece8f5';
+          ctx.fillText(line, view.w / 2, top + i * 12);
+        });
+        ctx.textAlign = 'left';
+      }
+
       for (const fx of effects) {
         const a = 1 - fx.t / 0.35, r = 2 + fx.t * 22;
         ctx.fillStyle = fx.kind === 'break' ? `rgba(200,150,90,${a})` : `rgba(255,246,200,${a})`;
@@ -940,6 +1026,10 @@
           ctx.fillStyle = '#2ef2ff'; ctx.fillRect(0, 8, Math.round(view.w * done), 1);
         }
         if (keys) { ctx.fillStyle = '#2ef2ff'; ctx.fillText(`${keys}`, 40, 2); }
+        if (stageList.length > 1) {
+          ctx.fillStyle = '#9a92b3';
+          ctx.fillText(`${stageIndex + 1}/${stageList.length}`, view.w / 2 - 14, 2);
+        }
       }
       if (state !== 'play' || message) {
         ctx.font = '8px "Press Start 2P", monospace';
@@ -1035,6 +1125,11 @@
         return false;
       },
       // What the studio saves: the live tilemap and entity placements.
+      get stage() { return stageIndex; },
+      get stages() { return stageList.length; },
+      // Skip the card, for a studio that does not want to wait for it.
+      skipCut() { if (state === 'cut') { loadStage(stageIndex + 1); state = 'play'; cutT = 0; } },
+      goToStage(i) { loadStage(i); state = 'play'; cutT = 0; draw(); },
       snapshot() {
         return { ...spec, level: { w: lvl.w, h: lvl.h, tiles: Array.from(lvl.tiles) },
                  entities: entities.map(e => ({ type: e.type, x: Math.round(e.home.x), y: Math.round(e.home.y),
@@ -1054,6 +1149,26 @@
     const errors = [], warnings = [];
     const bad = m => errors.push(m);
     if (!spec || typeof spec !== 'object') return { ok: false, errors: ['not an object'], warnings };
+
+    /* A run of stages is checked stage by stage, each on the same terms a
+       single-level game is held to. A run whose third room cannot be finished
+       is as broken as one whose first cannot, and finding that out on arrival
+       is too late. */
+    if (Array.isArray(spec.levels)) {
+      if (!spec.levels.length) bad('levels is empty');
+      if (spec.levels.length > 24) bad(`too many stages (${spec.levels.length})`);
+      spec.levels.forEach((st, i) => {
+        if (!st || typeof st !== 'object') { bad(`stage ${i + 1} is not a stage`); return; }
+        const one = { ...spec, ...st, levels: undefined,
+                      rules: st.rules || spec.rules, lives: spec.lives };
+        const r = validate(one);
+        for (const e of r.errors) bad(`stage ${i + 1}: ${e}`);
+        for (const w of r.warnings) warnings.push(`stage ${i + 1}: ${w}`);
+        if (st.cut !== undefined && !(typeof st.cut === 'string' || Array.isArray(st.cut)))
+          bad(`stage ${i + 1}: cut must be a line or a list of them`);
+      });
+      return { ok: !errors.length, errors, warnings };
+    }
 
     const lvl = spec.level;
     if (!lvl || !(lvl.w > 0) || !(lvl.h > 0)) bad('level needs a positive w and h');
