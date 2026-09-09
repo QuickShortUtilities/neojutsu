@@ -21,6 +21,9 @@ from collections import Counter
 DIRS = {'left': -1, 'right': 1, 'up': 1, 'down': -1}
 ANGLES = {'right': 0, 'down': 90, 'left': 180, 'up': 270}
 MATH_OPS = {'add': '+', 'sub': '-', 'mul': '*', 'div': '/', 'mod': '%'}
+# Four ways as one number, the way the engine answers dir(): DIRS above is
+# a two-way sign, which cannot tell up from right.
+FACING = {'right': 1, 'left': -1, 'down': 2, 'up': -2}
 # What is left of a formula once its variables are taken out. Anything
 # else in there is a function we have no word for - min and max, mostly.
 PLAIN_MATH = re.compile(r'^[-0-9+*/%(). ]*$')
@@ -165,6 +168,29 @@ def translate(nodes, ctx, depth=0):
                        else f'set {target} {target} {op} {rhs}')
             continue
 
+        if name in ('IF_ACTOR_AT_POSITION', 'IF_ACTOR_DIRECTION'):
+            # Questions about an actor, which the language can now ask.
+            tag = ctx.tag(args.get('actorId'))
+            if not tag:
+                ctx.missing[name + ' (player)'] += 1
+                continue
+            if name == 'IF_ACTOR_AT_POSITION':
+                out.append(f'if at({_q(tag)}, {num(args.get("x")):g}, {num(args.get("y")):g})')
+            else:
+                d = args.get('direction')
+                d = d.get('value') if isinstance(d, dict) else d
+                if d not in FACING:
+                    ctx.missing[name] += 1
+                    continue
+                out.append(f'if dir({_q(tag)}) == {FACING[d]}')
+            out += ['  ' + l for l in translate(kids.get('true'), ctx, depth + 1)]
+            other = translate(kids.get('false'), ctx, depth + 1)
+            if other:
+                out.append('else')
+                out += ['  ' + l for l in other]
+            out.append('end')
+            continue
+
         if name == 'IF':
             cond = args.get('condition') or {}
             var = cond.get('value') if isinstance(cond, dict) else args.get('variable')
@@ -188,7 +214,8 @@ def translate(nodes, ctx, depth=0):
 
         if name in ('ACTOR_MOVE_TO', 'ACTOR_SET_DIRECTION', 'ACTOR_DEACTIVATE',
                     'ACTOR_ACTIVATE', 'ACTOR_STOP_UPDATE', 'LAUNCH_PROJECTILE',
-                    'ACTOR_SET_POSITION', 'ACTOR_EMOTE'):
+                    'ACTOR_SET_POSITION', 'ACTOR_EMOTE', 'ACTOR_SET_MOVEMENT_SPEED',
+                    'ACTOR_GET_POSITION'):
             tag = ctx.tag(args.get('actorId'))
             if not tag:
                 ctx.missing[name + ' (player)'] += 1
@@ -209,6 +236,15 @@ def translate(nodes, ctx, depth=0):
                 out.append(f'place {_q(tag)} {num(args.get("x")):g} {num(args.get("y")):g}')
             elif name == 'ACTOR_EMOTE':
                 out.append(f'emote {_q(tag)} "!"')
+            elif name == 'ACTOR_GET_POSITION':
+                # Two variables out of one question each.
+                out.append(f'set v{slug(args.get("vectorX"))} x({_q(tag)})')
+                out.append(f'set v{slug(args.get("vectorY"))} y({_q(tag)})')
+            elif name == 'ACTOR_SET_MOVEMENT_SPEED':
+                # Theirs is pixels per frame at sixty frames a second, which is
+                # the whole conversion: their 1 is a walk, their 4 is a bolt.
+                px = max(0, min(400, round(num(args.get('speed'), 1) * 60)))
+                out.append(f'speed {_q(tag)} {px:g}')
             else:
                 d = args.get('direction')
                 d = d.get('value') if isinstance(d, dict) else d

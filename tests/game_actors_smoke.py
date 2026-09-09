@@ -141,6 +141,74 @@ with sync_playwright() as p:
     if sd['threads'] is not None and sd['threads'] > 2:
         issues.append(f"a waiting tick script piled up {sd['threads']} threads")
 
+    # ---- asking about an actor, not only commanding one ----
+    report['questions'] = page.evaluate("""() => {
+      const NL = String.fromCharCode(10);
+      const t = JSON.parse(JSON.stringify(window.NeoGameTemplates.platformer));
+      t.story = [];
+      t.entities = [{ type: 'walker', x: 80, y: 88, tag: 'guard' }];
+      t.script = ['on start',
+                  '  set gx x("guard")',
+                  '  set gy y("guard")',
+                  '  set there at("guard", 10, 11)',
+                  '  set away at("guard", 2, 2)',
+                  '  set close near("guard", 40)',
+                  '  set far near("guard", 1)',
+                  'end'].join(NL);
+      const cv = document.createElement('canvas'); cv.width = 160; cv.height = 144;
+      const g = window.NeoGame.create(cv, t, { hud: false });
+      g.tick(1/60);
+      const C = window.NeoScript.compile;
+      return {
+        vars: g.scriptState(), fault: g.scriptFault,
+        unknown: C(['on start', '  set a where("g")', 'end'].join(NL)).errors,
+        arity: C(['on start', '  set a at("g", 1)', 'end'].join(NL)).errors,
+        // a space before the bracket is still a grouped value, not a call
+        spaced: C(['on start', '  push n (2)', 'end'].join(NL)).errors,
+      };
+    }""")
+    q = report['questions']
+    if q['fault']: issues.append(f"asking about an actor faulted: {q['fault']}")
+    v = q['vars']
+    if v.get('gx') != 10 or v.get('gy') != 11:
+        issues.append(f"x()/y() gave {v.get('gx')},{v.get('gy')} for an actor at tile 10,11")
+    if v.get('there') != 1 or v.get('away') != 0:
+        issues.append(f"at() said there={v.get('there')} away={v.get('away')}")
+    if v.get('close') != 1 or v.get('far') != 0:
+        issues.append(f"near() said close={v.get('close')} far={v.get('far')}")
+    if not q['unknown']: issues.append('an unknown question compiled')
+    if not q['arity']: issues.append('a question with the wrong number of values compiled')
+    if q['spaced']: issues.append(f"a bracket after a space stopped being a group: {q['spaced']}")
+
+    # ---- pace belongs to the actor, not to its kind ----
+    report['pace'] = page.evaluate("""() => {
+      const NL = String.fromCharCode(10);
+      const t = JSON.parse(JSON.stringify(window.NeoGameTemplates.platformer));
+      t.story = [];
+      t.entities = [{ type: 'walker', x: 60, y: 88, tag: 'a' },
+                    { type: 'walker', x: 100, y: 88, tag: 'b' }];
+      t.script = ['on start', '  speed "a" 5', 'end'].join(NL);
+      const cv = document.createElement('canvas'); cv.width = 160; cv.height = 144;
+      const g = window.NeoGame.create(cv, t, { hud: false });
+      g.tick(1/60);
+      const by = {};
+      for (const e of g.entities) if (e.tag) by[e.tag] = Math.round(e.speed);
+      // and the player form still means the player
+      const t2 = JSON.parse(JSON.stringify(window.NeoGameTemplates.platformer));
+      t2.story = []; t2.script = ['on start', '  speed 200', 'end'].join(NL);
+      const g2 = window.NeoGame.create(document.createElement('canvas'), t2, { hud: false });
+      g2.tick(1/60);
+      return { by, kind: window.NeoGame.ENTITY.walker.speed, playerFault: g2.scriptFault };
+    }""")
+    pc = report['pace']
+    if pc['by'].get('a') != 5:
+        issues.append(f"speeding one actor did not take: {pc['by']}")
+    if pc['by'].get('b') == 5:
+        issues.append('speeding one actor sped up its neighbour of the same kind')
+    if pc['kind'] != 22:
+        issues.append(f"an actor's pace was written back onto its kind ({pc['kind']})")
+    if pc['playerFault']: issues.append(f"the player form of speed faulted: {pc['playerFault']}")
+
     if err: issues.append(f'page errors: {err[:3]}')
     b.close()
 

@@ -20,12 +20,19 @@
   const READS = ['score', 'keys', 'lives', 'time', 'x', 'y', 'vx', 'vy',
                  'enemies', 'coins', 'deaths', 'grounded', 'facing', 'random'];
 
+  /* Questions about a named thing, for use inside an expression. `x` is
+     where you are; `x("guard")` is where the guard is - the same word aimed
+     at something else, the way `speed` works. Without these a script could
+     command an actor but never ask about one, so no condition could depend
+     on where anything had got to. */
+  const FUNCS = { x: 1, y: 1, dir: 1, at: 3, near: 2 };
+
   // Actions a script may take, with how many arguments each expects.
   // A number is an exact arity; a pair is a range, for commands that read
   // better with an optional extra - `talk "hello"` and `talk "guard" "halt"`.
   const ACTIONS = {
     message: 1, win: 0, lose: 0, open: 0, give: 1, hurt: 0, heal: 1,
-    spawn: 3, tile: 3, warp: 2, push: 2, gravity: 1, speed: 1, shake: 1, print: 1,
+    spawn: 3, tile: 3, warp: 2, push: 2, gravity: 1, speed: [1, 2], shake: 1, print: 1,
     talk: [1, 2],
     /* Sequencing. Without a wait a script has no time in it, so nothing can
        happen after something else - no cutscene, no boss pattern, no door
@@ -51,7 +58,7 @@
        `\n` alternative never fired and skipNL() had nothing to skip - the
        language looked line-based but was not. A statement that may take an
        optional extra value needs the line ending to know where to stop. */
-    const re = /[^\S\n]*("(?:[^"\\]|\\.)*"|>=|<=|==|!=|[-+*/%()<>]|\n|[A-Za-z_][A-Za-z_0-9]*|\d+(?:\.\d+)?|#[^\n]*)/g;
+    const re = /[^\S\n]*("(?:[^"\\]|\\.)*"|>=|<=|==|!=|[-+*/%(),<>]|\n|[A-Za-z_][A-Za-z_0-9]*|\d+(?:\.\d+)?|#[^\n]*)/g;
     let m;
     while ((m = re.exec(src)) !== null) {
       const t = m[1];
@@ -86,7 +93,35 @@
       if (t === 'not') return { k: 'not', a: primary() };
       if (/^"/.test(t)) return { k: 'str', v: t.slice(1, -1).replace(/\\(.)/g, '$1') };
       if (/^\d/.test(t)) return { k: 'num', v: parseFloat(t) };
-      if (/^[A-Za-z_]/.test(t)) return { k: 'var', v: t };
+      if (/^[A-Za-z_]/.test(t)) {
+        /* A call is a name with the bracket up against it. The gap matters:
+           `push n (m)` is two arguments and `at("guard", 3, 4)` is one call,
+           and the only thing telling them apart is the space - which is how
+           anyone writing it would tell them apart too. */
+        const open = at(p);
+        if (open && open.v === '(' && open.i === at(p - 1).i + t.length) {
+          p++;                                                   // the bracket
+          const args = [];
+          if (peek() !== ')') {
+            for (;;) {
+              args.push(expr());
+              if (peek() !== ',') break;
+              next();
+            }
+          }
+          expect(')');
+          const want = FUNCS[t];
+          if (want === undefined) errors.push(`no such question as "${t}"`);
+          else if (args.length !== want) {
+            errors.push(`"${t}" takes ${want} value${want === 1 ? '' : 's'}, given ${args.length}`);
+          }
+          // `ask`, not `call`: a statement is already a call, and the two
+          // live in different switches. One name for two things is how you
+          // get a bug that only shows up in the one you were not thinking of.
+          return { k: 'ask', name: t, args };
+        }
+        return { k: 'var', v: t };
+      }
       errors.push(`unexpected "${t}"`);
       return { k: 'num', v: 0 };
     }
@@ -249,6 +284,12 @@
       switch (node.k) {
         case 'num': case 'str': return node.v;
         case 'var': return read(node.v);
+        case 'ask': {
+          // A question about a named thing. The engine answers; an engine that
+          // does not know the word answers nothing, which reads as zero.
+          const vals = node.args.map(a => ev(a, depth + 1));
+          return env.ask ? (env.ask(node.name, vals) || 0) : 0;
+        }
         case 'neg': return -ev(node.a, depth + 1);
         case 'not': return ev(node.a, depth + 1) ? 0 : 1;
         case 'bin': {
@@ -361,5 +402,5 @@
              empty: !Object.keys(r.events).length };
   };
 
-  window.NeoScript = { compile, run, makeThread, resume, EVENTS, READS, ACTIONS, MAX_STEPS };
+  window.NeoScript = { compile, run, makeThread, resume, EVENTS, READS, ACTIONS, FUNCS, MAX_STEPS };
 })();

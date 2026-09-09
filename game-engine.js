@@ -117,6 +117,10 @@
     const def = ENTITY[e.type] || ENTITY.coin;
     return { id: ++entitySeq, type: e.type, x: e.x, y: e.y, w: def.w, h: def.h, def,
              vx: (def.speed || 0) * (e.dir === -1 ? -1 : 1), vy: 0, hp: def.hp || 1,
+             /* Pace belongs to the thing, not to its kind. The def is shared
+                by every walker in the level, so changing it changed all of
+                them; this is the copy a script is allowed to touch. */
+             speed: def.speed || 0,
              home: { x: e.x, y: e.y }, alive: true, t: (e.x * 7 + e.y * 13) % 628 / 100,
              life: 0, cool: 0, tag: e.tag || '',
              // What a script can change about an actor: where it is going,
@@ -330,6 +334,33 @@
         }
         return 0;
       },
+      /* The same questions, asked about something other than you. A tag may
+         name several things - "guard" could be three of them - and the first
+         one is the answer, which is what `move "guard"` already assumes. */
+      ask(name, args) {
+        const who = tagged(args[0])[0];
+        if (!who) return 0;
+        switch (name) {
+          case 'x': return who.x / TILE;
+          case 'y': return who.y / TILE;
+          /* Four ways, as one number: right 1, left -1, down 2, up -2.
+             Only an overhead body has an aim worth reading; everything else
+             faces the way it is travelling. */
+          case 'dir':
+            if (mode === 'topdown' && (who.aimX || who.aimY)) {
+              return who.aimY ? (who.aimY > 0 ? 2 : -2) : who.aimX;
+            }
+            return who.face || (who.vx > 0 ? 1 : who.vx < 0 ? -1 : 1);
+          // Standing on a tile, give or take: an actor mid-step is still there.
+          case 'at': return (Math.abs(who.x / TILE - args[1]) < 0.75 &&
+                             Math.abs(who.y / TILE - args[2]) < 0.75) ? 1 : 0;
+          case 'near': {
+            const to = tagged('player')[0] || player;
+            return Math.hypot((who.x - to.x) / TILE, (who.y - to.y) / TILE) <= args[1] ? 1 : 0;
+          }
+        }
+        return 0;
+      },
       act(name, args) {
         const n = v => (typeof v === 'number' && isFinite(v) ? v : 0);
         switch (name) {
@@ -356,7 +387,22 @@
           case 'push': player.vx += Math.max(-400, Math.min(400, n(args[0])));
                        player.vy += Math.max(-400, Math.min(400, n(args[1]))); break;
           case 'gravity': P.gravity = Math.max(0, Math.min(2000, n(args[0]))); break;
-          case 'speed': P.speed = Math.max(10, Math.min(400, n(args[0]))); break;
+          /* `speed 120` is how fast you are; `speed "guard" 40` is how fast
+             something else is. A guard that charges and a boss that speeds up
+             are the same word aimed at a different thing. */
+          case 'speed':
+            if (args.length > 1) {
+              const v = Math.max(0, Math.min(400, n(args[1])));
+              for (const e of tagged(args[0])) {
+                if (e.n) { P.speed = Math.max(10, v); continue; }   // a body, not an actor
+                // Keep it going the way it was going, only faster or slower.
+                const was = Math.hypot(e.vx, e.vy);
+                if (was > 0.01) { e.vx = e.vx / was * v; e.vy = e.vy / was * v; }
+                else if (e.speed) { e.vx = Math.sign(e.vx || 1) * v; }
+                e.speed = v;
+              }
+            } else P.speed = Math.max(10, Math.min(400, n(args[0])));
+            break;
           case 'shake': shake = Math.max(0, Math.min(8, n(args[0]))); break;
           // talk "hello"  -  the player speaks
           // talk "guard" "halt"  -  whoever carries that tag speaks
@@ -804,7 +850,7 @@
         if (e.goal) {
           const gx = e.goal.x - e.x, gy = e.goal.y - e.y;
           const dist = Math.hypot(gx, gy);
-          const sp = Math.max(14, d.speed || 30);
+          const sp = Math.max(14, e.speed || 30);
           if (dist <= sp * dt + 0.5) {
             e.x = e.goal.x; e.y = e.goal.y; e.goal = null; e.vx = 0; e.vy = 0;
           } else {
@@ -828,7 +874,7 @@
         } else if (d.platform) {
           // A moving platform carries whatever is riding it.
           e.t += dt;
-          const nx = e.home.x + Math.sin(e.t * (e.def.speed / d.span) * 2) * d.span;
+          const nx = e.home.x + Math.sin(e.t * (e.speed / d.span) * 2) * d.span;
           const riders = players.filter(b => b.grounded && b.y + b.h <= e.y + 3 &&
                                               b.x + b.w > e.x && b.x < e.x + e.w);
           const dxp = nx - e.x; e.x = nx;
@@ -839,8 +885,8 @@
             const dx = (target.x + target.w / 2) - (e.x + e.w / 2);
             const dy = (target.y + target.h / 2) - (e.y + e.h / 2);
             const near = Math.hypot(dx, dy) < d.sight;
-            e.vx = near ? Math.sign(dx) * d.speed : 0;
-            if (mode === 'topdown') { e.vy = near ? Math.sign(dy) * d.speed : 0; e.y += e.vy * dt; }
+            e.vx = near ? Math.sign(dx) * e.speed : 0;
+            if (mode === 'topdown') { e.vy = near ? Math.sign(dy) * e.speed : 0; e.y += e.vy * dt; }
             e.x += e.vx * dt;
             if (solidAt(lvl, Math.floor((e.x + (e.vx > 0 ? e.w : 0)) / TILE), Math.floor((e.y + e.h / 2) / TILE), ctx2)) e.x -= e.vx * dt;
           } else if (d.floats) {
