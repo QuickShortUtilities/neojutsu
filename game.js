@@ -116,8 +116,15 @@
     spec.coop = c.coop;
     if (spec.script === undefined) spec.script = '';
     /* A game whose ending is not a pickup count keeps the rules it came
-       with: the dropdown is showing that ending, not choosing one. */
-    if (String($('g-goal').value) !== 'own') {
+       with: the dropdown is showing that ending, not choosing one. Asked of
+       the game rather than of the widget, because the widget is a report of
+       what the game is and this is the place that decides it - reading the
+       report back and believing it is how a falling-block game ended up
+       asking for twelve coins that were never in it. */
+    const owned = ((Array.isArray(spec.levels) && spec.levels.length ? spec.levels[0] : spec).rules)
+                || spec.rules || {};
+    const counted = !(owned.clearAll || owned.clearFoes || owned.lines || owned.beat);
+    if (counted) {
       spec.rules = { ...(spec.rules || {}), collect: c.goal || 0 };
     }
     [spec.sky0, spec.sky1] = (c.sky === 'own' && ownSky) ? ownSky : (SKIES[c.sky] || SKIES.day);
@@ -426,6 +433,14 @@
     // Facing is a property of a placed entity; with none to place it says nothing.
     const facing = $('g-dir') && $('g-dir').closest('label');
     if (facing) facing.hidden = !bodied;
+    /* Two modes whose level *is* the screen: nothing about them scrolls, so
+       nothing about them may be bigger than what you can see. Resizing a
+       formation game to sixty-four tiles marched the aliens forty-four tiles
+       past the right-hand edge before they turned, because the wall they turn
+       at is the level's and the level was no longer the screen. */
+    const fixedScreen = spec.mode === 'invaders' || spec.mode === 'blocks';
+    const sizeField = $('g-size') && $('g-size').closest('label');
+    if (sizeField) sizeField.hidden = fixedScreen;
 
     // Which sky this game came with: one of the presets, or its own.
     if (spec.sky0 && spec.sky1) {
@@ -460,6 +475,14 @@
     } else if (own) {
       own.remove();
     }
+    /* And where it is a readout, it is not a control. Left live, the four
+       pickup counts sat next to it as things you could pick, and picking one
+       on a falling-block game wrote `collect: 12` beside `lines: 6` - a game
+       that no longer validates, asking for twelve coins that do not exist,
+       broken by one dropdown in the panel that was meant to be describing it. */
+    sel.disabled = !!ending;
+    sel.title = ending ? `This game ends by ${ending.toLowerCase()}, so there is nothing to choose`
+                       : '';
     /* The ending is not chosen here, only reported - so stop before the
        pickup-count options, but not before everything else this function
        does. Returning outright once skipped the abilities above. */

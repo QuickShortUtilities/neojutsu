@@ -72,6 +72,8 @@ with sync_playwright() as pw:
           entities: shown($('g-entities')),
           facing: shown($('g-dir') && $('g-dir').closest('label')),
           goal: ($('g-goal').selectedOptions[0] || {}).textContent || '',
+          goalLocked: $('g-goal').disabled,
+          sizeShown: shown($('g-size') && $('g-size').closest('label')),
           // Which scripts the panel is willing to paste into this game.
           recipes: [...document.querySelectorAll('#g-recipes [data-recipe]')]
                      .filter(b => !b.hidden).map(b => b.dataset.recipe),
@@ -111,8 +113,17 @@ with sync_playwright() as pw:
         if not row['goal'].strip():
             issues.append(f"{row['id']} ({mode}) does not say how it ends")
         # No flag stands at the end of a bike course or a scrolling shooter.
-        if mode in ('rider', 'racer', 'shmup') and 'flag' in row['goal'].lower():
+        if mode in ('rider', 'racer', 'shmup', 'scramble') and 'flag' in row['goal'].lower():
             issues.append(f"{row['id']} ({mode}) says {row['goal']!r}, but has no flag")
+        # Where the ending is a readout it must not also be four choices.
+        counted = row['win'] == 'goal'
+        if row['goalLocked'] == counted:
+            issues.append(f"{row['id']} ({mode}) ends by {row['goal']!r} and the "
+                          f"control is {'locked' if row['goalLocked'] else 'live'}")
+        # A mode whose level is the screen has no level size to choose.
+        fixed = mode in ('invaders', 'blocks')
+        if row['sizeShown'] == fixed:
+            issues.append(f"{row['id']} ({mode}) offers a level size: {row['sizeShown']}")
 
     # A recipe is a script the panel will paste in. The generator has always
     # filtered them by mode and ending; the panel used to offer all of them.
@@ -162,6 +173,33 @@ with sync_playwright() as pw:
         if not r['beforeOpen']: issues.append('could not open the Abilities window at all')
         if not r['hidden']: issues.append('a block game still lists Abilities on the bar')
         if not r['back']: issues.append('an open window did not come back when the game could use it')
+
+    # And the rule survives the panel being lied to: writing a pickup count
+    # into a game that does not end on one used to leave it not merely odd but
+    # invalid, asking for twelve coins that were never in it.
+    report['forced'] = page.evaluate("""() => {
+      const $ = i => document.getElementById(i);
+      const out = [];
+      for (const [key, t] of Object.entries(window.NeoGameTemplates || {})) {
+        const st = (t.levels && t.levels.length) ? t.levels[0] : t;
+        const r = st.rules || t.rules || {};
+        if (!(r.clearAll || r.clearFoes || r.lines || r.beat)) continue;
+        const s = $('g-template'); s.value = key;
+        s.dispatchEvent(new Event('change', { bubbles: true }));
+        $('g-goal').value = '12';                       // as if the lock were not there
+        $('g-goal').dispatchEvent(new Event('change', { bubbles: true }));
+        const v = NeoGame.validate(NeoGameStudio.spec);
+        out.push({ key, collect: (NeoGameStudio.spec.rules || {}).collect || 0,
+                   valid: v.ok, err: v.errors.slice(0, 1) });
+      }
+      return out;
+    }""")
+    for row in report['forced']:
+        if row['collect']:
+            issues.append(f"{row['key']}: a pickup count was written onto a game "
+                          f"that does not end on one ({row['collect']})")
+        if not row['valid']:
+            issues.append(f"{row['key']}: the panel made it invalid: {row['err']}")
 
     # The pieces a maze game is built from have to be in the palette.
     report['palette'] = page.evaluate("""() => {
