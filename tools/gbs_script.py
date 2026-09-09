@@ -20,6 +20,10 @@ from collections import Counter
 
 DIRS = {'left': -1, 'right': 1, 'up': 1, 'down': -1}
 ANGLES = {'right': 0, 'down': 90, 'left': 180, 'up': 270}
+MATH_OPS = {'add': '+', 'sub': '-', 'mul': '*', 'div': '/', 'mod': '%'}
+# What is left of a formula once its variables are taken out. Anything
+# else in there is a function we have no word for - min and max, mostly.
+PLAIN_MATH = re.compile(r'^[-0-9+*/%(). ]*$')
 
 
 def slug(name):
@@ -116,6 +120,49 @@ def translate(nodes, ctx, depth=0):
 
         if name == 'SET_VALUE':
             out.append(f'set v{slug(args.get("variable"))} {num(args.get("value"))}')
+            continue
+
+        if name == 'VARIABLE_MATH_EVALUATE':
+            # GB Studio 4 writes these as a formula: `$L0$%8`, `$06$/10`. The
+            # variables are wrapped in dollars and the rest is arithmetic we
+            # already have - so substitute the names and keep the sum. Their
+            # division truncates and ours does not, which moves a value by
+            # less than one and keeps the shape of the script, which is what
+            # this corpus is for.
+            raw = str(args.get('expression') or '')
+            body = re.sub(r'\$([^$]*)\$', lambda m: f'v{slug(m.group(1))}', raw).strip()
+            bare = re.sub(r'v[A-Za-z0-9_]+', '', body)
+            if not body or not PLAIN_MATH.match(bare):
+                ctx.missing[name] += 1
+                continue
+            out.append(f'set v{slug(args.get("variable"))} {body}')
+            continue
+
+        if name.startswith('VARIABLE_MATH'):
+            """`x = x + 2`, `x = y`, `x = random`. The commonest thing a real
+            script does after talking, and the one gap where our language
+            already had every piece needed to say it."""
+            op = MATH_OPS.get(args.get('operation'))
+            if op is None and args.get('operation') != 'set':
+                ctx.missing[name] += 1
+                continue
+            target = f'v{slug(args.get("vectorX"))}'
+            src = args.get('other')
+            if src == 'var':
+                rhs = f'v{slug(args.get("vectorY"))}'
+            elif src == 'rnd':
+                # Their random is a range; ours is 0..1, so scale it.
+                lo, hi = num(args.get('minValue'), 0), num(args.get('maxValue'), 0)
+                span = max(1, int(hi - lo))
+                rhs = f'random * {span}' + (f' + {lo:g}' if lo else '')
+            elif src == 'true':
+                rhs = '1'
+            elif src == 'false':
+                rhs = '0'
+            else:
+                rhs = f'{num(args.get("value")):g}'
+            out.append(f'set {target} {rhs}' if args.get('operation') == 'set'
+                       else f'set {target} {target} {op} {rhs}')
             continue
 
         if name == 'IF':
