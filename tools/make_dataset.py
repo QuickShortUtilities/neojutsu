@@ -111,7 +111,9 @@ def make_prompt(rng):
 
 # ---- the browser side: generate, validate, and try to play ----
 BUILD = r"""
-(prompts) => {
+(args) => {
+  const prompts = args.prompts || args;
+  const CHIP = args.chip || 'gameboy';
   const T = 8, TILES = window.NeoGame.TILES;
 
   // The same bot the picker uses to keep its previews alive. A game a bot
@@ -157,6 +159,103 @@ BUILD = r"""
     }
   }
 
+  /* Readability, judged after the palette has had its way.
+
+     A level can validate, play, and still be unplayable: a magenta enemy on
+     a purple wall is obvious in thirty-two colours and gone in four. So the
+     frame is snapped to the hardware palette first, and only then is the
+     cast measured against the ground it stands on. Draw it twice - once with
+     everything, once with the level alone - and the pixels that differ are
+     exactly the things a player needs to see. */
+  function readability(spec, chip) {
+    const cv = document.createElement('canvas'); cv.width = 160; cv.height = 144;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    const g = window.NeoGame.create(cv, JSON.parse(JSON.stringify(spec)), { hud: false });
+    g.tick(1.6);                                     // past the arrival blink
+
+    /* One game, one moment, one camera. Pin the view first: building a second
+       game without the cast re-runs the simulation and takes the camera with
+       it, and then the two frames differ everywhere. */
+    g.freeCam = true;
+    const paint = () => {
+      // A speech bubble hangs off whoever is speaking, so hiding the player
+      // hides their bubble too - and a big bright box of dialogue swamps the
+      // silhouette it was meant to measure. Judge the character, not the talk.
+      g.bubbles.length = 0;
+      g.draw();
+      window.NeoPalette.snap(ctx, 160, 144, { chip, dither: 'bayer4', dithAmt: 0.6 });
+      return ctx.getImageData(0, 0, 160, 144).data;
+    };
+    const lum = (d, i) => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+
+    /* Measured against whichever frame is missing the thing being judged, so
+       the pixels that differ are that thing and nothing else. Contrast is the
+       larger of the two directions: a dark shape on a light ground reads as
+       well as the reverse. */
+    const against = (other) => {
+      let n = 0, mn = 255, mx = 0;
+      const box = [999, 999, -1, -1];
+      for (let i = 0, px = 0; i < full.length; i += 4, px++) {
+        if (full[i] === other[i] && full[i + 1] === other[i + 1] && full[i + 2] === other[i + 2]) continue;
+        const l = lum(full, i);
+        n++; if (l < mn) mn = l; if (l > mx) mx = l;
+        const x = px % 160, y = (px / 160) | 0;
+        if (x < box[0]) box[0] = x; if (y < box[1]) box[1] = y;
+        if (x > box[2]) box[2] = x; if (y > box[3]) box[3] = y;
+      }
+      if (n < 8) return { n, contrast: null };
+      let bg = 0, bgN = 0;
+      for (let y = Math.max(0, box[1] - 8); y < Math.min(144, box[3] + 8); y++) {
+        for (let x = Math.max(0, box[0] - 8); x < Math.min(160, box[2] + 8); x++) {
+          const i = (y * 160 + x) * 4;
+          if (full[i] === other[i] && full[i + 1] === other[i + 1] && full[i + 2] === other[i + 2]) {
+            bg += lum(other, i); bgN++;
+          }
+        }
+      }
+      const mean = bgN ? bg / bgN : 0;
+      return { n, contrast: Math.round(Math.max(mx - mean, mean - mn)) };
+    };
+
+    const full = paint();
+
+    const py = g.player.y;
+    g.player.y = -99999;
+    const noPlayer = paint();
+    g.player.y = py;
+
+    const hidden = [];
+    for (const e of g.entities) if (e.alive) { e.alive = false; hidden.push(e); }
+    const noCast = paint();
+    for (const e of hidden) e.alive = true;
+
+    const seen = new Set();
+    for (let i = 0; i < full.length; i += 4) seen.add(full[i] + ',' + full[i + 1] + ',' + full[i + 2]);
+
+    /* A player who leaves almost no pixels behind is either off the screen -
+       nothing to judge - or standing right there and indistinguishable from
+       what is behind them, which is the worst score there is, not a missing
+       one. Telling the two apart is the difference between a grader and a
+       rubber stamp. */
+    const sx = g.player.x + g.player.w / 2 - g.view.x;
+    const sy = g.player.y + g.player.h / 2 - g.view.y;
+    const onScreen = sx > -8 && sx < 168 && sy > -8 && sy < 152;
+
+    const P = against(noPlayer), C = against(noCast);
+    if (P.contrast === null) P.contrast = onScreen ? 0 : null;
+    /* The binding constraint is the worst-reading thing on screen, not the
+       average of everything. A level whose coins gleam while the player is
+       invisible is not a readable level, and averaging says it is. */
+    const both = [P.contrast, C.contrast].filter(v => v !== null);
+    return {
+      cast: P.n + C.n,
+      playerContrast: P.contrast,
+      castContrast: C.contrast,
+      contrast: both.length ? Math.min(...both) : 0,
+      shades: seen.size,
+    };
+  }
+
   return prompts.map(prompt => {
     try {
       const r = window.NeoGameGen.generateValid(prompt);
@@ -179,6 +278,7 @@ BUILD = r"""
         out.state = g.state;
         out.scored = g.score;
         out.lost = (spec.lives ?? 3) - g.lives;
+        Object.assign(out, readability(spec, CHIP));
       }
       return out;
     } catch (e) { return { prompt, error: String(e && e.message || e) }; }
@@ -217,6 +317,12 @@ def main():
     ap.add_argument('--seed', default='neojutsu')
     ap.add_argument('--min-moved', type=int, default=24,
                     help='pixels a bot must cover before a game counts as playable')
+    ap.add_argument('--chip', default='gameboy',
+                    help='palette the readability check judges against')
+    ap.add_argument('--min-contrast', type=int, default=28,
+                    help='how far the cast must stand out from the ground, after the palette snap')
+    ap.add_argument('--min-shades', type=int, default=3,
+                    help='distinct shades a frame must use; a level that snaps to two is flat')
     args = ap.parse_args()
 
     from playwright.sync_api import sync_playwright
@@ -239,7 +345,7 @@ def main():
             while len(kept) < args.count and guard < args.count * 6:
                 batch = [make_prompt(rng) for _ in range(args.batch)]
                 guard += len(batch)
-                results = page.evaluate(BUILD, [pr for pr, _ in batch])
+                results = page.evaluate(BUILD, {'prompts': [pr for pr, _ in batch], 'chip': args.chip})
                 for (prompt, expect), r in zip(batch, results):
                     why = None
                     spec = r.get('spec')
@@ -255,6 +361,12 @@ def main():
                         why = 'theme not understood'
                     elif r.get('moved', 0) < args.min_moved:
                         why = f"a bot got {r.get('moved', 0)}px into it"
+                    elif r.get('cast', 0) < 12:
+                        why = 'nothing of the cast is on screen'
+                    elif r.get('contrast', 0) < args.min_contrast:
+                        why = f"cast reads at {r.get('contrast', 0)} against the ground"
+                    elif r.get('shades', 0) < args.min_shades:
+                        why = f"the frame snaps to {r.get('shades', 0)} shade(s)"
                     else:
                         key = hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()
                         if key in seen:

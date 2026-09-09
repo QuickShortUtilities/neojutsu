@@ -143,7 +143,7 @@ def main():
                                   '{ spec: prompt, understood: {} }')
             for i in range(0, len(loaded), args.batch):
                 chunk = loaded[i:i + args.batch]
-                verdicts = page.evaluate(CHECK, [s for _, s in chunk])
+                verdicts = page.evaluate(CHECK, {'prompts': [s for _, s in chunk]})
                 for (f, spec), v in zip(chunk, verdicts):
                     if v.get('error'):
                         rejects.append({'file': str(f), 'why': 'threw: ' + v['error'][:60]})

@@ -1004,6 +1004,7 @@
         lvl.tiles[ty * lvl.w + tx] = id; draw(); return true;
       },
       addEntity(e) { const made = makeEntity(e); entities.push(made); draw(); return made; },
+      get entities() { return entities; },
       get props() { return props; },
       addProp(pr) {
         if (props.length >= 600) return null;

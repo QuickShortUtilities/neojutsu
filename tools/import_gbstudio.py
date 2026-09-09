@@ -232,7 +232,7 @@ def main():
                                   '{ spec: prompt, understood: {} }')
             for i in range(0, len(made), 6):
                 chunk = made[i:i + 6]
-                verdicts = page.evaluate(CHECK, [s for _, s, _ in chunk])
+                verdicts = page.evaluate(CHECK, {'prompts': [s for _, s, _ in chunk]})
                 for (name, spec, scene), v in zip(chunk, verdicts):
                     if v.get('error'):
                         rejects.append({'scene': name, 'why': 'threw: ' + v['error'][:60]})

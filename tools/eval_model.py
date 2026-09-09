@@ -99,7 +99,7 @@ def main():
             verdicts = []
             for i in range(0, len(parsed), 8):
                 chunk = [s if s else {} for s in parsed[i:i + 8]]
-                verdicts += page.evaluate(CHECK, chunk)
+                verdicts += page.evaluate(CHECK, {'prompts': chunk})
             b.close()
     finally:
         srv.shutdown()
