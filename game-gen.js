@@ -91,6 +91,9 @@
     // already said overhead - "a tank battle in a cavern" is still a tank.
     if (want.shape && !['racer', 'shmup', 'topdown'].includes(want.mode)) want.mode = 'platform';
 
+    /* Two on one keyboard. The engine has always taken it and nothing could
+       ask for it in words, so no described game was ever a two-player one. */
+    if (/two[- ]player|2[- ]player|co.?op\b|for two\b/.test(raw)) want.coop = true;
     if (/\b(hard|difficult|brutal|tough|punishing)\b/.test(t)) want.difficulty = 2;
     else if (/\b(easy|gentle|simple|relaxed|calm)\b/.test(t)) want.difficulty = 0;
 
@@ -1018,6 +1021,9 @@
       name: (String(prompt || '').trim().slice(0, 40) || `${theme} run`).replace(/\s+/g, ' '),
       mode, seed: s,
       cat: chooseCat(want, mode, theme, o.shape),
+      // Two bodies share the lives; a scroller holds one in the frame and is
+      // not the place for it.
+      ...(want.coop && !['racer', 'shmup'].includes(mode) ? { coop: true } : {}),
       sky0: t.sky[0], sky1: t.sky[1],
       player,
       start: built.start,

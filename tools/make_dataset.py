@@ -59,11 +59,45 @@ ABILITIES = {
     'wallJump':   ['with a wall jump', 'where you can climb walls'],
     'attack':     ['where you can shoot', 'with a weapon'],
 }
+# Overhead only: a turret is a thing you drive, not a thing you jump with.
+TOPDOWN_ABILITIES = {
+    # Not "driving armour": the reader takes "driv" for a racing game, and a
+    # prompt that quietly changes the genre is a prompt that cannot be met.
+    'aimLock': ['in a tank', 'with a turret', 'in armour', 'as a tank with a turret'],
+}
+# A room to survive rather than a level to cross, and a clock to beat.
+FIGHTS = ['with a boss at the end', 'where a horde comes at you',
+          'an arena you have to survive', 'with a swarm to hold off']
+CLOCKS = ['against the clock', 'with a countdown', 'timed']
+TOGETHER = ['for two players', 'two player']
+# A run of rooms rather than one room. The engine has always built these and
+# nothing in the corpus was ever one, because no prompt asked for a number.
+# Not "rooms": the reader takes that for an overhead game, and asking a
+# platformer for three rooms turned it into a dungeon.
+RUNS = ['two levels', 'three levels', 'four levels', 'a three stage run',
+        'five screens', 'four stages', 'a run of three stages']
+# Who you play as, and how much rope you get.
+HEROES = ['as a knight', 'as a ninja', 'as a mage', 'as a robot', 'as a rogue',
+          'as a beast', 'as a princess', 'playing a hero']
+LIVES = ['1 life', '2 lives', '5 lives', '9 lives']
+# Shapes the builder knows by name, which only ever arrived by accident before.
+SHAPES = ['on floating islands', 'in a cavern', 'up a tower',
+          'down a long corridor', 'up a flight of stairs']
 HARD = ['hard', 'difficult', 'brutal', 'tough', 'punishing']
 EASY = ['easy', 'gentle', 'simple', 'relaxed']
 SIZES = {'wide': ['long', 'big', 'sprawling'], 'small': ['short', 'small', 'quick'],
          'tall': ['tall', 'vertical']}
 OPENERS = ['Make ', 'Create ', 'Build ', 'Design ', 'Generate ', '']
+
+
+def collect_of(spec):
+    """What the game asks you to pick up. A run of rooms keeps its rules on
+    each room rather than on the game, so looking only at the top level said
+    every run had ignored the number it was given."""
+    stages = spec.get('levels')
+    if isinstance(stages, list) and stages:
+        return (stages[0].get('rules') or {}).get('collect')
+    return (spec.get('rules') or {}).get('collect')
 
 
 def make_prompt(rng):
@@ -88,6 +122,30 @@ def make_prompt(rng):
         ab = rng.choice(list(ABILITIES))
         parts.append(rng.choice(ABILITIES[ab]))
         expect['ability'] = ab
+
+    # Things the generator can build that nothing was ever asking it for. A
+    # feature with no prompt in the corpus is a feature the model never sees.
+    if mode == 'topdown' and rng.random() < 0.3:
+        ab = rng.choice(list(TOPDOWN_ABILITIES))
+        parts.append(rng.choice(TOPDOWN_ABILITIES[ab]))
+        expect['ability'] = ab
+    if rng.random() < 0.15:
+        parts.append(rng.choice(FIGHTS))
+    if rng.random() < 0.15:
+        parts.append(rng.choice(CLOCKS))
+    if mode in ('platform', 'topdown') and rng.random() < 0.10:
+        parts.append(rng.choice(TOGETHER))
+    if rng.random() < 0.12:
+        parts.append(rng.choice(RUNS))
+    if rng.random() < 0.15:
+        parts.append(rng.choice(HEROES))
+    if rng.random() < 0.10:
+        parts.append(rng.choice(LIVES))
+    # Only when no place was named: "in a cavern" is a shape to the builder and
+    # a cave to the theme scorer, so putting one next to "in the sky" asks for
+    # a theme the generator will not agree to.
+    if mode == 'platform' and not theme and rng.random() < 0.35:
+        parts.append(rng.choice(SHAPES))
 
     r = rng.random()
     if r < 0.25:
@@ -362,7 +420,7 @@ def main():
                         why = 'invalid: ' + (r.get('errors') or ['?'])[0][:50]
                     elif spec.get('mode') != expect['mode']:
                         why = f"asked for {expect['mode']}, got {spec.get('mode')}"
-                    elif 'collect' in expect and (spec.get('rules') or {}).get('collect') != expect['collect']:
+                    elif 'collect' in expect and collect_of(spec) != expect['collect']:
                         why = 'collect count not honoured'
                     elif 'theme' in expect and r['understood'].get('theme') != expect['theme']:
                         why = 'theme not understood'
