@@ -38,6 +38,15 @@ with sync_playwright() as p:
         page.select_option('#g-audio-src', scored[0]); page.wait_for_timeout(800)
     report['scored']=bool(scored)
 
+    # an opening and an ending card, so the package is a whole little film
+    page.evaluate("""()=>{
+      const set=(id,v)=>{const e=document.getElementById(id); e.value=v;
+        e.dispatchEvent(new Event('input',{bubbles:true}));};
+      set('g-intro','skyline'); set('g-intro-secs','2'); set('g-intro-text','FRIEND GAME | press a key');
+      set('g-outro','grid'); set('g-outro-secs','2'); set('g-outro-text','THE END');
+    }""")
+    page.wait_for_timeout(400)
+
     with page.expect_download(timeout=120000) as dl:
         page.click('#g-package')
     pkg=ART/'game.html'; dl.value.save_as(str(pkg))
@@ -45,7 +54,7 @@ with sync_playwright() as p:
     report['package_kb']=round(size/1024)
     if size < 20000: issues.append(f'package suspiciously small: {size} bytes')
     text=pkg.read_text(encoding='utf-8')
-    for needed in ['NeoGame','NeoPalette','NeoChip','NeoScene']:
+    for needed in ['NeoGame','NeoPalette','NeoChip','NeoScene','NeoSfx','NeoScript']:
         if needed not in text: issues.append(f'package is missing {needed}')
     page.close()
 
@@ -71,6 +80,26 @@ with sync_playwright() as p:
     report['colours']=len(cols)
     if stray: issues.append(f'packaged frame off-palette: {list(stray)[:3]}')
     if len(cols) < 2: issues.append('packaged frame is blank')
+
+    # the opening card must render before anything is pressed, and the whole
+    # sequence must run: card -> game -> ending card
+    sequence = page2.evaluate("""()=>new Promise(res=>{
+      const c=document.querySelector('canvas');
+      const shot=()=>c.toDataURL().length;
+      const first=shot();
+      window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyQ'}));
+      setTimeout(()=>{
+        const during=shot();
+        setTimeout(()=>{
+          res({first, during, after:shot(),
+               startedGame: typeof window.NeoGame!=='undefined'});
+        }, 2600);
+      }, 500);
+    })""")
+    report['sequence']={'movedFromTitle': sequence['during']!=sequence['first'],
+                        'keptMoving': sequence['after']!=sequence['during']}
+    if not report['sequence']['movedFromTitle']: issues.append('pressing a key did not start the opening card')
+    if not report['sequence']['keptMoving']: issues.append('the package froze after the opening card')
 
     # and it has to actually play: press right, the player moves
     moved=page2.evaluate("""()=>new Promise(res=>{

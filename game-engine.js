@@ -536,6 +536,12 @@
 
     // ---------- drawing ----------
     function camera() {
+      // While building, the camera is the builder's, not the player's.
+      if (freeCam) {
+        view.x = Math.max(0, Math.min(view.x, Math.max(0, lvl.w * TILE - view.w)));
+        view.y = Math.max(0, Math.min(view.y, Math.max(0, lvl.h * TILE - view.h)));
+        return;
+      }
       const dead = view.w * 0.22;
       const px = player.x + player.w / 2;
       if (px - view.x < dead) view.x = px - dead;
@@ -656,7 +662,7 @@
     }
 
     // ---------- loop ----------
-    let raf = 0, last = 0, acc = 0, running = false;
+    let raf = 0, last = 0, acc = 0, running = false, freeCam = false;
     function frame(now) {
       if (!running) return;
       raf = requestAnimationFrame(frame);
@@ -676,6 +682,10 @@
       get player() { return player; },
       get level() { return lvl; },
       get view() { return view; },
+      get freeCam() { return freeCam; },
+      set freeCam(v) { freeCam = !!v; if (!v) camera(); draw(); },
+      panBy(dx, dy) { view.x += dx; view.y += dy; camera(); draw(); },
+      panTo(x, y) { view.x = x; view.y = y; camera(); draw(); },
       get scriptLog() { return scriptLog; },
       get scriptFault() { return scriptFault; },
       setScript(src) { spec.script = src; const r = compileScript(); reset(); draw(); return r; },

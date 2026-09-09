@@ -47,6 +47,8 @@
     wallJump: $('g-wall').checked,
     dash: $('g-dash').checked,
     attack: $('g-attack').checked,
+    intro: { scene: $('g-intro').value, secs: +$('g-intro-secs').value, text: $('g-intro-text').value.trim() },
+    outro: { scene: $('g-outro').value, secs: +$('g-outro-secs').value, text: $('g-outro-text').value.trim() },
     dir: +$('g-dir').value,
     sfx: $('g-sfx').checked,
     edit: $('g-edit').checked,
@@ -115,7 +117,9 @@
   function meta() {
     if (!game) return;
     const l = game.level;
-    $('g-meta').textContent = `${l.w}×${l.h} tiles · ${game.entities.length} pieces · ${spec.mode}`;
+    const v = game.view;
+    const at = game.freeCam ? ` · at ${Math.round(v.x / T)},${Math.round(v.y / T)}` : '';
+    $('g-meta').textContent = `${l.w}×${l.h} tiles · ${game.entities.length} pieces · ${spec.mode}${at}`;
     $('g-help').textContent = spec.mode === 'platform'
       ? 'Arrows or WASD to move · Z / Space to jump'
       : 'Arrows or WASD to move in any direction';
@@ -130,6 +134,7 @@
   function play() {
     if (!game) return;
     if (game.state !== 'play') game.reset();
+    game.freeCam = false;
     game.start(); setPlaying(true); startMusic();
     display.focus();
   }
@@ -159,6 +164,25 @@
     }
   }
 
+  // ---------- panning ----------
+  // Levels are wider than the screen, so building means being able to look
+  // around. Right-drag pans, arrows nudge, and the bar says where you are.
+  let panning = false, panFrom = null;
+  function setFreeCam(on) {
+    if (!game) return;
+    game.freeCam = on;
+    display.classList.toggle('panning', on && panning);
+    meta();
+  }
+  function panKeys(e) {
+    if (!game || !cfg().edit || $('g-play').getAttribute('aria-pressed') === 'true') return false;
+    const step = e.shiftKey ? 64 : 16;
+    const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.code];
+    if (!d) return false;
+    game.freeCam = true; game.panBy(d[0], d[1]); present(); meta();
+    return true;
+  }
+
   // ---------- building ----------
   function tileAtEvent(e) {
     const r = display.getBoundingClientRect();
@@ -178,12 +202,26 @@
   function wireBuild() {
     display.addEventListener('pointerdown', e => {
       if (!cfg().edit) return;
-      e.preventDefault(); painting = true; display.setPointerCapture(e.pointerId);
-      mark();
-      paint(e, e.button === 2 || brush.id === 0);
+      e.preventDefault(); display.setPointerCapture(e.pointerId);
+      if (e.button === 2 || e.button === 1) {          // right or middle drags the view
+        panning = true; panFrom = { x: e.clientX, y: e.clientY };
+        game.freeCam = true; display.classList.add('panning');
+        return;
+      }
+      painting = true; mark(); paint(e, brush.id === 0);
     });
-    display.addEventListener('pointermove', e => { if (painting) paint(e, e.buttons === 2 || brush.id === 0); });
-    for (const ev of ['pointerup', 'pointercancel']) display.addEventListener(ev, () => { painting = false; });
+    display.addEventListener('pointermove', e => {
+      if (panning && panFrom) {
+        const z = cfg().zoom;
+        game.panBy(-(e.clientX - panFrom.x) / z, -(e.clientY - panFrom.y) / z);
+        panFrom = { x: e.clientX, y: e.clientY };
+        present(); meta(); return;
+      }
+      if (painting) paint(e, brush.id === 0);
+    });
+    for (const ev of ['pointerup', 'pointercancel']) display.addEventListener(ev, () => {
+      painting = false; panning = false; panFrom = null; display.classList.remove('panning');
+    });
     display.addEventListener('contextmenu', e => { if (cfg().edit) e.preventDefault(); });
   }
 
@@ -380,6 +418,8 @@
       set('g-sky', d.look.sky); set('g-char', d.look.char); set('g-lives', d.look.lives);
       set('g-goal', d.look.goal); set('g-vol', Math.round((d.look.vol ?? .7) * 100));
       set('g-title', d.look.title);
+      if (d.look.intro) { set('g-intro', d.look.intro.scene); set('g-intro-secs', d.look.intro.secs); set('g-intro-text', d.look.intro.text); }
+      if (d.look.outro) { set('g-outro', d.look.outro.scene); set('g-outro-secs', d.look.outro.secs); set('g-outro-text', d.look.outro.text); }
       for (const [id, k] of [['g-double','doubleJump'],['g-wall','wallJump'],['g-dash','dash'],['g-attack','attack']])
         if ($(id)) $(id).checked = !!d.look[k];
       if ($('g-edit')) $('g-edit').checked = d.look.edit !== false;
@@ -455,6 +495,8 @@
         title: c.title || 'neojutsu-game',
         chip: c.chip, dither: c.dither, zoom: c.zoom,
         pattern: track ? track.pattern : null,
+        intro: c.intro.secs > 0 ? c.intro : null,
+        outro: c.outro.secs > 0 ? c.outro : null,
       };
       const html = PACKAGE_HTML
         .replace('/*__ENGINE__*/', src.join('\n'))
@@ -507,27 +549,115 @@ const c = document.getElementById('c'); c.width = P.size[0]*D.zoom; c.height = P
 const dctx = c.getContext('2d'); dctx.imageSmoothingEnabled = false;
 const present = () => { window.NeoPalette.snap(lctx, low.width, low.height, {chip:D.chip, dither:D.dither, dithAmt:.6});
   dctx.drawImage(low,0,0,c.width,c.height); };
-const g = window.NeoGame.create(low, D.spec, {onFrame: present,
-  onEvent: n => { if (window.NeoSfx) window.NeoSfx.play(n); }});
-present();
+let g = null, phase = 'idle', tShow = 0, sceneState = null, sceneKey = null, raf = 0, last = 0;
+const EMPTY = {level:0,bass:0,mid:0,treble:0,freq:[],wave:[]};
+
+function caption(text, y) {
+  if (!text) return;
+  lctx.save();
+  lctx.textAlign = 'center'; lctx.textBaseline = 'middle';
+  const lines = String(text).split('|').map(s => s.trim()).slice(0, 3);
+  // Shrink until the longest line fits the frame. A caption clipped at both
+  // edges is worse than a small one, and the frame is only 160px wide.
+  const room = low.width - 8;
+  let size = Math.max(5, Math.round(low.height * 0.075));
+  while (size > 4) {
+    lctx.font = size + 'px "Press Start 2P", monospace';
+    if (Math.max(...lines.map(l => lctx.measureText(l).width)) <= room) break;
+    size--;
+  }
+  lctx.font = size + 'px "Press Start 2P", monospace';
+  lines.forEach((line, i) => {
+    const ly = y + (i - (lines.length - 1) / 2) * size * 1.7;
+    lctx.fillStyle = '#000'; lctx.fillText(line, low.width / 2 + 1, ly + 1);
+    lctx.fillStyle = '#ffffff'; lctx.fillText(line, low.width / 2, ly);
+  });
+  lctx.restore();
+}
+
+// A card is a Video Studio scene run at hardware resolution, so an intro costs
+// a seed and a scene name rather than a video file.
+function card(def, dt) {
+  const S = window.NeoScene.SCENES[def.scene] || Object.values(window.NeoScene.SCENES)[0];
+  if (sceneKey !== def.scene || !sceneState) {
+    sceneState = S.init(window.NeoScene.rng(D.spec.seed || 'neojutsu'), low.width, low.height, .5);
+    sceneKey = def.scene;
+  }
+  lctx.save();
+  S.draw(lctx, low.width, low.height, tShow, EMPTY, sceneState, {speed:1, density:.5, step:dt, bg:true});
+  lctx.restore();
+  caption(def.text || D.title, low.height * 0.5);
+  present();
+}
+
+function startGame() {
+  phase = 'play';
+  if (!g) {
+    g = window.NeoGame.create(low, D.spec, {onFrame: present,
+      onEvent: n => { if (window.NeoSfx) window.NeoSfx.play(n); }});
+  } else g.reset();
+  g.start();
+}
+
+function loop(now) {
+  raf = requestAnimationFrame(loop);
+  const dt = Math.min(.1, (now - last) / 1000 || 0); last = now;
+  if (phase === 'intro' || phase === 'outro') {
+    tShow += dt;
+    const def = phase === 'intro' ? D.intro : D.outro;
+    card(def, dt);
+    if (tShow >= def.secs) {
+      sceneState = null; sceneKey = null;
+      if (phase === 'intro') startGame();
+      else { phase = 'idle'; tShow = 0; begin(); }
+    }
+  } else if (phase === 'play' && g && g.state === 'won' && D.outro && D.outro.secs > 0) {
+    g.stop(); phase = 'outro'; tShow = 0;
+  }
+}
+
+function skip() {
+  if (phase === 'intro') { sceneState = null; sceneKey = null; startGame(); }
+}
+
+let started = false;
+function begin(){
+  if (started && phase !== 'idle') return;
+  started = true;
+  if (window.NeoSfx) window.NeoSfx.ensure();
+  if (D.pattern && window.NeoChip && !window.__music){
+    const ac = new (window.AudioContext||window.webkitAudioContext)();
+    window.NeoChip.render(D.pattern,{tail:false}).then(buf=>{
+      const src=ac.createBufferSource(), gn=ac.createGain();
+      gn.gain.value=.6; src.buffer=buf; src.loop=true;
+      src.connect(gn).connect(ac.destination); src.start(); window.__music=src;
+    }).catch(()=>{});
+  }
+  last = performance.now();
+  if (D.intro && D.intro.secs > 0) { phase = 'intro'; tShow = 0; }
+  else startGame();
+  cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
+}
+
 const KEY={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',ArrowUp:'up',KeyW:'up',
   ArrowDown:'down',KeyS:'down',Space:'a',KeyZ:'a',KeyX:'b',KeyK:'b'};
-addEventListener('keydown',e=>{const k=KEY[e.code];if(k){e.preventDefault();g.input[k]=true;}
-  if(e.code==='KeyR'){g.reset();present();}});
-addEventListener('keyup',e=>{const k=KEY[e.code];if(k)g.input[k]=false;});
+addEventListener('keydown',e=>{
+  if(!started){ begin(); return; }
+  skip();
+  const k=KEY[e.code]; if(k && g){e.preventDefault(); g.input[k]=true;}
+  if(e.code==='KeyR' && g){ g.reset(); present(); }
+});
+addEventListener('keyup',e=>{const k=KEY[e.code]; if(k && g) g.input[k]=false;});
 for(const b of document.querySelectorAll('#pad button')){const k=b.dataset.k;
-  const set=on=>{g.input[k]=on;};
+  const set=on=>{ if(!started){begin();return;} skip(); if(g) g.input[k]=on; };
   b.addEventListener('pointerdown',e=>{e.preventDefault();set(true);});
-  ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>set(false)));}
-let started=false;
-function begin(){ if(started) return; started=true; g.start();
-  if(D.pattern && window.NeoChip){ const ac=new (window.AudioContext||window.webkitAudioContext)();
-    window.NeoChip.render(D.pattern,{tail:false}).then(buf=>{ const src=ac.createBufferSource();
-      const gn=ac.createGain(); gn.gain.value=.7; src.buffer=buf; src.loop=true;
-      src.connect(gn).connect(ac.destination); src.start(); }).catch(()=>{}); } }
-addEventListener('keydown',begin,{once:true});
-c.addEventListener('pointerdown',begin,{once:true});
-document.getElementById('pad').addEventListener('pointerdown',begin,{once:true});
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>{ if(g) g.input[k]=false; }));}
+c.addEventListener('pointerdown',()=>{ if(!started){begin();} else skip(); });
+
+// something on screen before the first key
+lctx.fillStyle='#05040a'; lctx.fillRect(0,0,low.width,low.height);
+caption(D.title, low.height*0.42); caption('PRESS ANY KEY', low.height*0.62);
+present();
 <\/script></body></html>`;
 
   // ---------- wiring ----------
@@ -535,6 +665,13 @@ document.getElementById('pad').addEventListener('pointerdown',begin,{once:true})
     const tsel = $('g-template');
     for (const [key, t] of Object.entries(window.NeoGameTemplates)) {
       const o = document.createElement('option'); o.value = key; o.textContent = `${t.kanji} ${t.name}`; tsel.append(o);
+    }
+    for (const id of ['g-intro', 'g-outro']) {
+      const sel = $(id);
+      for (const [key, def] of Object.entries(window.NeoScene.SCENES)) {
+        const o = document.createElement('option'); o.value = key; o.textContent = def.label; sel.append(o);
+      }
+      sel.value = id === 'g-intro' ? 'skyline' : 'grid';
     }
     const csel = $('g-char');
     for (const key of Object.keys(window.NeoScene.CHARS)) {
@@ -564,6 +701,12 @@ document.getElementById('pad').addEventListener('pointerdown',begin,{once:true})
       display.classList.toggle('building', cfg().edit);
       present(); save();
     });
+    for (const id of ['g-intro','g-outro','g-intro-text','g-outro-text','g-intro-secs','g-outro-secs'])
+      $(id).addEventListener('input', () => {
+        $('g-intro-secs-v').textContent = $('g-intro-secs').value;
+        $('g-outro-secs-v').textContent = $('g-outro-secs').value;
+        save();
+      });
     $('g-title').addEventListener('input', save);
     $('g-undo').addEventListener('click', undo);
     $('g-redo').addEventListener('click', redo);
@@ -583,6 +726,8 @@ document.getElementById('pad').addEventListener('pointerdown',begin,{once:true})
     addEventListener('keydown', e => {
       if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
       if ((e.metaKey || e.ctrlKey) && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+      else if (panKeys(e)) e.preventDefault();
+      else if (e.code === 'Home' && game) { game.freeCam = false; present(); meta(); }
     });
     $('g-script-apply').addEventListener('click', applyScript);
     $('g-script-clear').addEventListener('click', () => { $('g-script').value = ''; applyScript(); });
@@ -615,6 +760,8 @@ document.getElementById('pad').addEventListener('pointerdown',begin,{once:true})
     display.tabIndex = 0;
     display.classList.toggle('building', cfg().edit);
     $('g-zoom-v').textContent = $('g-zoom').value;
+    $('g-intro-secs-v').textContent = $('g-intro-secs').value;
+    $('g-outro-secs-v').textContent = $('g-outro-secs').value;
     syncHistory();
   }
   // A handle on the running game, so it can be driven by tests and, later, by

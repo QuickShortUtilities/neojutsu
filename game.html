@@ -190,6 +190,25 @@
       <label class="field range"><span>Volume <b id="g-vol-v">70</b></span>
         <input type="range" id="g-vol" min="0" max="100" step="1" value="70" aria-label="Music volume"></label>
 
+      <h2 class="panel-title"><span class="k">巻</span> Intro &amp; outro</h2>
+      <p class="hint">A scene from the Video Studio plays before the game and after
+        you finish it. Scenes are generated from a seed, so they cost almost nothing
+        to carry.</p>
+      <div class="two-up">
+        <label class="field"><span>Opening</span><select id="g-intro"></select></label>
+        <label class="field range"><span>Hold <b id="g-intro-secs-v">4</b>s</span>
+          <input type="range" id="g-intro-secs" min="0" max="12" step="1" value="4" aria-label="Intro seconds"></label>
+      </div>
+      <label class="field"><span>Opening caption <small>| splits lines</small></span>
+        <input type="text" id="g-intro-text" maxlength="60" spellcheck="false" placeholder="NEO術 | press a key"></label>
+      <div class="two-up">
+        <label class="field"><span>Ending</span><select id="g-outro"></select></label>
+        <label class="field range"><span>Hold <b id="g-outro-secs-v">5</b>s</span>
+          <input type="range" id="g-outro-secs" min="0" max="12" step="1" value="5" aria-label="Outro seconds"></label>
+      </div>
+      <label class="field"><span>Ending caption</span>
+        <input type="text" id="g-outro-text" maxlength="60" spellcheck="false" placeholder="THE END | thanks for playing"></label>
+
       <h2 class="panel-title"><span class="k">雲</span> Projects</h2>
       <div id="g-cloud-out">
         <p class="hint" id="g-cloud-status">Sign in to keep your games and share them by link.</p>
