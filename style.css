@@ -83,8 +83,24 @@ button { font: inherit; cursor: pointer; }
 .nav-links { display: flex; gap: 22px; align-items: center; }
 .nav-links a { color: var(--muted); font-size: 14px; font-weight: 500; }
 .nav-links a:hover { color: var(--text); text-decoration: none; }
-.nav-gh { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; }
-@media (max-width: 720px) { .nav-links a:not(.nav-gh) { display: none; } }
+/* One way in to the studios, rather than a list of them. */
+.nav-cta {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px 8px 12px; border-radius: 999px;
+  color: #07060c !important; font-weight: 600; letter-spacing: .3px;
+  background: linear-gradient(110deg, var(--cyan), #8bd8ff 45%, var(--magenta));
+  box-shadow: 0 0 18px rgba(46,242,255,.28), 0 0 34px rgba(255,46,136,.18);
+  transition: transform .15s, box-shadow .15s, filter .15s;
+}
+.nav-cta:hover {
+  text-decoration: none; transform: translateY(-1px); filter: saturate(1.15);
+  box-shadow: 0 0 24px rgba(46,242,255,.45), 0 0 46px rgba(255,46,136,.3);
+}
+.nav-cta .k {
+  font-family: var(--kanji); font-weight: 900; font-size: 17px; line-height: 1; color: #07060c;
+}
+/* The button is the one link that has to survive a narrow screen. */
+@media (max-width: 720px) { .nav-links a:not(.nav-cta) { display: none; } }
 
 /* ---------- hero ---------- */
 .hero {
