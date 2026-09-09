@@ -83,14 +83,21 @@ with sync_playwright() as p:
       for (const p of prompts) {
         const g = window.NeoGameGen.generateValid(p);
         const c = window.NeoScript.compile(g.spec.script||'');
-        out.push({p, events:Object.keys(c.events), errors:c.errors.length,
+        const acts = Object.values(c.events || {}).reduce((n, b) => n + (b||[]).length, 0);
+        out.push({p, events:Object.keys(c.events), errors:c.errors.length, acts,
                   lines:(g.spec.script||'').split('\\n').length});
       }
       return out;}""")
-    report['generated_scripts'] = [{'prompt': g['p'][:26], 'events': g['events'], 'lines': g['lines']} for g in gen]
+    report['generated_scripts'] = [{'prompt': g['p'][:26], 'events': g['events'],
+                                    'statements': g['acts'], 'lines': g['lines']} for g in gen]
     for g in gen:
         if g['errors']: issues.append(f"generated script for {g['p']!r} does not compile")
-        if g['lines'] < 6: issues.append(f"generated script for {g['p']!r} is only {g['lines']} lines")
+        # Length is not the property worth asserting: the generator picks its
+        # rules at random, so a short script is a fair outcome and this failed
+        # about one run in four for no fault of the code. What matters is that
+        # a generated game has logic in it at all.
+        if not g['events']: issues.append(f"generated script for {g['p']!r} has no events")
+        elif g['acts'] < 2: issues.append(f"generated script for {g['p']!r} does almost nothing ({g['acts']} statements)")
     variety = {tuple(sorted(g['events'])) for g in gen}
     report['distinct_event_sets'] = len(variety)
     if len(variety) < 2: issues.append('every generated script uses the same events')

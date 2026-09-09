@@ -55,7 +55,7 @@ class Ctx:
         if actor_id in ('$self$', 'self'):
             return self.self_tag or None
         if actor_id == 'player':
-            return None                      # the player is not a tagged actor
+            return 'player'                  # the engine addresses bodies by name now
         return self.actors.get(actor_id)
 
 
@@ -110,6 +110,10 @@ def translate(nodes, ctx, depth=0):
             out.append(f'set {v} {v} {"-" if name == "DEC_VALUE" else "+"} 1')
             continue
 
+        if name == 'SOUND_PLAY_EFFECT':
+            out.append('sound "coin"')
+            continue
+
         if name == 'SET_VALUE':
             out.append(f'set v{slug(args.get("variable"))} {num(args.get("value"))}')
             continue
@@ -136,7 +140,8 @@ def translate(nodes, ctx, depth=0):
             continue
 
         if name in ('ACTOR_MOVE_TO', 'ACTOR_SET_DIRECTION', 'ACTOR_DEACTIVATE',
-                    'ACTOR_ACTIVATE', 'ACTOR_STOP_UPDATE', 'LAUNCH_PROJECTILE'):
+                    'ACTOR_ACTIVATE', 'ACTOR_STOP_UPDATE', 'LAUNCH_PROJECTILE',
+                    'ACTOR_SET_POSITION', 'ACTOR_EMOTE'):
             tag = ctx.tag(args.get('actorId'))
             if not tag:
                 ctx.missing[name + ' (player)'] += 1
@@ -153,6 +158,10 @@ def translate(nodes, ctx, depth=0):
                 out.append(f'show {_q(tag)}')
             elif name == 'ACTOR_STOP_UPDATE':
                 out.append(f'stop {_q(tag)}')
+            elif name == 'ACTOR_SET_POSITION':
+                out.append(f'place {_q(tag)} {num(args.get("x")):g} {num(args.get("y")):g}')
+            elif name == 'ACTOR_EMOTE':
+                out.append(f'emote {_q(tag)} "!"')
             else:
                 d = args.get('direction')
                 d = d.get('value') if isinstance(d, dict) else d

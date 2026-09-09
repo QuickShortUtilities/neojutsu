@@ -34,7 +34,8 @@
     /* Actors. In a real game most of the script is aimed at a named thing in
        the level: move it, stop it, hide it, arm it. Every entity can carry a
        tag, and these address it. */
-    move: 3, nudge: 3, stop: 1, hide: 1, show: 1, face: 2, setsprite: 2, remove: 1,
+    move: 3, nudge: 3, place: 3, stop: 1, hide: 1, show: 1, face: 2,
+    setsprite: 2, remove: 1, emote: [1, 2], sound: 1, camera: [1, 2],
     /* A door: `goto 2` or `goto "the cave"`. Leaving for a named room is
        what turns a run of corridors into a place you can come back to. */
     goto: 1,

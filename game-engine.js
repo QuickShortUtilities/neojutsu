@@ -200,7 +200,7 @@
     /* Speech. A message is the game talking to the room; a bubble is a
        character talking, anchored to whoever said it and gone a few seconds
        later. Stories are made of these. */
-    let bubbles = [], toldBeats;
+    let bubbles = [], toldBeats, emotes = [], camHold = null;
 
     // Bodies are made wherever a stage says to start, so arriving in stage
     // three works the same way as arriving in stage one.
@@ -214,6 +214,8 @@
         face: 1, coyote: 0, buffer: 0, walk: 0,
         wall: 0, dash: 0, dashLeft: P.dash ? 1 : 0, doubleLeft: P.doubleJump ? 1 : 0,
         shotCool: 0, shotHeld: false, bWasDown: false, aWasDown: false,
+        // A script may command a body the same way it commands an actor.
+        hidden: false, goal: null, def: { speed: P.speed },
         // A moment of grace on arriving, so a turret already aimed at
         // the spawn cannot land a hit before anyone has moved.
         hurt: P.grace ?? 1.1,
@@ -237,7 +239,7 @@
       entities = (st.entities || []).map(makeEntity);
       stageStory = Array.isArray(st.story) ? st.story : [];
       toldBeats = new Set();
-      bubbles = [];
+      bubbles = []; emotes = []; camHold = null;
       scoreAtStage = score;
       const start = st.start || { x: TILE, y: TILE };
       respawn = { x: start.x, y: start.y };
@@ -399,6 +401,32 @@
             }
             break;
           }
+          // Put something somewhere, rather than walking it there.
+          case 'place': {
+            for (const e of tagged(args[0])) {
+              e.x = Math.max(0, Math.min(lvl.w - 1, Math.round(n(args[1])))) * TILE;
+              e.y = Math.max(0, Math.min(lvl.h - 1, Math.round(n(args[2])))) * TILE;
+              e.goal = null; e.vx = 0; e.vy = 0;
+            }
+            break;
+          }
+          // A mark over someone's head: surprise, a question, an idea.
+          case 'emote': {
+            const marks = { '!': 672, '?': 674, 'note': 823, 'heart': 529, 'skull': 622 };
+            const which = marks[String(args[1] ?? '!').toLowerCase()] ?? 672;
+            for (const e of tagged(args[0])) emotes.push({ who: e, i: which, t: 0 });
+            break;
+          }
+          /* Camera. `camera 10 6` holds on a tile; `camera follow` gives it
+             back. A hundred of their commands move the camera, and a
+             cutscene that cannot look somewhere is not a cutscene. */
+          case 'camera': {
+            const first = String(args[0] ?? '').toLowerCase();
+            if (first === 'follow' || first === 'player') { camHold = null; break; }
+            camHold = { x: n(args[0]) * TILE - view.w / 2, y: n(args[1]) * TILE - view.h / 2 };
+            break;
+          }
+          case 'sound': say(String(args[0])); break;
           case 'print': if (scriptLog.length < 50) scriptLog.push(String(args[0]).slice(0, 80)); break;
         }
       },
@@ -408,7 +436,14 @@
     // commands a group without knowing how many there are.
     function tagged(name) {
       const t = String(name);
-      return t ? entities.filter(e => e.alive && e.tag === t) : [];
+      if (!t) return [];
+      /* "player" and "p2" address the bodies. Their games aim a third of all
+         actor commands at the player, and ours could not name it at all -
+         every one of those lines was dropped on the way in. */
+      if (t === 'player' || t === 'p1') return players.slice(0, 1);
+      if (t === 'p2') return players.slice(1, 2);
+      if (t === 'players') return players.slice();
+      return entities.filter(e => e.alive && e.tag === t);
     }
 
     // Who is talking: a body, an entity with a matching tag, or the player.
@@ -502,6 +537,8 @@
       pumpThreads(dt);
       for (const b of bubbles) b.t += dt;
       bubbles = bubbles.filter(b => b.t < b.life);
+      for (const em of emotes) em.t += dt;
+      emotes = emotes.filter(em => em.t < 1.1 && em.who && em.who.alive !== false);
       fire('tick');
       if (shake > 0) shake = Math.max(0, shake - dt * 12);
     }
@@ -517,8 +554,20 @@
       const beltTile = on.find(t => t.info.belt);
       let iceFloor = false;
 
+      /* A scripted walk. While a body has somewhere to be, the script steers
+         and the keys do not - which is what a cutscene is made of. */
+      let scripted = 0;
+      if (player.goal) {
+        const gx = player.goal.x - player.x;
+        if (Math.abs(gx) <= P.speed * dt + 1) {
+          player.x = player.goal.x;
+          if (mode !== 'platform') player.y = player.goal.y;
+          player.goal = null; player.vx = 0;
+        } else scripted = gx > 0 ? 1 : -1;
+      }
+
       // horizontal
-      const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+      const dir = scripted || ((input.right ? 1 : 0) - (input.left ? 1 : 0));
       const groundInfo = player.grounded ? tileInfo(lvl.at(Math.floor((player.x + player.w / 2) / TILE),
                                                            Math.floor((player.y + player.h + 1) / TILE))) : null;
       iceFloor = !!(groundInfo && groundInfo.ice);
@@ -908,6 +957,11 @@
         view.y = Math.max(0, Math.min(view.y, Math.max(0, lvl.h * TILE - view.h)));
         return;
       }
+      if (camHold) {
+        view.x = Math.max(0, Math.min(camHold.x, Math.max(0, lvl.w * TILE - view.w)));
+        view.y = Math.max(0, Math.min(camHold.y, Math.max(0, lvl.h * TILE - view.h)));
+        return;
+      }
       const dead = view.w * 0.22;
       // With two players the camera follows the pair's midpoint, so neither
       // is the one who owns the screen.
@@ -1045,6 +1099,7 @@
       // the players, drawn with the studio's own character sprites
       const chars = window.NeoScene && window.NeoScene.CHARS;
       for (const b of players) {
+        if (b.hidden) continue;                                       // taken off stage by a script
         if (b.hurt > 0 && Math.floor(b.hurt * 20) % 2) continue;      // blink while stunned
         const psx = Math.round(b.x + b.w / 2 - ox), psy = Math.round(b.y + b.h - oy);
         const pStep = b.grounded && Math.abs(b.vx) > 6 ? (Math.floor(elapsed * 10) % 2) * -1 : 0;
@@ -1063,6 +1118,14 @@
       /* Speech bubbles. Drawn after the cast so nothing stands in front of a
          line of dialogue, and clamped into the frame so a character speaking
          at the edge of the screen is still readable. */
+      // A mark over someone's head, rising as it fades.
+      if (useArt) for (const em of emotes) {
+        const rise = Math.min(6, em.t * 26);
+        art.draw(ctx, em.i, Math.round(em.who.x + em.who.w / 2 - ox),
+                 Math.round(em.who.y - oy - 2 - rise),
+                 { colour: '#ffd23f', outline: '#0a0714' });
+      }
+
       const placed = [];
       for (const bub of bubbles) {
         const who = bub.from;
