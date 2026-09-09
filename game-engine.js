@@ -241,7 +241,8 @@
       },
       fault(msg) { if (!scriptFault) scriptFault = msg; },
     };
-    const fire = name => { if (program) window.NeoScript.run(program, name, scriptEnv); };
+    const say = name => { if (opts.onEvent) opts.onEvent(name); };
+    const fire = name => { say(name); if (program) window.NeoScript.run(program, name, scriptEnv); };
 
     // Only now, because reset fires the script's start event.
     reset();
@@ -253,7 +254,7 @@
       if (player.hurt > 0) return;
       lives--; player.hurt = 1.1; fire('hurt');
       effects.push({ kind: 'pop', x: player.x, y: player.y, t: 0 });
-      if (lives <= 0) { state = 'over'; message = 'GAME OVER'; }
+      if (lives <= 0) { state = 'over'; message = 'GAME OVER'; say('lose'); }
       else {
         player.x = respawn.x; player.y = respawn.y;
         player.vx = player.vy = 0; player.dash = 0;
@@ -308,13 +309,13 @@
           player.dashLeft = P.dash ? 1 : 0;
           if (player.buffer > 0 && jumpHeld && input.left === input.right) { /* hold still on the ladder */ }
         } else if (player.buffer > 0 && player.coyote > 0) {
-          player.vy = -P.jump; player.grounded = false; player.coyote = 0; player.buffer = 0;
+          player.vy = -P.jump; player.grounded = false; player.coyote = 0; player.buffer = 0; say('jump');
         } else if (player.buffer > 0 && P.wallJump && player.wall && !player.grounded) {
           // Kick away from the wall, which is what makes a wall jump readable.
           player.vy = -P.jump * 0.95; player.vx = -player.wall * P.speed * 1.1;
-          player.face = -player.wall; player.buffer = 0; player.doubleLeft = P.doubleJump ? 1 : 0;
+          player.face = -player.wall; player.buffer = 0; player.doubleLeft = P.doubleJump ? 1 : 0; say('doubleJump');
         } else if (player.buffer > 0 && player.doubleLeft > 0 && !player.grounded) {
-          player.vy = -P.jump * 0.86; player.doubleLeft--; player.buffer = 0;
+          player.vy = -P.jump * 0.86; player.doubleLeft--; player.buffer = 0; say('doubleJump');
         }
         if (!jumpHeld && player.vy < -40) player.vy *= 0.55;
         aWasDown = jumpHeld;
@@ -357,12 +358,12 @@
       if (player.grounded && hy.floor) {
         const f = tileInfo(lvl.at(hy.floor.tx, hy.floor.ty));
         if (f.belt) player.x += f.belt * dt;
-        if (f.spring) { player.vy = -P.jump * f.spring; player.grounded = false; effects.push({ kind: 'pop', x: hy.floor.tx * TILE + 4, y: hy.floor.ty * TILE, t: 0 }); }
+        if (f.spring) { say('spring'); player.vy = -P.jump * f.spring; player.grounded = false; effects.push({ kind: 'pop', x: hy.floor.tx * TILE + 4, y: hy.floor.ty * TILE, t: 0 }); }
       }
       // headbutting a breakable tile destroys it
       if (hy.ceil) {
         const c = tileInfo(lvl.at(hy.ceil.tx, hy.ceil.ty));
-        if (c.breakable) { breakTile(hy.ceil.tx, hy.ceil.ty); }
+        if (c.breakable) { say('break'); breakTile(hy.ceil.tx, hy.ceil.ty); }
       }
       if (beltTile && !player.grounded) { /* belts only act underfoot */ }
 
@@ -371,7 +372,7 @@
         if (t.info.hazard) { die(); break; }
         if (t.info.checkpoint && (respawn.x !== t.tx * TILE || respawn.y !== t.ty * TILE)) {
           respawn = { x: t.tx * TILE, y: t.ty * TILE };
-          message = 'CHECKPOINT'; messageAt = elapsed;
+          message = 'CHECKPOINT'; messageAt = elapsed; say('checkpoint');
         }
         if (t.info.exit) finish();
       }
@@ -381,7 +382,7 @@
       if (P.attack && input.b && !player.shotHeld && player.shotCool <= 0 && player.dash <= 0) {
         entities.push(makeEntity({ type: 'shot', x: player.x + (player.face > 0 ? player.w : -3), y: player.y + 4 }));
         entities[entities.length - 1].vx = player.face * ENTITY.shot.speed;
-        player.shotCool = 0.28;
+        player.shotCool = 0.28; say('shoot');
       }
       player.shotHeld = input.b;
       player.shotCool = Math.max(0, player.shotCool - dt);
@@ -399,7 +400,7 @@
 
     function finish() {
       const need = (spec.rules && spec.rules.collect) || 0;
-      if (score >= need) { state = 'won'; won = true; message = 'CLEAR'; }
+      if (score >= need) { state = 'won'; won = true; message = 'CLEAR'; say('win'); }
       else { message = `${need - score} TO GO`; messageAt = elapsed; }
     }
 
@@ -478,6 +479,7 @@
         if (!overlaps(player, e)) continue;
         if (d.collect) {
           e.alive = false;
+          say(d.key ? 'key' : d.score >= 5 ? 'gem' : 'coin');
           if (d.key) keys++;
           else if (d.heal) lives = Math.min(9, lives + 1);
           else score += d.score || 1;
@@ -712,5 +714,65 @@
     return api;
   }
 
-  window.NeoGame = { TILE, TILES, ENTITY, create, makeLevel, rng };
+  // ---------- validation ----------
+  // A game may arrive from a shared link, a file, or one day a model. None of
+  // those are trusted, so a spec is checked before it is played: not for style,
+  // but for the things that make a game unplayable or unsafe to run.
+  function validate(spec) {
+    const errors = [], warnings = [];
+    const bad = m => errors.push(m);
+    if (!spec || typeof spec !== 'object') return { ok: false, errors: ['not an object'], warnings };
+
+    const lvl = spec.level;
+    if (!lvl || !(lvl.w > 0) || !(lvl.h > 0)) bad('level needs a positive w and h');
+    else {
+      if (lvl.w * lvl.h > 40000) bad(`level is too large (${lvl.w}x${lvl.h})`);
+      const rows = typeof lvl.tiles === 'string' ? lvl.tiles.trim().split('\n') : null;
+      if (rows) {
+        if (rows.length < lvl.h) warnings.push(`only ${rows.length} rows for a height of ${lvl.h}`);
+        const wrong = rows.findIndex(r => r.length !== lvl.w);
+        if (wrong >= 0) warnings.push(`row ${wrong} is ${rows[wrong].length} wide, expected ${lvl.w}`);
+        const unknown = new Set();
+        for (const r of rows) for (const ch of r) { const id = parseInt(ch, 36); if (!TILES[id]) unknown.add(ch); }
+        if (unknown.size) bad(`unknown tiles: ${[...unknown].slice(0, 6).join(', ')}`);
+      } else if (!Array.isArray(lvl.tiles)) bad('level.tiles must be rows of digits or an array');
+    }
+
+    const ents = spec.entities || [];
+    if (!Array.isArray(ents)) bad('entities must be a list');
+    else {
+      if (ents.length > 400) bad(`too many entities (${ents.length})`);
+      const unknown = [...new Set(ents.filter(e => !ENTITY[e && e.type]).map(e => e && e.type))];
+      if (unknown.length) bad(`unknown entity types: ${unknown.slice(0, 5).join(', ')}`);
+      if (lvl && lvl.w) {
+        const off = ents.filter(e => e && (e.x < 0 || e.y < 0 || e.x > lvl.w * TILE || e.y > lvl.h * TILE));
+        if (off.length) warnings.push(`${off.length} piece(s) sit outside the level`);
+      }
+    }
+
+    // A game nobody can finish is a broken game, so the goal is checked too.
+    const need = (spec.rules && spec.rules.collect) || 0;
+    const pickups = ents.filter(e => e && ENTITY[e.type] && ENTITY[e.type].collect && !ENTITY[e.type].key).length;
+    if (need > pickups) bad(`rules.collect is ${need} but only ${pickups} pickups exist`);
+    const keysNeeded = (spec.rules && spec.rules.keys) || 0;
+    const keys = ents.filter(e => e && e.type === 'key').length;
+    if (keysNeeded > keys) bad(`rules.keys is ${keysNeeded} but only ${keys} key(s) exist`);
+    const hasEnd = ents.some(e => e && ENTITY[e.type] && ENTITY[e.type].goal);
+    const scriptWins = typeof spec.script === 'string' && /\bwin\b/.test(spec.script);
+    if (!hasEnd && !scriptWins) warnings.push('no goal and no script that wins - the game cannot be completed');
+
+    if (spec.script !== undefined) {
+      if (typeof spec.script !== 'string') bad('script must be text');
+      else if (spec.script.length > 20000) bad('script is too long');
+      else if (window.NeoScript) {
+        const r = window.NeoScript.compile(spec.script);
+        for (const e of r.errors.slice(0, 6)) bad(`script: ${e}`);
+      }
+    }
+    if (spec.start && (spec.start.x < 0 || spec.start.y < 0)) bad('start is outside the level');
+
+    return { ok: !errors.length, errors, warnings };
+  }
+
+  window.NeoGame = { TILE, TILES, ENTITY, create, makeLevel, rng, validate };
 })();

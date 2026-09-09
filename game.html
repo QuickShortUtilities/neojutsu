@@ -96,9 +96,30 @@
       <p class="hint">Pick a piece, then draw on the game. Right-click or pick Erase to clear.</p>
       <div class="tilebar" id="g-tiles"></div>
       <div class="tilebar" id="g-entities"></div>
+      <div class="two-up">
+        <label class="field"><span>Facing</span>
+          <select id="g-dir"><option value="1" selected>Right</option><option value="-1">Left</option></select>
+        </label>
+        <label class="field"><span>Level size</span>
+          <select id="g-size">
+            <option value="">Keep as is</option>
+            <option value="24x14">24 × 14 · small</option>
+            <option value="40x18">40 × 18 · wide</option>
+            <option value="64x18">64 × 18 · long</option>
+            <option value="20x40">20 × 40 · tall</option>
+            <option value="32x24">32 × 24 · room</option>
+          </select>
+        </label>
+      </div>
+      <div class="cloud-actions">
+        <button class="mini" id="g-undo" type="button" title="Undo the last edit">↶ Undo</button>
+        <button class="mini" id="g-redo" type="button" title="Redo">↷ Redo</button>
+        <button class="mini" id="g-clear" type="button" title="Clear the level">Clear</button>
+      </div>
       <div class="toggle-row">
         <label class="chk"><input type="checkbox" id="g-edit" checked> <span>Build mode</span></label>
         <label class="chk"><input type="checkbox" id="g-grid" checked> <span>Grid</span></label>
+        <label class="chk"><input type="checkbox" id="g-sfx" checked> <span>Sound</span></label>
       </div>
     </aside>
 
@@ -191,6 +212,7 @@
   <script src="neo-cloud.js"></script>
   <script src="chip.js"></script>
   <script src="video-gen.js"></script>
+  <script src="game-sfx.js"></script>
   <script src="game-script.js"></script>
   <script src="game-engine.js"></script>
   <script src="game-templates.js"></script>

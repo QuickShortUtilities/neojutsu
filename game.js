@@ -47,6 +47,8 @@
     wallJump: $('g-wall').checked,
     dash: $('g-dash').checked,
     attack: $('g-attack').checked,
+    dir: +$('g-dir').value,
+    sfx: $('g-sfx').checked,
     edit: $('g-edit').checked,
     grid: $('g-grid').checked,
   });
@@ -95,7 +97,10 @@
     spec.rules = { ...(spec.rules || {}), collect: c.goal || 0 };
     [spec.sky0, spec.sky1] = SKIES[c.sky] || SKIES.day;
     sizeCanvas();
-    game = window.NeoGame.create(low, spec, { onFrame: () => { present(); readout(); pumpScriptLog(); } });
+    game = window.NeoGame.create(low, spec, {
+      onFrame: () => { present(); readout(); pumpScriptLog(); },
+      onEvent: name => { if (cfg().sfx && window.NeoSfx) window.NeoSfx.play(name); },
+    });
     if ($('g-script')) { $('g-script').value = spec.script || ''; showScriptState({ errors: [] }); }
     present(); readout(); meta();
   }
@@ -167,13 +172,14 @@
     const p = tileAtEvent(e);
     if (brush.kind === 'tile') game.setTile(p.tx, p.ty, erase ? 0 : brush.id);
     else if (erase) game.removeEntityAt(p.x, p.y);
-    else if (!game.removeEntityAt(p.x, p.y)) game.addEntity({ type: brush.id, x: p.tx * T, y: p.ty * T, dir: 1 });
+    else if (!game.removeEntityAt(p.x, p.y)) game.addEntity({ type: brush.id, x: p.tx * T, y: p.ty * T, dir: cfg().dir });
     present(); meta(); save();
   }
   function wireBuild() {
     display.addEventListener('pointerdown', e => {
       if (!cfg().edit) return;
       e.preventDefault(); painting = true; display.setPointerCapture(e.pointerId);
+      mark();
       paint(e, e.button === 2 || brush.id === 0);
     });
     display.addEventListener('pointermove', e => { if (painting) paint(e, e.buttons === 2 || brush.id === 0); });
@@ -223,6 +229,58 @@
   function markCurrent() {
     const want = `${brush.kind}:${brush.id}`;
     for (const b of document.querySelectorAll('.tilebtn')) b.classList.toggle('current', b.dataset.piece === want);
+  }
+
+  // ---------- undo ----------
+  // The level and its pieces are small, so history is whole snapshots rather
+  // than a diff - simpler, and impossible to get subtly wrong.
+  const past = [], future = [];
+  function mark() {
+    if (!game) return;
+    past.push(JSON.stringify({ tiles: Array.from(game.level.tiles),
+                               entities: game.snapshot().entities }));
+    if (past.length > 60) past.shift();
+    future.length = 0;
+    syncHistory();
+  }
+  function restoreState(str) {
+    const st = JSON.parse(str);
+    const lvl = game.level;
+    for (let i = 0; i < lvl.tiles.length; i++) lvl.tiles[i] = st.tiles[i] || 0;
+    const sp = game.snapshot();
+    sp.entities = st.entities;
+    sp.level = { w: lvl.w, h: lvl.h, tiles: Array.from(lvl.tiles) };
+    build(sp);
+  }
+  function undo() {
+    if (!past.length) return;
+    future.push(JSON.stringify({ tiles: Array.from(game.level.tiles), entities: game.snapshot().entities }));
+    restoreState(past.pop()); syncHistory(); save();
+  }
+  function redo() {
+    if (!future.length) return;
+    past.push(JSON.stringify({ tiles: Array.from(game.level.tiles), entities: game.snapshot().entities }));
+    restoreState(future.pop()); syncHistory(); save();
+  }
+  function syncHistory() {
+    if ($('g-undo')) $('g-undo').disabled = !past.length;
+    if ($('g-redo')) $('g-redo').disabled = !future.length;
+  }
+
+  // ---------- resize ----------
+  // Growing keeps what is there; shrinking keeps the top-left, which is what
+  // people expect from a map editor.
+  function resize(w, h) {
+    if (!game) return;
+    mark();
+    const lvl = game.level;
+    const out = new Array(w * h).fill(0);
+    for (let y = 0; y < Math.min(h, lvl.h); y++)
+      for (let x = 0; x < Math.min(w, lvl.w); x++) out[y * w + x] = lvl.at(x, y);
+    const sp = game.snapshot();
+    sp.level = { w, h, tiles: out };
+    sp.entities = sp.entities.filter(e => e.x < w * T && e.y < h * T);
+    build(sp); save();
   }
 
   // ---------- audio ----------
@@ -384,7 +442,7 @@
     const btn = $('g-package');
     btn.disabled = true; const was = btn.textContent; btn.textContent = 'Packing…';
     try {
-      const files = ['neo-palette.js', 'chip.js', 'video-gen.js', 'game-engine.js'];
+      const files = ['neo-palette.js', 'chip.js', 'video-gen.js', 'game-sfx.js', 'game-script.js', 'game-engine.js'];
       const src = [];
       for (const f of files) {
         const r = await fetch(f);
@@ -449,7 +507,8 @@ const c = document.getElementById('c'); c.width = P.size[0]*D.zoom; c.height = P
 const dctx = c.getContext('2d'); dctx.imageSmoothingEnabled = false;
 const present = () => { window.NeoPalette.snap(lctx, low.width, low.height, {chip:D.chip, dither:D.dither, dithAmt:.6});
   dctx.drawImage(low,0,0,c.width,c.height); };
-const g = window.NeoGame.create(low, D.spec, {onFrame: present});
+const g = window.NeoGame.create(low, D.spec, {onFrame: present,
+  onEvent: n => { if (window.NeoSfx) window.NeoSfx.play(n); }});
 present();
 const KEY={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',ArrowUp:'up',KeyW:'up',
   ArrowDown:'down',KeyS:'down',Space:'a',KeyZ:'a',KeyX:'b',KeyK:'b'};
@@ -506,6 +565,25 @@ document.getElementById('pad').addEventListener('pointerdown',begin,{once:true})
       present(); save();
     });
     $('g-title').addEventListener('input', save);
+    $('g-undo').addEventListener('click', undo);
+    $('g-redo').addEventListener('click', redo);
+    $('g-clear').addEventListener('click', () => {
+      if (!confirm('Clear the whole level? Undo can bring it back.')) return;
+      mark();
+      const lvl = game.level;
+      for (let i = 0; i < lvl.tiles.length; i++) lvl.tiles[i] = 0;
+      const sp = game.snapshot(); sp.entities = []; build(sp); save();
+    });
+    $('g-size').addEventListener('change', () => {
+      const v = $('g-size').value; if (!v) return;
+      const [w, h] = v.split('x').map(Number); resize(w, h);
+      $('g-size').value = ''; window.NeoSelect?.refreshAll?.();
+    });
+    $('g-sfx').addEventListener('change', () => { if (window.NeoSfx) window.NeoSfx.muted = !cfg().sfx; save(); });
+    addEventListener('keydown', e => {
+      if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+      if ((e.metaKey || e.ctrlKey) && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    });
     $('g-script-apply').addEventListener('click', applyScript);
     $('g-script-clear').addEventListener('click', () => { $('g-script').value = ''; applyScript(); });
     $('g-vol').addEventListener('input', () => { $('g-vol-v').textContent = $('g-vol').value; if (gain) gain.gain.value = cfg().vol; save(); });
@@ -537,6 +615,7 @@ document.getElementById('pad').addEventListener('pointerdown',begin,{once:true})
     display.tabIndex = 0;
     display.classList.toggle('building', cfg().edit);
     $('g-zoom-v').textContent = $('g-zoom').value;
+    syncHistory();
   }
   // A handle on the running game, so it can be driven by tests and, later, by
   // the Automation Studio.
