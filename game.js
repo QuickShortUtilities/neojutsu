@@ -362,8 +362,13 @@
     return bits;
   }
 
+  const RUN_STAGES = 3;                 // what "a game" means when nobody says
+
   function runGenerate(prompt) {
-    const out = window.NeoGameGen.generateValid(prompt);
+    // A single room ends the moment you touch the flag, which is not a game.
+    // Unless the words ask for a particular number, build a short run.
+    const asked = window.NeoGameGen.stageCount(prompt);
+    const out = window.NeoGameGen.generateValid(prompt, 8, asked || RUN_STAGES);
     const el = $('g-understood');
     if (!out || !out.validation.ok) {
       el.innerHTML = `<span class="warn">Could not build that one — ${(out && out.validation.errors[0]) || 'unknown problem'}. Try different words.</span>`;

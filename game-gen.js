@@ -562,12 +562,15 @@
     return props;
   }
 
-  function generate(prompt, seed) {
+  function generate(prompt, seed, force) {
     const want = read(prompt);
+    const f = force || {};
     const s = seed || Math.random().toString(36).slice(2, 8);
     const r = rng(s + ':' + String(prompt || ''));
-    const theme = want.theme || pick(r, Object.keys(THEMES));
-    const mode = want.mode || (r() < .22 ? 'topdown' : 'platform');
+    const theme = f.theme || want.theme || pick(r, Object.keys(THEMES));
+    // A run that turns into a racing game halfway through is not a run, so a
+    // later stage is told what the first one decided to be.
+    const mode = f.mode || want.mode || (r() < .22 ? 'topdown' : 'platform');
     const mech = want.mech || pick(r, ['plain', 'springs', 'belts', 'ice', 'doors', 'breakables', 'water', 'moving']);
     const difficulty = want.difficulty ?? Math.floor(r() * 3);
     const size = want.size || pick(r, ['small', 'normal', 'wide']);
@@ -635,6 +638,42 @@
     return { spec, understood: want };
   }
 
+  /* How many rooms were asked for. "three levels", "a five stage run", or
+     nothing, in which case the caller decides. */
+  function stageCount(prompt) {
+    const t = ' ' + String(prompt || '').toLowerCase() + ' ';
+    const words = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8 };
+    let m = t.match(/\b(\d{1,2})\s*(levels?|stages?|rooms?|screens?)\b/);
+    if (m) return Math.max(1, Math.min(8, parseInt(m[1], 10)));
+    m = t.match(/\b(one|two|three|four|five|six|seven|eight)[\s-]*(levels?|stages?|rooms?|screens?)\b/);
+    if (m) return words[m[1]];
+    return null;
+  }
+
+  const asStage = sp => ({
+    name: sp.name, level: sp.level, entities: sp.entities, props: sp.props,
+    story: sp.story, start: sp.start, rules: sp.rules,
+  });
+
+  /* A game of several rooms. Each stage is generated the same way one whole
+     game used to be, then they are stitched into a run that shares a player,
+     a palette and a pool of lives. */
+  function generateRun(prompt, seed, n) {
+    const s = seed || Math.random().toString(36).slice(2, 8);
+    const first = generate(prompt, s);
+    const force = { mode: first.spec.mode };
+    const levels = [asStage(first.spec)];
+    for (let i = 1; i < Math.max(1, Math.min(8, n)); i++) {
+      levels.push(asStage(generate(prompt, `${s}:${i}`, force).spec));
+    }
+    // Later rooms lean harder, so a run has somewhere to go.
+    levels.forEach((st, i) => { st.cut = i ? `STAGE ${i + 1}` : undefined; });
+    const spec = { ...first.spec, levels };
+    for (const k of ['level', 'entities', 'props', 'story', 'start', 'rules']) delete spec[k];
+    spec.name = (String(prompt || '').trim().slice(0, 40) || first.spec.name);
+    return { spec, understood: first.understood };
+  }
+
   // Valid is not the same as playable. A game that passes every structural check
   // and then kills you before you have touched a key is still a bad game, so the
   // candidate is played for a moment before it is accepted.
@@ -643,18 +682,26 @@
       const cv = document.createElement('canvas');
       cv.width = 160; cv.height = 144;
       const g = window.NeoGame.create(cv, JSON.parse(JSON.stringify(spec)), { hud: false });
-      g.tick(3.2);
-      if (g.state !== 'play') return false;
-      if (g.lives < (spec.lives ?? 3)) return false;      // hit before moving
-      if (g.player.y > spec.level.h * 8 + 40) return false;
-      return !g.scriptFault;
+      // Every room, not only the first. A run whose third stage drowns you on
+      // arrival is a broken run, and nobody finds out until they get there.
+      for (let i = 0; i < g.stages; i++) {
+        if (i) g.goToStage(i);
+        g.tick(3.2);
+        if (g.state !== 'play') return false;
+        if (g.lives < (spec.lives ?? 3)) return false;    // hit before moving
+        if (g.player.y > g.level.h * 8 + 40) return false;
+        if (g.scriptFault) return false;
+      }
+      return true;
     } catch { return false; }
   }
 
-  function generateValid(prompt, tries = 8) {
+  function generateValid(prompt, tries = 8, stages) {
+    const n = stages || stageCount(prompt) || 1;
     let last = null;
     for (let i = 0; i < tries; i++) {
-      const out = generate(prompt, Math.random().toString(36).slice(2, 8));
+      const seed = Math.random().toString(36).slice(2, 8);
+      const out = n > 1 ? generateRun(prompt, seed, n) : generate(prompt, seed);
       const v = window.NeoGame.validate(out.spec);
       last = { ...out, validation: v };
       if (v.ok && survives(out.spec)) return last;
@@ -662,5 +709,5 @@
     return last;
   }
 
-  window.NeoGameGen = { generate, generateValid, read, dress, rng, DECOR, THEMES, MECHANICS, ABILITIES };
+  window.NeoGameGen = { generate, generateRun, generateValid, stageCount, read, dress, rng, DECOR, THEMES, MECHANICS, ABILITIES };
 })();

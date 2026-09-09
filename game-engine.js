@@ -1131,10 +1131,23 @@
       skipCut() { if (state === 'cut') { loadStage(stageIndex + 1); state = 'play'; cutT = 0; } },
       goToStage(i) { loadStage(i); state = 'play'; cutT = 0; draw(); },
       snapshot() {
-        return { ...spec, level: { w: lvl.w, h: lvl.h, tiles: Array.from(lvl.tiles) },
-                 entities: entities.map(e => ({ type: e.type, x: Math.round(e.home.x), y: Math.round(e.home.y),
-                                                dir: e.vx < 0 ? -1 : 1 })),
-                 props: props.map(pr => ({ i: pr.i, x: pr.x, y: pr.y, ...(pr.t ? { t: pr.t } : {}), ...(pr.b ? { b: 1 } : {}) })) };
+        const here = {
+          level: { w: lvl.w, h: lvl.h, tiles: Array.from(lvl.tiles) },
+          entities: entities.map(e => ({ type: e.type, x: Math.round(e.home.x), y: Math.round(e.home.y),
+                                         dir: e.vx < 0 ? -1 : 1 })),
+          props: props.map(pr => ({ i: pr.i, x: pr.x, y: pr.y, ...(pr.t ? { t: pr.t } : {}), ...(pr.b ? { b: 1 } : {}) })),
+        };
+        const out = { ...spec, ...here };
+        /* Editing stage three and saving must not write those edits into the
+           top-level level while `levels` keeps the version you started from -
+           the edits would vanish the next time the game was built. The stage
+           you are standing in is written back into the run. */
+        if (stageList.length > 1 || Array.isArray(spec.levels)) {
+          out.levels = stageList.map((st, i) => (i === stageIndex
+            ? { ...st, ...here, story: stageStory }
+            : st));
+        }
+        return out;
       },
     };
     draw();

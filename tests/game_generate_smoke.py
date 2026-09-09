@@ -32,7 +32,8 @@ PLAY = """(spec)=>{
   const g=window.NeoGame.create(cv, JSON.parse(JSON.stringify(spec)), {hud:false});
   g.tick(1.5);
   if (g.state!=='play') return {ok:false, why:['ends immediately']};
-  if (g.player.y > spec.level.h*8+40) return {ok:false, why:['falls out of the world']};
+  const lvl = spec.level || (spec.levels && spec.levels[0].level) || {h:18};
+  if (g.player.y > lvl.h*8+40) return {ok:false, why:['falls out of the world']};
   g.input.right=true; for(let i=0;i<240;i++) g.tick(1/60); g.input.right=false;
   return {ok:!g.scriptFault, why:g.scriptFault?[g.scriptFault]:[], warnings:v.warnings};
 }"""
@@ -97,7 +98,8 @@ with sync_playwright() as p:
 
     # variety: twenty runs of one prompt should not be one game twenty times
     uniq = page.evaluate("""()=>{const s=new Set();
-      for(let i=0;i<20;i++) s.add(window.NeoGameGen.generateValid('a cave level').spec.level.tiles);
+      for(let i=0;i<20;i++){ const sp=window.NeoGameGen.generateValid('a cave level', 8, 1).spec;
+        s.add((sp.level || sp.levels[0].level).tiles); }
       return s.size;}""")
     report['variety_over_20']=uniq
     if uniq < 15: issues.append(f'only {uniq} distinct levels from 20 runs')
