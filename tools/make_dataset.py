@@ -1,240 +1,196 @@
 #!/usr/bin/env python3
 """Build fine-tuning pairs for a game-writing model.
 
-Generates varied games with a description that is true of each one, then keeps
-only those the engine will actually accept and play. The filter is the same
-validator the studio uses plus a short simulation, so nothing enters the dataset
-that a player could not finish.
+The games come from the studio's own generator, driven in a real browser, so
+there is one implementation of what a game is and the dataset cannot drift
+away from what the engine plays. Every candidate is then graded the way a
+player would grade it: it has to validate, and a bot has to be able to get
+somewhere in it.
 
-    python3 tools/make_dataset.py --count 400 --out data/games.jsonl
+Genres are kept apart. One flat pile of "games" teaches a model that a racing
+level and a dungeon are the same thing wearing different colours, which is
+exactly the mistake worth avoiding - so records carry their mode and category
+and are written per genre as well as combined.
+
+    python3 tools/make_dataset.py --count 2000
+    python3 tools/make_dataset.py --count 200 --out data/games.jsonl
 """
-import argparse, json, random, sys, threading, functools, http.server, socketserver
+import argparse, json, hashlib, random, sys, threading, functools, http.server, socketserver
 from pathlib import Path
+from collections import Counter
 
 ROOT = Path(__file__).resolve().parents[1]
-T = 8
 
-THEMES = {
-    'cave':    {'sky': ('#0d0a16', '#241a30'), 'char': 'beast',    'words': ['underground', 'in a cave', 'in a dark cavern']},
-    'ice':     {'sky': ('#0a1830', '#4a7fa8'), 'char': 'ninja',    'words': ['in a frozen cave', 'on a glacier', 'somewhere icy']},
-    'sky':     {'sky': ('#1b2a5c', '#bfe9ff'), 'char': 'hero',     'words': ['on floating islands', 'high above the clouds', 'in the sky']},
-    'sunset':  {'sky': ('#241844', '#c9598a'), 'char': 'princess', 'words': ['at sunset', 'in the evening', 'at dusk']},
-    'factory': {'sky': ('#0d0a16', '#3a2a4a'), 'char': 'robot',    'words': ['in a factory', 'in a machine works', 'on an assembly line']},
-    'ruins':   {'sky': ('#12002a', '#7a1236'), 'char': 'knight',   'words': ['in some ruins', 'in an old fortress', 'in a broken keep']},
-    'volcano': {'sky': ('#2a0410', '#8c2350'), 'char': 'rogue',    'words': ['inside a volcano', 'in lava caves', 'somewhere burning']},
-    'temple':  {'sky': ('#0a1424', '#2a5a7a'), 'char': 'mage',     'words': ['in a temple', 'at a shrine', 'in an old sanctuary']},
+# Vocabulary the generator's own reader understands. Keeping the prompt bank
+# and the parser in step is what makes a pair honest: the description has to
+# be true of the game that comes back.
+KINDS = [
+    ('platform', ['a platformer', 'a side-scrolling platformer', 'a jumping level',
+                  'a platform level', 'a side-on level with ledges']),
+    ('topdown',  ['a top-down dungeon', 'an overhead maze', 'a dungeon crawl',
+                  'a top-down level of rooms', 'an overhead dungeon']),
+    ('racer',    ['a racing level', 'a driving level', 'a rally stage',
+                  'a car race', 'a speedway run']),
+    ('shmup',    ['a space shooter', 'a shoot-em-up', 'a starfighter run',
+                  'a bullet hell', 'a dogfight in space']),
+]
+PLACES = {
+    'cave':    ['underground', 'in a cave', 'in a dark cavern', 'in a deep mine'],
+    'ice':     ['in a frozen cave', 'on a glacier', 'somewhere icy', 'in the snow'],
+    'sky':     ['on floating islands', 'high above the clouds', 'in the sky'],
+    'sunset':  ['at sunset', 'in the evening', 'at dusk'],
+    'factory': ['in a factory', 'in a machine works', 'on an assembly line'],
+    'ruins':   ['in some ruins', 'in an old fortress', 'in a broken keep'],
+    'volcano': ['inside a volcano', 'in lava caves', 'somewhere burning'],
+    'temple':  ['in a temple', 'at a shrine', 'in an old sanctuary'],
 }
-MECHANICS = ['plain', 'springs', 'belts', 'ice', 'doors', 'breakables', 'water', 'moving']
-ABILITIES = ['none', 'doubleJump', 'dash', 'attack', 'wallJump']
+MECHS = {
+    'springs':    ['with bounce pads', 'full of springs', 'with trampolines'],
+    'belts':      ['with conveyor belts', 'with moving belts'],
+    'ice':        ['with slippery ground', 'where the floor is icy'],
+    'doors':      ['with a locked door and a key', 'where a key opens the way'],
+    'breakables': ['with bricks you can smash', 'with breakable crates'],
+    'water':      ['with water to swim through', 'partly flooded'],
+    'moving':     ['with moving platforms', 'with platforms that slide'],
+}
+ABILITIES = {
+    'doubleJump': ['with a double jump', 'where you can jump twice'],
+    'dash':       ['with a dash', 'where you can dash'],
+    'wallJump':   ['with a wall jump', 'where you can climb walls'],
+    'attack':     ['where you can shoot', 'with a weapon'],
+}
+HARD = ['hard', 'difficult', 'brutal', 'tough', 'punishing']
+EASY = ['easy', 'gentle', 'simple', 'relaxed']
+SIZES = {'wide': ['long', 'big', 'sprawling'], 'small': ['short', 'small', 'quick'],
+         'tall': ['tall', 'vertical']}
+OPENERS = ['Make ', 'Create ', 'Build ', 'Design ', 'Generate ', '']
 
 
-def grid(w, h, fill='0'):
-    return [[fill] * w for _ in range(h)]
+def make_prompt(rng):
+    """A description, and the things it commits the generator to."""
+    mode, kinds = rng.choice(KINDS)
+    parts = [rng.choice(kinds)]
+    expect = {'mode': mode}
+
+    theme = rng.choice(list(PLACES)) if rng.random() < 0.8 else None
+    if theme:
+        parts.append(rng.choice(PLACES[theme]))
+        expect['theme'] = theme
+
+    # Several mechanics only make sense side-on; asking for one in a racer
+    # would be a description the generator cannot honour.
+    if mode == 'platform' and rng.random() < 0.6:
+        mech = rng.choice(list(MECHS))
+        parts.append(rng.choice(MECHS[mech]))
+        expect['mech'] = mech
+
+    if rng.random() < 0.4:
+        ab = rng.choice(list(ABILITIES))
+        parts.append(rng.choice(ABILITIES[ab]))
+        expect['ability'] = ab
+
+    r = rng.random()
+    if r < 0.25:
+        parts.append(rng.choice(HARD)); expect['difficulty'] = 2
+    elif r < 0.5:
+        parts.append(rng.choice(EASY)); expect['difficulty'] = 0
+
+    if rng.random() < 0.35:
+        size = rng.choice(list(SIZES))
+        parts.append(rng.choice(SIZES[size]))
+
+    if rng.random() < 0.45:
+        n = rng.randint(3, 16)
+        parts.append(f'{n} coins to collect')
+        expect['collect'] = n
+
+    rng.shuffle(parts[1:])
+    text = rng.choice(OPENERS) + ', '.join(parts)
+    return text[0].upper() + text[1:] + '.', expect
 
 
-def rows(g):
-    return '\n'.join(''.join(r) for r in g)
+# ---- the browser side: generate, validate, and try to play ----
+BUILD = r"""
+(prompts) => {
+  const T = 8, TILES = window.NeoGame.TILES;
 
-
-def make_platform(rng, theme, mech, w, h, difficulty):
-    g = grid(w, h)
-    ground = h - 3
-    for y in range(ground, h):
-        for x in range(w):
-            g[y][x] = '1'
-
-    # pits, and something unpleasant at the bottom of them
-    pit_char = 'e' if theme == 'volcano' else ('6' if mech == 'water' else '4')
-    x = 6
-    pits = []
-    while x < w - 8:
-        if rng.random() < 0.28 + difficulty * 0.12:
-            span = rng.randint(2, 3 + (1 if difficulty > 1 else 0))
-            for px in range(x, min(x + span, w - 4)):
-                for y in range(ground, h):
-                    g[y][px] = '0'
-                g[h - 1][px] = pit_char
-            pits.append((x, span))
-            x += span + rng.randint(4, 7)
-        else:
-            x += rng.randint(3, 6)
-
-    # ledges to climb, and the mechanic this game is about
-    ledges = []
-    x = 4
-    while x < w - 6:
-        if rng.random() < 0.5:
-            span = rng.randint(3, 5)
-            y = ground - rng.randint(3, 5)
-            ch = '3'
-            if mech == 'ice': ch = '8'
-            if mech == 'belts': ch = '9' if rng.random() < .5 else 'a'
-            for lx in range(x, min(x + span, w - 2)):
-                g[y][lx] = ch
-            ledges.append((x, y, span))
-            x += span + rng.randint(3, 6)
-        else:
-            x += rng.randint(4, 8)
-
-    if mech == 'springs':
-        for _ in range(max(1, len(pits))):
-            sx = rng.randint(3, w - 5)
-            g[ground - 1][sx] = 'b'
-    if mech == 'breakables':
-        for _ in range(rng.randint(3, 6)):
-            bx, by = rng.randint(3, w - 4), ground - rng.randint(4, 6)
-            g[by][bx] = '7'
-
-    ents, coins = [], 0
-    for (lx, ly, span) in ledges:
-        for i in range(min(2, span)):
-            ents.append({'type': 'coin', 'x': (lx + i) * T + 1, 'y': (ly - 1) * T + 1}); coins += 1
-    for _ in range(rng.randint(2, 5)):
-        ents.append({'type': 'coin', 'x': rng.randint(2, w - 3) * T, 'y': (ground - 1) * T}); coins += 1
-    if rng.random() < .4:
-        ents.append({'type': 'gem', 'x': rng.randint(2, w - 3) * T, 'y': (ground - 2) * T})
-
-    foes = ['walker', 'flyer', 'chaser', 'jumper', 'turret']
-    n_foes = 1 + difficulty + rng.randint(0, 2)
-    for _ in range(n_foes):
-        kind = rng.choice(foes[:3 + difficulty])
-        ents.append({'type': kind, 'x': rng.randint(6, w - 4) * T,
-                     'y': (ground - 2) * T, 'dir': rng.choice([1, -1])})
-    if difficulty == 0 or rng.random() < .4:
-        ents.append({'type': 'heart', 'x': rng.randint(3, w - 3) * T, 'y': (ground - 2) * T})
-
-    keys = 0
-    if mech == 'doors':
-        dx = int(w * 0.62)
-        for y in (ground - 2, ground - 1):
-            g[y][dx] = 'c'
-        ents.append({'type': 'key', 'x': rng.randint(3, dx - 3) * T, 'y': (ground - 2) * T})
-        keys = 1
-    if mech == 'moving':
-        ents.append({'type': 'mover', 'x': int(w * .5) * T, 'y': (ground - 4) * T})
-
-    ents.append({'type': 'goal', 'x': (w - 3) * T, 'y': (ground - 2) * T})
-    return g, ents, coins, keys, ground
-
-
-def make_topdown(rng, theme, mech, w, h, difficulty):
-    g = grid(w, h, '1')
-    rooms = []
-    for (rx, ry) in [(2, 2), (int(w * .55), 2), (2, int(h * .55)), (int(w * .55), int(h * .55))]:
-        rw, rh = int(w * .38), int(h * .38)
-        for y in range(ry, min(ry + rh, h - 1)):
-            for x in range(rx, min(rx + rw, w - 1)):
-                g[y][x] = '0'
-        rooms.append((rx, ry, rw, rh))
-    mid_x, mid_y = int(w * .48), int(h * .48)
-    for x in range(2, w - 2): g[mid_y][x] = '0'
-    for y in range(2, h - 2): g[mid_x][y % h] = '0'
-    for y in range(2, h - 2): g[y][mid_x] = '0'
-    hazard = '6' if mech == 'water' else '4'
-    for _ in range(2 + difficulty * 2):
-        g[rng.randint(3, h - 4)][rng.randint(3, w - 4)] = hazard
-
-    ents, coins = [], 0
-    for (rx, ry, rw, rh) in rooms:
-        for _ in range(2):
-            ents.append({'type': 'coin', 'x': (rx + rng.randint(1, max(1, rw - 2))) * T,
-                         'y': (ry + rng.randint(1, max(1, rh - 2))) * T}); coins += 1
-    for _ in range(1 + difficulty):
-        ents.append({'type': rng.choice(['walker', 'chaser']),
-                     'x': rng.randint(3, w - 4) * T, 'y': rng.randint(3, h - 4) * T,
-                     'dir': rng.choice([1, -1])})
-    keys = 0
-    if mech == 'doors' or rng.random() < .4:
-        for x in range(mid_x - 1, mid_x + 2): g[mid_y][x] = 'c'
-        ents.append({'type': 'key', 'x': (rooms[1][0] + 2) * T, 'y': (rooms[1][1] + 2) * T})
-        keys = 1
-    ents.append({'type': 'goal', 'x': (rooms[3][0] + 2) * T, 'y': (rooms[3][1] + 2) * T})
-    return g, ents, coins, keys, None
-
-
-def script_for(rng, mech, need, timed):
-    lines = []
-    hello = rng.choice(['GO', 'GOOD LUCK', 'BEGIN', 'MOVE'])
-    lines.append(f'on start\n  message "{hello}"\nend')
-    if timed:
-        secs = rng.choice([30, 45, 60, 90])
-        lines.append(f'on start\n  set left {secs}\nend')
-        lines.append('on tick\n  every 1\n    set left left - 1\n    if left == 10\n      message "10 LEFT"\n    end\n    if left <= 0\n      lose\n    end\n  end\nend')
-    if mech == 'doors' and rng.random() < .6:
-        lines.append('on collect\n  if keys >= 1\n    message "DOOR OPEN"\n  end\nend')
-    if rng.random() < .35:
-        lines.append('on hurt\n  shake 3\nend')
-    if rng.random() < .3 and need:
-        lines.append(f'on collect\n  if score >= {need}\n    message "GO TO THE FLAG"\n  end\nend')
-    return '\n'.join(lines)
-
-
-def describe(rng, theme, mode, mech, ability, difficulty, need, timed, size):
-    t = THEMES[theme]
-    where = rng.choice(t['words'])
-    kind = 'top-down' if mode == 'topdown' else 'platformer'
-    bits = [f'a {kind} set {where}']
-    if size == 'wide': bits.append('a long level')
-    elif size == 'tall': bits.append('a tall level to climb')
-    elif size == 'small': bits.append('a short level')
-    mech_words = {
-        'springs': 'bouncy springs', 'belts': 'conveyor belts', 'ice': 'slippery ice',
-        'doors': 'a locked door and a key', 'breakables': 'breakable bricks',
-        'water': 'water to swim through', 'moving': 'a moving platform',
+  // The same bot the picker uses to keep its previews alive. A game a bot
+  // cannot move through is not a game, whatever the validator says.
+  function drive(g, seconds) {
+    const info = (tx, ty) => TILES[g.level.at(tx, ty)] || {};
+    const steps = Math.round(seconds * 60);
+    for (let i = 0; i < steps; i++) {
+      if (g.state !== 'play') break;
+      const p = g.player;
+      if (g.mode === 'racer' || g.mode === 'shmup') {
+        const row = Math.floor((p.y + p.h / 2) / T);
+        const here = Math.floor((p.x + p.w / 2) / T);
+        let L = here, R = here;
+        while (L > 0 && info(L - 1, row).solid !== true && here - L < 12) L--;
+        while (R < g.level.w - 1 && info(R + 1, row).solid !== true && R - here < 12) R++;
+        const want = ((L + R) / 2) * T + T / 2;
+        g.input.left = want < p.x + p.w / 2 - 3;
+        g.input.right = want > p.x + p.w / 2 + 3;
+      } else if (g.mode === 'topdown') {
+        // No gravity to jump with: a wall means going round it, so pick a
+        // side and hold it for a while rather than jittering on the spot.
+        const ahead = Math.floor((p.x + p.w + 2) / T);
+        const mid = Math.floor((p.y + p.h / 2) / T);
+        const blocked = info(ahead, mid).solid === true;
+        const flip = Math.floor(i / 40) % 2 === 0;
+        g.input.right = !blocked;
+        g.input.left = false;
+        g.input.up = blocked && flip;
+        g.input.down = blocked && !flip;
+      } else {
+        const ahead = Math.floor((p.x + p.w + 2) / T);
+        const mid = Math.floor((p.y + p.h / 2) / T);
+        const foot = Math.floor((p.y + p.h + 2) / T);
+        const blocked = info(ahead, mid).solid === true;
+        const gap = info(ahead, foot).solid !== true && !info(ahead, foot).hazard;
+        const spike = !!info(ahead, foot).hazard || !!info(ahead, mid).hazard;
+        g.input.right = true;
+        g.input.a = blocked || gap || spike;
+      }
+      g.tick(1 / 60);
+      g.input.a = false;
     }
-    if mech in mech_words: bits.append(mech_words[mech])
-    ability_words = {'doubleJump': 'a double jump', 'dash': 'a dash', 'attack': 'the ability to shoot',
-                     'wallJump': 'wall jumping'}
-    if ability in ability_words: bits.append(f'give the player {ability_words[ability]}')
-    bits.append(['easy', 'normal', 'hard'][difficulty])
-    if need: bits.append(f'{need} things to collect')
-    if timed: bits.append('a countdown')
-    ask = rng.choice(['Make', 'Build', 'Create', 'Design', 'Write'])
-    return f'{ask} {bits[0]} with ' + ', '.join(bits[1:-1]) + f', {bits[-1]}.' if len(bits) > 2 \
-        else f'{ask} {bits[0]}.'
+  }
+
+  return prompts.map(prompt => {
+    try {
+      const r = window.NeoGameGen.generateValid(prompt);
+      const spec = r.spec;
+      const v = window.NeoGame.validate(spec);
+      const out = { prompt, spec, understood: r.understood,
+                    ok: v.ok, errors: v.errors.slice(0, 3), warnings: v.warnings.length };
+      if (v.ok) {
+        const cv = document.createElement('canvas'); cv.width = 160; cv.height = 144;
+        const g = window.NeoGame.create(cv, JSON.parse(JSON.stringify(spec)), { hud: false });
+        const x0 = g.player.x, y0 = g.player.y;
+        const vx0 = g.view.x, vy0 = g.view.y;
+        drive(g, 14);
+        // In a scroller the player is held in the frame and the world moves,
+        // so their own displacement is near zero however well it is going.
+        // Progress is whichever of the two actually travelled.
+        out.moved = Math.round(Math.max(
+          Math.abs(g.player.x - x0), Math.abs(g.player.y - y0),
+          Math.abs(g.view.x - vx0), Math.abs(g.view.y - vy0)));
+        out.state = g.state;
+        out.scored = g.score;
+        out.lost = (spec.lives ?? 3) - g.lives;
+      }
+      return out;
+    } catch (e) { return { prompt, error: String(e && e.message || e) }; }
+  });
+}
+"""
+
+SYSTEM = ('You write NeoJutsu games. Reply with one JSON object and nothing else. '
+          'One tile is 8 pixels; level.w and level.h are in tiles while start and entity '
+          'x/y are in pixels. Tiles are rows of base-36 digits joined with newlines.')
 
 
-def build_one(rng):
-    theme = rng.choice(list(THEMES))
-    mode = 'topdown' if rng.random() < 0.22 else 'platform'
-    mech = rng.choice(MECHANICS)
-    ability = rng.choice(ABILITIES)
-    difficulty = rng.randint(0, 2)
-    size = rng.choice(['small', 'normal', 'wide', 'tall'])
-    if mode == 'topdown':
-        w, h = rng.choice([(26, 20), (30, 22), (34, 24)])
-    else:
-        w, h = {'small': (28, 16), 'normal': (40, 18), 'wide': (56, 18), 'tall': (22, 34)}[size]
-
-    maker = make_topdown if mode == 'topdown' else make_platform
-    g, ents, coins, keys, ground = maker(rng, theme, mech, w, h, difficulty)
-    need = 0
-    if coins and rng.random() < .75:
-        need = max(1, int(coins * rng.choice([.5, .7, 1.0])))
-    timed = rng.random() < .18
-    t = THEMES[theme]
-    start_y = (ground - 2) * T if ground else 3 * T
-    spec = {
-        'name': f'{theme.title()} {rng.choice(["run", "climb", "dive", "trial", "path", "chase"])}',
-        'mode': mode, 'seed': f'{theme}{rng.randint(100, 999)}',
-        'sky0': t['sky'][0], 'sky1': t['sky'][1],
-        'player': {'char': t['char']},
-        'start': {'x': 2 * T, 'y': start_y},
-        'lives': [4, 3, 2][difficulty],
-        'level': {'w': w, 'h': h, 'tiles': rows(g)},
-        'entities': ents,
-        'rules': {'collect': need, 'keys': keys},
-    }
-    if ability != 'none':
-        spec['player'][ability] = True
-    script = script_for(rng, mech, need, timed)
-    if script:
-        spec['script'] = script
-    prompt = describe(rng, theme, mode, mech, ability, difficulty, need, timed, size)
-    return prompt, spec
-
-
-# ---------- validation in the real engine ----------
 def serve():
     class Quiet(http.server.SimpleHTTPRequestHandler):
         def log_message(self, *a): pass
@@ -243,78 +199,115 @@ def serve():
     return srv, srv.server_address[1]
 
 
-CHECK = """(specs)=>specs.map(spec=>{
-  const v = window.NeoGame.validate(spec);
-  if (!v.ok) return {ok:false, why:v.errors.slice(0,2)};
-  try {
-    const cv=document.createElement('canvas'); cv.width=160; cv.height=144;
-    const g=window.NeoGame.create(cv, JSON.parse(JSON.stringify(spec)), {hud:false});
-    g.tick(1.5);
-    if (g.state!=='play') return {ok:false, why:['dies immediately']};
-    if (g.player.y > spec.level.h*8+40) return {ok:false, why:['falls out of the world']};
-    g.input.right=true; for(let i=0;i<300;i++) g.tick(1/60); g.input.right=false;
-    if (g.scriptFault) return {ok:false, why:['script fault: '+g.scriptFault]};
-    return {ok:true, warnings:v.warnings.length};
-  } catch(e) { return {ok:false, why:['threw: '+e.message]}; }
-})"""
+def record(prompt, spec):
+    return {'messages': [
+        {'role': 'system', 'content': SYSTEM},
+        {'role': 'user', 'content': prompt},
+        {'role': 'assistant', 'content': json.dumps(spec, separators=(',', ':'))},
+    ]}
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--count', type=int, default=400)
+    ap.add_argument('--count', type=int, default=800)
     ap.add_argument('--out', default='data/games.jsonl')
-    ap.add_argument('--seed', type=int, default=7)
-    ap.add_argument('--batch', type=int, default=50)
+    ap.add_argument('--genre-dir', default='data/by-genre')
+    ap.add_argument('--rejects', default='data/rejects.jsonl')
+    ap.add_argument('--batch', type=int, default=12)
+    ap.add_argument('--seed', default='neojutsu')
+    ap.add_argument('--min-moved', type=int, default=24,
+                    help='pixels a bot must cover before a game counts as playable')
     args = ap.parse_args()
 
     from playwright.sync_api import sync_playwright
     rng = random.Random(args.seed)
+    kept, rejects = [], []
+    seen = set()
+    reasons = Counter()
+
     srv, port = serve()
-    kept, rejected, reasons = [], 0, {}
     try:
         with sync_playwright() as p:
             b = p.chromium.launch(headless=True)
-            page = b.new_context().new_page()
-            page.goto(f'http://127.0.0.1:{port}/game.html'); page.wait_for_timeout(900)
-            made = 0
-            while len(kept) < args.count and made < args.count * 4:
-                batch = [build_one(rng) for _ in range(args.batch)]
-                made += len(batch)
-                verdicts = page.evaluate(CHECK, [s for _, s in batch])
-                for (prompt, spec), v in zip(batch, verdicts):
-                    if v['ok']:
-                        kept.append((prompt, spec))
+            page = b.new_context(viewport={'width': 900, 'height': 700}).new_page()
+            page.on('pageerror', lambda e: reasons.update(['page error: ' + str(e)[:40]]))
+            page.goto(f'http://127.0.0.1:{port}/game.html')
+            page.wait_for_function('!!(window.NeoGameGen && window.NeoSprites && window.NeoSprites.loaded)',
+                                   timeout=30000)
+
+            guard = 0
+            while len(kept) < args.count and guard < args.count * 6:
+                batch = [make_prompt(rng) for _ in range(args.batch)]
+                guard += len(batch)
+                results = page.evaluate(BUILD, [pr for pr, _ in batch])
+                for (prompt, expect), r in zip(batch, results):
+                    why = None
+                    spec = r.get('spec')
+                    if r.get('error'):
+                        why = 'threw: ' + r['error'][:40]
+                    elif not r.get('ok'):
+                        why = 'invalid: ' + (r.get('errors') or ['?'])[0][:50]
+                    elif spec.get('mode') != expect['mode']:
+                        why = f"asked for {expect['mode']}, got {spec.get('mode')}"
+                    elif 'collect' in expect and (spec.get('rules') or {}).get('collect') != expect['collect']:
+                        why = 'collect count not honoured'
+                    elif 'theme' in expect and r['understood'].get('theme') != expect['theme']:
+                        why = 'theme not understood'
+                    elif r.get('moved', 0) < args.min_moved:
+                        why = f"a bot got {r.get('moved', 0)}px into it"
                     else:
-                        rejected += 1
-                        for w in v['why']:
-                            key = w.split(':')[0][:40]
-                            reasons[key] = reasons.get(key, 0) + 1
-                print(f'\rkept {len(kept)}/{args.count}  rejected {rejected}', end='', file=sys.stderr)
+                        key = hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()
+                        if key in seen:
+                            why = 'duplicate level'
+                        else:
+                            seen.add(key)
+                    if why:
+                        reasons.update([why.split(':')[0][:44]])
+                        rejects.append({'prompt': prompt, 'why': why,
+                                        'spec': spec if spec else None})
+                    else:
+                        kept.append((prompt, spec))
+                print(f'\rkept {len(kept)}/{args.count}  tried {guard}  '
+                      f'rejected {len(rejects)}', end='', file=sys.stderr)
             b.close()
     finally:
         srv.shutdown()
     print(file=sys.stderr)
 
+    kept = kept[:args.count]
     out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
-    system = ('You write NeoJutsu games. Reply with one JSON object and nothing else. '
-              'One tile is 8 pixels; level.w and level.h are in tiles while start and entity '
-              'x/y are in pixels. Tiles are rows of base-36 digits joined with newlines.')
     with out.open('w', encoding='utf-8') as f:
-        for prompt, spec in kept[:args.count]:
-            f.write(json.dumps({'messages': [
-                {'role': 'system', 'content': system},
-                {'role': 'user', 'content': prompt},
-                {'role': 'assistant', 'content': json.dumps(spec, separators=(',', ':'))},
-            ]}, ensure_ascii=False) + '\n')
+        for prompt, spec in kept:
+            f.write(json.dumps(record(prompt, spec), ensure_ascii=False) + '\n')
 
-    sizes = [len(json.dumps(s, separators=(',', ':'))) for _, s in kept[:args.count]]
+    # Per genre as well as combined, so a model can be trained or evaluated on
+    # one kind of game without the others drowning it out.
+    by = {}
+    for prompt, spec in kept:
+        by.setdefault(spec.get('mode', 'other'), []).append((prompt, spec))
+    gdir = ROOT / args.genre_dir
+    gdir.mkdir(parents=True, exist_ok=True)
+    for mode, rows in by.items():
+        with (gdir / f'{mode}.jsonl').open('w', encoding='utf-8') as f:
+            for prompt, spec in rows:
+                f.write(json.dumps(record(prompt, spec), ensure_ascii=False) + '\n')
+
+    if args.rejects:
+        rj = ROOT / args.rejects
+        rj.parent.mkdir(parents=True, exist_ok=True)
+        with rj.open('w', encoding='utf-8') as f:
+            for r in rejects:
+                f.write(json.dumps(r, ensure_ascii=False) + '\n')
+
+    sizes = sorted(len(json.dumps(s, separators=(',', ':'))) for _, s in kept) or [0]
     print(json.dumps({
-        'written': min(len(kept), args.count), 'file': str(out),
-        'rejected': rejected,
-        'accept_rate': round(len(kept) / max(1, len(kept) + rejected), 3),
-        'bytes': {'min': min(sizes), 'median': sorted(sizes)[len(sizes)//2], 'max': max(sizes)},
-        'top_rejections': dict(sorted(reasons.items(), key=lambda kv: -kv[1])[:5]),
+        'written': len(kept), 'file': str(out),
+        'by_mode': {k: len(v) for k, v in sorted(by.items())},
+        'rejected': len(rejects),
+        'accept_rate': round(len(kept) / max(1, len(kept) + len(rejects)), 3),
+        'chars': {'min': sizes[0], 'median': sizes[len(sizes) // 2], 'max': sizes[-1]},
+        'top_rejections': dict(reasons.most_common(6)),
     }, indent=2))
 
 

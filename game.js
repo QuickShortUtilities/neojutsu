@@ -491,6 +491,19 @@
     const mid = Math.floor((p.y + p.h / 2) / T);
     const foot = Math.floor((p.y + p.h + 2) / T);
     const blocked = solid(ahead, mid);
+
+    if (g.mode === 'topdown') {
+      // Nothing to jump with here, so a wall means going around it. Hold a
+      // side for a beat rather than jittering against the corner.
+      t.turn = ((t.turn || 0) + dt) % 1.4;
+      const up = t.turn < 0.7;
+      g.input.right = !blocked;
+      g.input.up = blocked && up;
+      g.input.down = blocked && !up;
+      g.tick(dt);
+      return;
+    }
+
     const gap = !solid(ahead, foot) && !harmful(ahead, foot);
     const spike = harmful(ahead, foot) || harmful(ahead, mid);
     g.input.right = true;

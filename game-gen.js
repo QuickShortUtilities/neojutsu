@@ -16,7 +16,7 @@
     ice:     { sky: ['#0a1830', '#4a7fa8'], char: 'ninja',    words: ['ice', 'icy', 'frozen', 'snow', 'glacier', 'cold', 'winter'] },
     sky:     { sky: ['#1b2a5c', '#bfe9ff'], char: 'hero',     words: ['sky', 'cloud', 'island', 'air', 'high', 'floating'] },
     sunset:  { sky: ['#241844', '#c9598a'], char: 'princess', words: ['sunset', 'dusk', 'evening', 'pink', 'romantic'] },
-    factory: { sky: ['#0d0a16', '#3a2a4a'], char: 'robot',    words: ['factory', 'machine', 'robot', 'industrial', 'belt', 'steel'] },
+    factory: { sky: ['#0d0a16', '#3a2a4a'], char: 'robot',    words: ['factory', 'machine', 'robot', 'industrial', 'belt', 'steel', 'assembly'] },
     ruins:   { sky: ['#12002a', '#7a1236'], char: 'knight',   words: ['ruin', 'castle', 'fortress', 'keep', 'knight', 'medieval'] },
     volcano: { sky: ['#2a0410', '#8c2350'], char: 'rogue',    words: ['volcano', 'lava', 'fire', 'burning', 'hell', 'magma'] },
     temple:  { sky: ['#0a1424', '#2a5a7a'], char: 'mage',     words: ['temple', 'shrine', 'sanctuary', 'magic', 'mage', 'ancient'] },
@@ -44,8 +44,19 @@
 
   // ---------- reading the prompt ----------
   function read(prompt) {
-    const t = ' ' + String(prompt || '').toLowerCase() + ' ';
+    const raw = ' ' + String(prompt || '').toLowerCase() + ' ';
     const want = {};
+
+    /* Genre names are not places. "bullet hell" carries the word hell, which
+       scored as the volcano theme and quietly turned every bullet-hell
+       request into a lava level; "dogfight" is not a dog. Blank the genre
+       phrases before looking for a setting, but keep the original for the
+       mode test below, which is what those phrases are actually for. */
+    const t = raw
+      .replace(/bullet hell/g, ' shmup ')
+      .replace(/shoot.?.?em.?up/g, ' shmup ')
+      .replace(/dogfight/g, ' shmup ')
+      .replace(/hell ?scape/g, ' volcano ');
 
     // Score rather than take the first match: "ice cave" is an ice level, and
     // whichever word the writer put first is the one they led with.
@@ -67,10 +78,10 @@
     const mech = best(MECHANICS, v => v); if (mech) want.mech = mech;
     want.abilities = Object.entries(ABILITIES).filter(([, v]) => hit(t, v)).map(([k]) => k);
 
-    if (/\brac(e|ing)|driv(e|ing)|car\b|speedway|highway|kart|rally\b/.test(t)) want.mode = 'racer';
-    else if (/shoot.?.?em.?up|shmup|space shooter|starfighter|dogfight|bullet hell/.test(t)) want.mode = 'shmup';
-    else if (/top.?down|overhead|dungeon|maze|room|zelda/.test(t)) want.mode = 'topdown';
-    if (/platform|jump|side.?scroll|mario|climb|ledge/.test(t)) want.mode = want.mode || 'platform';
+    if (/\brac(e|ing)|driv(e|ing)|car\b|speedway|highway|kart|rally\b/.test(raw)) want.mode = 'racer';
+    else if (/shoot.?.?em.?up|shmup|space shooter|starfighter|dogfight|bullet hell/.test(raw)) want.mode = 'shmup';
+    else if (/top.?down|overhead|dungeon|maze|room|zelda/.test(raw)) want.mode = 'topdown';
+    if (/platform|jump|side.?scroll|mario|climb|ledge/.test(raw)) want.mode = want.mode || 'platform';
     // Some mechanics and every shape only make sense side-on, so asking for one
     // implies the mode rather than leaving it to chance.
     if (!want.mode && ['springs', 'belts', 'breakables', 'moving', 'ice'].includes(want.mech))

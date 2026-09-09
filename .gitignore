@@ -1,1 +1,8 @@
 .DS_Store
+
+# Training data is generated, not authored: `tools/make_dataset.py` rebuilds it
+# from a seed in a few minutes. Keeping several megabytes of it in history -
+# again on every rebuild - costs more than making it again.
+data/*.jsonl
+data/by-genre/
+runs/
