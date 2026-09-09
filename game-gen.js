@@ -370,8 +370,23 @@
     const { w, h, difficulty } = o;
     const g = Array.from({ length: h }, () => Array(w).fill('1'));
     const cols = w >= 30 ? 3 : 2, rowsN = h >= 22 ? 3 : 2;
-    const rw = Math.floor(w / cols), rh = Math.floor(h / rowsN);
-    const room = (i, j) => ({ x0: i * rw, y0: j * rh, x1: i * rw + rw - 1, y1: j * rh + rh - 1 });
+
+    /* Where the walls fall. An even grid made every small dungeon the same
+       dungeon: four identical rooms, doorways at the midpoints, and the only
+       thing that ever changed was which walls got a hole. So the dividing
+       lines wander, within enough of a margin that no room collapses. */
+    const cuts = (span, n) => {
+      const at = [0];
+      const step = span / n;
+      for (let k = 1; k < n; k++) {
+        const drift = Math.round((r() - 0.5) * step * 0.5);
+        at.push(Math.max(at[k - 1] + 6, Math.min(Math.round(k * step) + drift, span - 6 * (n - k))));
+      }
+      at.push(span - 1);
+      return at;
+    };
+    const xs = cuts(w, cols), ys = cuts(h, rowsN);
+    const room = (i, j) => ({ x0: xs[i], y0: ys[j], x1: xs[i + 1], y1: ys[j + 1] });
 
     const floors = [];
     for (let j = 0; j < rowsN; j++) for (let i = 0; i < cols; i++) {
@@ -400,6 +415,10 @@
       if (i + di < cols && j + dj < rowsN) edges.push([i, j, i + di, j + dj]);
     }
 
+    // A doorway sits somewhere along the shared wall, keeping clear of both
+    // corners so it never opens into the wall running the other way.
+    const along = (a, b) => a + 2 + Math.floor(r() * Math.max(1, b - a - 4));
+
     const last = floors[floors.length - 1];
     const doors = [];
     for (const [i, j, ni, nj] of edges) {
@@ -413,15 +432,45 @@
       const cells = [];
       if (ni !== i) {
         const x = (ni > i ? A.x1 : B.x1);                     // left wall of the pair
-        const y = Math.floor((A.y0 + A.y1) / 2);
+        // Anywhere along the wall, not always the middle of it.
+        const y = along(A.y0, A.y1);
         for (const yy of [y, y + 1]) for (const xx of [x, x + 1]) cells.push([xx, yy]);
       } else {
         const y = (nj > j ? A.y1 : B.y1);                     // upper wall of the pair
-        const x = Math.floor((A.x0 + A.x1) / 2);
+        const x = along(A.x0, A.x1);
         for (const yy of [y, y + 1]) for (const xx of [x, x + 1]) cells.push([xx, yy]);
       }
       for (const [x, y] of cells) if (g[y] && g[y][x] !== undefined) g[y][x] = '0';
       doors.push({ cells, guards });
+    }
+
+    /* Something in the rooms. An empty box is a box whatever size it is, and
+       a dungeon of them is one room drawn nine times - a pillar to walk round
+       or a block to hide behind is what makes one room a different room from
+       the next. Kept off the middle, which is where the doors lead and where
+       the coins and the way out go. */
+    const blocked = [].concat(...doors.map(d => d.cells));
+    for (const f of floors) {
+      const R = f.R;
+      const iw = R.x1 - R.x0 - 1, ih = R.y1 - R.y0 - 1;
+      if (iw < 6 || ih < 6) continue;
+      for (let k = 0, want = 1 + Math.floor(r() * 3); k < want; k++) {
+        const bw = 1 + Math.floor(r() * Math.min(3, iw - 4));
+        const bh = 1 + Math.floor(r() * Math.min(3, ih - 4));
+        const bx = R.x0 + 2 + Math.floor(r() * Math.max(1, iw - bw - 2));
+        const by = R.y0 + 2 + Math.floor(r() * Math.max(1, ih - bh - 2));
+        const cx = Math.floor((R.x0 + R.x1) / 2), cy = Math.floor((R.y0 + R.y1) / 2);
+        // never on the spot the goal, the key or a coin is about to take
+        if (bx <= cx + 1 && cx <= bx + bw && by <= cy + 1 && cy <= by + bh) continue;
+        /* And never in a doorway or its approach. The doors are cut before
+           this runs, so a block dropped on one seals the room it was meant to
+           furnish - which is how a dungeon that was always solvable stopped
+           being. A tile of clearance, because a body is wider than a cell. */
+        if (blocked.some(([dx, dy]) => dx >= bx - 1 && dx <= bx + bw &&
+                                       dy >= by - 1 && dy <= by + bh)) continue;
+        const ch = r() < .3 ? '2' : '1';
+        for (let y = by; y < by + bh; y++) for (let x = bx; x < bx + bw; x++) g[y][x] = ch;
+      }
     }
 
     const mid = f => ({ x: Math.floor((f.R.x0 + f.R.x1) / 2), y: Math.floor((f.R.y0 + f.R.y1) / 2) });
@@ -558,8 +607,13 @@
                   y: (3 + Math.floor(r() * (h - 6))) * T, dir: 1 });
     let keys = 0;
     if (mech === 'doors' || r() < .4) {
+      /* The lock goes across the crossroads, which cuts the map into a left
+         half and a right half. The start is in the top-left corner and the
+         goal in the bottom-right, so the key has to be in one of the two
+         rooms on the left - it was in the top-right one, behind the very door
+         it opens, every single time a door was placed. */
       for (let x = mx - 1; x <= mx; x++) g[my][x] = 'c';
-      ents.push({ type: 'key', x: (corners[1][0] + 2) * T, y: (corners[1][1] + 2) * T });
+      ents.push({ type: 'key', x: (corners[2][0] + 2) * T, y: (corners[2][1] + 2) * T });
       keys = 1;
     }
     ents.push({ type: 'goal', x: (corners[3][0] + 2) * T, y: (corners[3][1] + 2) * T });
