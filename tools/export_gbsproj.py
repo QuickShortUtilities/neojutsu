@@ -15,10 +15,15 @@ image and its solid tiles become the scene's collision layer.
     python3 tools/export_gbsproj.py --spec mygame.json --out ~/MyGame
     python3 tools/export_gbsproj.py --template platformer --out ~/Platformer
 
-What does not travel: our sprite atlas, tinted decor and per-prop colour have
-no counterpart on the hardware, and a Game Boy has hard limits on sprites and
-tiles that our levels do not respect. Geometry and collision go across.
-Actors and scripts are the next piece of work, not this one.
+Geometry, collision and the cast go across: every coin, enemy and goal
+becomes a GB Studio actor, drawn with a sprite cut out of the same 1-bit
+atlas the browser uses, so the exported project looks like the game it came
+from rather than a blank room.
+
+What does not travel: tinted decor and per-prop colour have no counterpart on
+the hardware, our scripts are not their event graphs, and a Game Boy has hard
+limits on sprites per scanline that our levels do not respect - twenty coins
+in a row is fine here and will flicker there.
 """
 import argparse, json, sys, uuid
 from pathlib import Path
@@ -111,6 +116,73 @@ def draw_background(grid, w, h, path):
     img.save(path)
 
 
+# GB Studio keys sprite transparency on this exact green.
+SPRITE_KEY = (101, 255, 0)
+
+
+def atlas():
+    """The same 1-bit sheet the browser draws from, decoded once.
+
+    It lives as base64 inside game-sprites.js because a packaged game is one
+    HTML file; there is no PNG on disk to open, so it is read back out of the
+    source rather than kept in two places that can disagree.
+    """
+    import base64, io, re
+    from PIL import Image
+    src = (ROOT / 'game-sprites.js').read_text(encoding='utf-8')
+    runs = re.findall(r'[A-Za-z0-9+/=]{2000,}', src)
+    if not runs:
+        return None
+    return Image.open(io.BytesIO(base64.b64decode(runs[0]))).convert('RGBA')
+
+
+def sprite_table(name):
+    """A lookup read out of game-sprites.js, so the ROM uses the same drawing
+    for a coin that the browser does and cannot quietly drift from it."""
+    import re
+    src = (ROOT / 'game-sprites.js').read_text(encoding='utf-8')
+    head = f'const {name} = {{'
+    if head not in src:
+        return {}
+    i = src.index(head)
+    body = src[i + len(f'const {name} = '):src.index('};', i) + 1]
+    body = re.sub(r'//[^\n]*', '', body)
+    body = re.sub(r'([A-Za-z_][A-Za-z_0-9]*)\s*:', r'"\1":', body)
+    body = re.sub(r',\s*}', '}', body)
+    try:
+        return json.loads(body)
+    except ValueError:
+        return {}
+
+
+def sprite_for(kind):
+    """Which drawing an entity type gets. Items are one apiece; the cast has a
+    few to choose from and takes the first, because a ROM wants one sprite per
+    kind rather than a different guard in every room."""
+    item = sprite_table('ITEM').get(kind)
+    if isinstance(item, int):
+        return item
+    base = sprite_table('BASE').get(kind)
+    if isinstance(base, list) and base:
+        return base[0]
+    return None
+
+
+def write_sprite(sheet, idx, path):
+    """One 16x16 sprite, cut from the atlas and recoloured for the hardware:
+    the ink in the darkest green, everything else the transparency key."""
+    from PIL import Image
+    cell = sheet.crop(((idx % 49) * 16, (idx // 49) * 16, (idx % 49) * 16 + 16, (idx // 49) * 16 + 16))
+    img = Image.new('RGB', (16, 16), SPRITE_KEY)
+    src, dst = cell.load(), img.load()
+    for y in range(16):
+        for x in range(16):
+            if src[x, y][3] > 40:
+                dst[x, y] = DMG[0]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(path)
+
+
 def slug(s):
     out = ''.join(c if c.isalnum() else '_' for c in str(s or 'scene')).strip('_').lower()
     return (out or 'scene')[:28]
@@ -132,6 +204,44 @@ def export(spec, out, name):
     out = Path(out).expanduser()
     stages = stages_of(spec)
     scene_ids, first = [], None
+
+    # One sprite per kind of thing in the game, cut from the atlas before any
+    # scene is written, because several rooms share a coin and the hardware
+    # wants one sheet for all of them.
+    sheet = atlas()
+    sprites = {}
+    for st in stages:
+        for e in (st.get('entities') or []):
+            kind = e.get('type')
+            if kind in sprites or kind is None:
+                continue
+            idx = sprite_for(kind)
+            if idx is None or sheet is None:
+                continue
+            sid_sp, name_sp = str(uuid.uuid4()), slug(kind)
+            write_sprite(sheet, idx, out / 'assets' / 'sprites' / f'{name_sp}.png')
+            write(out / 'project' / 'sprites' / f'{name_sp}.gbsres', {
+                '_resourceType': 'sprite', 'id': sid_sp, 'name': kind,
+                'symbol': f'sprite_{name_sp}', 'numFrames': 1,
+                'filename': f'{name_sp}.png', 'width': 16, 'height': 16,
+                'canvasWidth': 16, 'canvasHeight': 16,
+                'boundsX': 0, 'boundsY': 0, 'boundsWidth': 16, 'boundsHeight': 16,
+                'states': [{
+                    'id': str(uuid.uuid4()), 'name': '',
+                    'animationType': 'fixed', 'flipLeft': False,
+                    'animations': [{'id': str(uuid.uuid4()), 'frames': [{
+                        'id': str(uuid.uuid4()),
+                        # Four hardware tiles make one 16x16 sprite.
+                        'tiles': [{'id': str(uuid.uuid4()), 'x': tx, 'y': ty,
+                                   'sliceX': tx, 'sliceY': ty, 'palette': 0,
+                                   'flipX': False, 'flipY': False,
+                                   'objPalette': 'OBP0', 'paletteIndex': 0,
+                                   'priority': False}
+                                  for ty in (0, 8) for tx in (0, 8)],
+                    }]}] + [{'id': str(uuid.uuid4()), 'frames': []} for _ in range(7)],
+                }],
+            })
+            sprites[kind] = sid_sp
 
     for i, st in enumerate(stages):
         level = st.get('level') or {}
@@ -163,6 +273,26 @@ def export(spec, out, name):
             'collisions': encode_rle(cells),
             'script': [], 'playerHit1Script': [], 'playerHit2Script': [], 'playerHit3Script': [],
         })
+        # The cast. A coin sitting in a room is the difference between a level
+        # and a picture of one, and their x and y are in tiles on the hardware
+        # where ours are in pixels.
+        for n, e in enumerate(st.get('entities') or []):
+            sp = sprites.get(e.get('type'))
+            if not sp:
+                continue
+            aname = slug(f"{e.get('type')}_{n}")
+            write(out / 'project' / 'scenes' / room / 'actors' / f'{aname}.gbsres', {
+                '_resourceType': 'actor', 'id': str(uuid.uuid4()),
+                'name': f"{e.get('type')} {n + 1}", 'symbol': f'actor_{room}_{n}',
+                'spriteSheetId': sp, 'prefabId': '', 'frame': 0, 'animate': False,
+                'direction': 'down', 'moveSpeed': 1, 'animSpeed': 15,
+                'paletteId': '', 'isPinned': False, 'persistent': False,
+                'collisionGroup': '', 'prefabScriptOverrides': {},
+                'x': max(0, int(e.get('x', 0)) // T), 'y': max(0, int(e.get('y', 0)) // T),
+                '_index': n,
+                'script': [], 'startScript': [], 'updateScript': [],
+                'hit1Script': [], 'hit2Script': [], 'hit3Script': [],
+            })
         scene_ids.append((room, sid))
 
     if not scene_ids:
