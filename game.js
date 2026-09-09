@@ -594,14 +594,25 @@
   const STORY_MAX_T = 60;                       // the timeline's span, in seconds
 
   function storyBeats() {
-    return (game ? (game.snapshot().story || []) : (spec && spec.story) || []).slice();
+    return (game ? (game.story || []) : (spec && spec.story) || []).slice();
   }
+  /* Written straight to the running stage rather than through build(), which
+     would rebuild the game and drop you back into stage one every time you
+     edited a line in stage three. */
   function writeStory(beats) {
     if (!game) return;
     mark();
+    game.setStory(beats);
+    save(); buildStory();
+  }
+  // Every stage's story, for the lanes.
+  function allStageStories() {
+    if (!game) return [];
     const sp = game.snapshot();
-    sp.story = beats;
-    build(sp); save();
+    if (Array.isArray(sp.levels)) {
+      return sp.levels.map((st, i) => ({ name: st.name || `Stage ${i + 1}`, beats: st.story || [] }));
+    }
+    return [{ name: sp.name || 'Stage 1', beats: sp.story || [] }];
   }
   function cueOf(beat) {
     for (const [key] of CUES) if (beat[key] !== undefined) return key;
@@ -687,14 +698,17 @@
     $('g-story-count').textContent = beats.length
       ? `${beats.length} beat${beats.length === 1 ? '' : 's'}`
       : 'No story yet';
-    buildStoryLine(beats);
+    buildStoryLine();
   }
 
-  // The line only shows beats that happen at a time; a beat cued by score or
-  // by an event has no place on a clock, and pretending otherwise would lie.
-  function buildStoryLine(beats) {
-    const track = $('g-story-track'); if (!track) return;
-    track.innerHTML = '';
+  /* One lane per stage, so a run reads as a run. A lane only shows the beats
+     cued by a clock - a beat cued by a score or an event has no place on a
+     timeline, and drawing it at an invented time would be a lie - so those
+     are counted beside the lane instead. Clicking a lane goes to that stage,
+     because editing what you cannot see is how edits get lost. */
+  function buildStoryLine() {
+    const host = $('g-story-track'); if (!host) return;
+    host.innerHTML = '';
     $('g-story-ticks').innerHTML = '';
     for (let sec = 0; sec <= STORY_MAX_T; sec += 10) {
       const tick = document.createElement('span');
@@ -703,31 +717,56 @@
       tick.textContent = `${sec}s`;
       $('g-story-ticks').append(tick);
     }
-    beats.forEach((beat, i) => {
-      if (beat.at === undefined) return;
-      const pin = document.createElement('button');
-      pin.type = 'button'; pin.className = 'tl-pin';
-      pin.style.left = `${Math.max(0, Math.min(100, (beat.at / STORY_MAX_T) * 100))}%`;
-      pin.title = `${beat.at}s · ${beat.text || ''}`;
-      pin.textContent = String(i + 1);
-      const drag = e => {
-        const r = track.getBoundingClientRect();
-        const t = Math.max(0, Math.min(STORY_MAX_T, ((e.clientX - r.left) / r.width) * STORY_MAX_T));
-        pin.style.left = `${(t / STORY_MAX_T) * 100}%`;
-        pin.dataset.t = t.toFixed(1);
-      };
-      pin.addEventListener('pointerdown', e => {
-        e.preventDefault(); pin.setPointerCapture(e.pointerId); pin.dataset.dragging = '1'; drag(e);
+
+    const lanes = allStageStories();
+    const here = game ? game.stage : 0;
+    lanes.forEach((lane, i) => {
+      const row = document.createElement('div');
+      row.className = 'tl-lane' + (i === here ? ' current' : '');
+
+      const label = document.createElement('button');
+      label.type = 'button'; label.className = 'tl-name';
+      const timed = lane.beats.filter(b => b.at !== undefined).length;
+      const cued = lane.beats.length - timed;
+      label.innerHTML = `<span>${lane.name}</span><i>${lane.beats.length || '·'}${cued ? ` (${cued} cued)` : ''}</i>`;
+      label.title = i === here ? 'The stage you are editing' : `Go to ${lane.name}`;
+      if (i !== here) label.addEventListener('click', () => {
+        game.goToStage(i); present(); readout(); meta(); buildStory();
       });
-      pin.addEventListener('pointermove', e => { if (pin.dataset.dragging) drag(e); });
-      for (const ev of ['pointerup', 'pointercancel']) pin.addEventListener(ev, () => {
-        if (!pin.dataset.dragging) return;
-        delete pin.dataset.dragging;
-        const all = storyBeats();
-        all[i] = { ...all[i], at: +(+pin.dataset.t || 0).toFixed(1) };
-        writeStory(all);
+
+      const track = document.createElement('div');
+      track.className = 'tl-track';
+
+      lane.beats.forEach((beat, n) => {
+        if (beat.at === undefined) return;
+        const pin = document.createElement('button');
+        pin.type = 'button'; pin.className = 'tl-pin';
+        pin.style.left = `${Math.max(0, Math.min(100, (beat.at / STORY_MAX_T) * 100))}%`;
+        pin.title = `${beat.at}s · ${beat.text || ''}`;
+        pin.textContent = String(n + 1);
+        if (i !== here) { pin.disabled = true; track.append(pin); return; }
+        const drag = e => {
+          const r = track.getBoundingClientRect();
+          const t = Math.max(0, Math.min(STORY_MAX_T, ((e.clientX - r.left) / r.width) * STORY_MAX_T));
+          pin.style.left = `${(t / STORY_MAX_T) * 100}%`;
+          pin.dataset.t = t.toFixed(1);
+        };
+        pin.addEventListener('pointerdown', e => {
+          e.preventDefault(); pin.setPointerCapture(e.pointerId); pin.dataset.dragging = '1'; drag(e);
+        });
+        pin.addEventListener('pointermove', e => { if (pin.dataset.dragging) drag(e); });
+        for (const ev of ['pointerup', 'pointercancel']) pin.addEventListener(ev, () => {
+          if (!pin.dataset.dragging) return;
+          delete pin.dataset.dragging;
+          const all = storyBeats();
+          all[n] = { ...all[n], at: +(+pin.dataset.t || 0).toFixed(1) };
+          writeStory(all);
+        });
+        track.append(pin);
       });
-      track.append(pin);
+
+      row.append(label, track);
+      host.append(row);
     });
   }
 
@@ -947,7 +986,7 @@ end`;
   const past = [], future = [];
   function snapState() {
     const sp = game.snapshot();
-    return JSON.stringify({ tiles: Array.from(game.level.tiles), entities: sp.entities, props: sp.props, story: sp.story });
+    return JSON.stringify({ tiles: Array.from(game.level.tiles), entities: sp.entities, props: sp.props, story: game.story });
   }
   function mark() {
     if (!game) return;

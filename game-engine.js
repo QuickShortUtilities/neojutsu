@@ -1216,6 +1216,15 @@
         return false;
       },
       // What the studio saves: the live tilemap and entity placements.
+      // The story belongs to the stage you are standing in, not to the game,
+      // so an editor reading spec.story on a run of three rooms saw nothing
+      // and wrote to a key nobody reads.
+      get story() { return stageStory; },
+      setStory(list) {
+        stageStory = Array.isArray(list) ? list.slice(0, 60) : [];
+        toldBeats = new Set();
+        return stageStory;
+      },
       get stage() { return stageIndex; },
       get stages() { return stageList.length; },
       // Skip the card, for a studio that does not want to wait for it.
@@ -1228,7 +1237,7 @@
                                          dir: e.vx < 0 ? -1 : 1 })),
           props: props.map(pr => ({ i: pr.i, x: pr.x, y: pr.y, ...(pr.t ? { t: pr.t } : {}), ...(pr.b ? { b: 1 } : {}) })),
         };
-        const out = { ...spec, ...here };
+        const out = { ...spec, ...here, story: stageStory };
         /* Editing stage three and saving must not write those edits into the
            top-level level while `levels` keeps the version you started from -
            the edits would vanish the next time the game was built. The stage
@@ -1237,6 +1246,9 @@
           out.levels = stageList.map((st, i) => (i === stageIndex
             ? { ...st, ...here, story: stageStory }
             : st));
+          // A run keeps its stories on its stages; a stray top-level one
+          // would be a second copy nobody reads.
+          delete out.story;
         }
         return out;
       },

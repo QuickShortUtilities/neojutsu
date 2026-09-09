@@ -465,6 +465,33 @@
   // Nobody should die before they have moved. Clears anything harmful around
   // the spawn, makes sure there is something to stand on, and pushes enemies
   // out of arm's reach.
+  /* A generated game had no voice at all - correct, playable and silent. A
+     few beats give it one. They are cued the way a person would cue them: a
+     line on arriving, a word at the halfway mark, something when it goes
+     wrong. */
+  const ARRIVE = {
+    cave:    ['It is darker than the map promised.', 'Something lives down here.'],
+    ice:     ['The floor will not hold a stop.', 'Cold enough to slow a step.'],
+    sky:     ['A long way down from here.', 'The wind does half the work.'],
+    sunset:  ['We are losing the light.', 'One more before dark.'],
+    factory: ['Nothing here was built for people.', 'Mind the belts.'],
+    ruins:   ['Someone left in a hurry.', 'The walls remember more than we do.'],
+    volcano: ['The floor is warm through the boot.', 'It is waking up.'],
+    temple:  ['We are not the first ones in.', 'Quiet. Too quiet for a temple.'],
+  };
+  const HALFWAY = ['Halfway.', 'Nearly through.', 'Keep going.', 'That is most of it.'];
+  const HIT = ['That hurt.', 'Careless.', 'Not again.', 'It is faster than it looks.'];
+
+  function story(r, o, need) {
+    const beats = [{ at: +(0.6 + r() * 0.5).toFixed(1),
+                     text: pick(r, ARRIVE[o.theme] || ['Here we go.']) }];
+    if (need >= 4 && r() < 0.75) {
+      beats.push({ score: Math.max(1, Math.round(need / 2)), text: pick(r, HALFWAY) });
+    }
+    if (r() < 0.55) beats.push({ on: 'hurt', text: pick(r, HIT) });
+    return beats;
+  }
+
   function makeStartSafe(built, o) {
     const { w, h } = o;
     const g = built.g;
@@ -633,6 +660,7 @@
       entities: built.ents,
       props: dress(r, o, built),
       rules: { collect: need, keys },
+      story: story(r, o, need),
       script: script(r, o, need),
     };
     return { spec, understood: want };
@@ -666,8 +694,14 @@
     for (let i = 1; i < Math.max(1, Math.min(8, n)); i++) {
       levels.push(asStage(generate(prompt, `${s}:${i}`, force).spec));
     }
-    // Later rooms lean harder, so a run has somewhere to go.
-    levels.forEach((st, i) => { st.cut = i ? `STAGE ${i + 1}` : undefined; });
+    /* Rooms need their own names. Every stage taking the prompt as its name
+       made a run read as the same room three times over, in the picker and
+       on the timeline both. */
+    const ROOMS = ['Approach', 'Descent', 'Crossing', 'The deep', 'Ascent', 'Threshold', 'The last room'];
+    levels.forEach((st, i) => {
+      st.name = i ? (ROOMS[(i - 1) % ROOMS.length]) : 'Way in';
+      st.cut = i ? `STAGE ${i + 1}|${st.name.toUpperCase()}` : undefined;
+    });
     const spec = { ...first.spec, levels };
     for (const k of ['level', 'entities', 'props', 'story', 'start', 'rules']) delete spec[k];
     spec.name = (String(prompt || '').trim().slice(0, 40) || first.spec.name);
