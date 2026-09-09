@@ -257,3 +257,20 @@ button { font: inherit; cursor: pointer; }
   html { scroll-behavior: auto; }
 }
 .nav-studio { color: var(--cyan) !important; }
+
+/* ---- the three studios ---- */
+.studio-cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.studio-card {
+  display: flex; flex-direction: column; gap: 10px; text-decoration: none;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 22px;
+  transition: border-color .15s, transform .15s;
+}
+.studio-card:hover { border-color: var(--cyan); transform: translateY(-2px); text-decoration: none; }
+.studio-card .sc-k {
+  font-family: var(--kanji); font-weight: 900; font-size: 30px; line-height: 1;
+  color: var(--magenta); text-shadow: var(--glow-m);
+}
+.studio-card h3 { font-family: var(--pixel); font-size: 12px; margin: 0; color: var(--text); letter-spacing: .5px; }
+.studio-card p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.65; flex: 1; }
+.studio-card .sc-go { font-family: var(--mono); font-size: 11px; color: var(--cyan); }
+.section-lead { max-width: 640px; color: var(--muted); font-size: 14px; line-height: 1.75; margin: -6px 0 24px; }
