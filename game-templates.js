@@ -5,7 +5,7 @@
    fixed seed, then checked and frozen. */
 (() => {
   'use strict';
-  window.NeoGameCats = {"platformer": ["Platformer", "\u8df3"], "dungeon": ["Dungeon crawler", "\u8ff7"], "rpg": ["RPG", "\u7269"], "racing": ["Racing", "\u8d70"], "shooter": ["Shooter", "\u6483"], "adventure": ["Adventure", "\u5192"], "scifi": ["Sci-fi", "\u5b99"], "strategy": ["Strategy", "\u9663"], "twoplayer": ["Two player", "\u53cc"]};
+  window.NeoGameCats = {"platformer": ["Platformer", "跳"], "dungeon": ["Dungeon crawler", "迷"], "rpg": ["RPG", "物"], "racing": ["Racing", "走"], "shooter": ["Shooter", "撃"], "adventure": ["Adventure", "冒"], "scifi": ["Sci-fi", "宙"], "strategy": ["Strategy", "陣"], "twoplayer": ["Two player", "双"], "puzzle": ["Puzzle", "盤"]};
   window.NeoGameTemplates = {
   "platformer": {
     "name": "Platformer",
@@ -3560,7 +3560,7 @@
     "name": "Stack",
     "kanji": "\u7a4d",
     "mode": "blocks",
-    "cat": "strategy",
+    "cat": "puzzle",
     "seed": "stack0",
     "sky0": "#0b0a14",
     "sky1": "#151327",

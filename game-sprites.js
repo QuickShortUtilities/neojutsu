@@ -172,6 +172,11 @@
                 chaser: [324], jumper: [414], turret: [486, 577], hunter: [989, 990], ghost: [419], invader: [319, 320], rival: [220, 26, 31] },
     twoplayer: { player: [25, 76], walker: [269, 421], flyer: [418, 320],
                  chaser: [324], jumper: [372], turret: [577], hunter: [273, 417], ghost: [419], invader: [365, 319], rival: [220, 26, 31] },
+    // A board game has no cast at all; it still needs a row here so nothing
+    // asking for one falls through to a missing table.
+    puzzle:    { player: [30, 74], walker: [269], flyer: [418], chaser: [324],
+                 jumper: [414], turret: [486], hunter: [273], ghost: [419],
+                 invader: [365], rival: [220] },
   };
 
   // Pickups and the goal read the same in every game - a heart is a heart.

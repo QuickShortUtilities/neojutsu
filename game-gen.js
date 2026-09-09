@@ -840,6 +840,10 @@
      drew the same handful of monsters whatever you asked for - which is a
      large part of why they all felt like the same game with a new palette. */
   function chooseCat(want, mode, theme, shape) {
+    // The two that are their own thing rather than a setting.
+    if (mode === 'blocks') return 'puzzle';
+    if (mode === 'rider') return 'racing';
+    if (mode === 'invaders') return 'shooter';
     if (mode === 'racer') return 'racing';
     if (mode === 'shmup') return 'shooter';
     if ((want.abilities || []).includes('aimLock')) return 'shooter';

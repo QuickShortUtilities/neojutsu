@@ -545,6 +545,15 @@
 
   function previewDrive(t, dt) {
     const g = t.game;
+    /* A fight is not the game being over, it is the game happening somewhere
+       else. Treating it as a stop restarted the preview every second it was
+       in one, which is exactly when there is something worth watching. */
+    if (g.state === 'fight') {
+      t.tap = !t.tap;
+      g.input.a = t.tap;
+      g.tick(dt);
+      return;
+    }
     if (g.state !== 'play') {
       // let the loss read for a moment, then go again
       t.over = (t.over || 0) + dt;
@@ -556,6 +565,51 @@
     const p = g.player, T = 8;
     const solid = (tx, ty) => previewInfo(g, tx, ty).solid === true;
     const harmful = (tx, ty) => !!previewInfo(g, tx, ty).hazard;
+
+    /* A well and a bike have nobody to steer, or nobody who steers the way
+       everything else does. Without these the two newest games sat perfectly
+       still in the picker, which is a poor advertisement for them. */
+    if (g.mode === 'blocks') {
+      const pc = g.piece;
+      if (pc) {
+        let bestX = null, bestD = -1;
+        for (let x = 1; x < g.level.w - 1; x++) {
+          if (solid(x, 1)) continue;
+          let d = g.level.h;
+          for (let y = 0; y < g.level.h; y++) if (g.level.at(x, y)) { d = y; break; }
+          if (d > bestD) { bestD = d; bestX = x; }
+        }
+        g.input.left = bestX !== null && pc.x > bestX;
+        g.input.right = bestX !== null && pc.x < bestX;
+        g.input.down = bestX !== null && pc.x === bestX;
+        t.turn = ((t.turn || 0) + dt) % 1.7;
+        g.input.a = t.turn < dt * 2;
+      }
+      g.tick(dt);
+      return;
+    }
+
+    if (g.mode === 'rider') {
+      g.input.up = p.pitch > 0.06;
+      g.input.down = p.pitch < -0.06;
+      t.turn = ((t.turn || 0) + dt) % 0.8;
+      g.input.a = p.grounded && t.turn < dt * 2;
+      g.tick(dt);
+      return;
+    }
+
+    if (g.mode === 'invaders') {
+      const rank = g.entities.filter(e => e.alive && e.def.march);
+      if (rank.length) {
+        const low = rank.reduce((a, b) => (b.y > a.y ? b : a));
+        const want = low.x + low.w / 2, me = p.x + p.w / 2;
+        g.input.left = want < me - 2;
+        g.input.right = want > me + 2;
+        g.input.b = Math.abs(want - me) < 6;
+      }
+      g.tick(dt);
+      return;
+    }
 
     if (g.mode === 'racer' || g.mode === 'shmup') {
       // Steer for the middle of whatever road is open on this row.
