@@ -80,7 +80,10 @@ end` },
   message "LOW GRAVITY"
 end` },
 
+    /* Spawns at fixed tiles, so it needs a level big enough to hold them -
+       and a formation game has its own idea of what a wave is. */
     { id: 'waves', name: 'Enemy waves', kanji: '波', tags: ['fight'],
+      modes: ['platform', 'topdown'],
       blurb: 'Something new arrives every few seconds.',
       code: `on start
   set wave 0
@@ -113,6 +116,7 @@ end` },
 end` },
 
     { id: 'panic', name: 'Escape sequence', kanji: '逃', tags: ['drama'],
+      modes: ['platform', 'topdown'],
       blurb: 'Collect the last one and everything goes wrong.',
       code: `on collect
   if score >= 10

@@ -22,7 +22,7 @@
   // Every tile and piece the engine knows, in the order they are most used.
   const PIECES = [0, 1, 2, 3, 7, 15, 4, 14, 6, 5, 8, 9, 10, 11, 12, 13, 18, 16, 17];
   const PLACEABLE = ['coin', 'gem', 'heart', 'key', 'goal',
-                     'walker', 'flyer', 'chaser', 'jumper', 'turret', 'hunter', 'ghost', 'spike', 'mover'];
+                     'walker', 'flyer', 'chaser', 'jumper', 'turret', 'hunter', 'ghost', 'invader', 'spike', 'mover'];
 
   let game = null, spec = null, brush = { kind: 'tile', id: 1 }, painting = false;
   // Decor colour. Scenery is tinted at draw time rather than baked, so the
@@ -146,7 +146,8 @@
     /* Say what the keys actually do in this game. A top-down shooter whose
        help line only mentions moving leaves the gun undiscovered. */
     const p = spec.player || {};
-    const bits = ['Arrows or WASD to move'];
+    const bits = [spec.mode === 'invaders' ? 'Left and right to move'
+                                            : 'Arrows or WASD to move'];
     if (spec.mode === 'platform') bits.push('Z / Space to jump');
     if (p.attack) bits.push('X to shoot');
     else if (p.dash) bits.push('X to dash');
@@ -381,7 +382,7 @@
     attack: 'a gun', aimLock: 'a turret',
   };
   const MODE_SAID = { topdown: 'top-down', platform: 'platformer',
-                      racer: 'racing', shmup: 'a shooter' };
+                      racer: 'racing', shmup: 'a shooter', invaders: 'a fixed shooter' };
 
   function describeUnderstanding(u) {
     const bits = [];

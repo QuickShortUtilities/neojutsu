@@ -116,6 +116,10 @@
        standing player in a second and a half, which makes a maze a coin flip
        rather than a chase. */
     ghost:  { w: 8, h: 10, enemy: true, speed: 30, chases: true, sight: 9999, hp: 1 },
+    /* A formation moves as one thing, not as a crowd of things that happen to
+       be next to each other: they step together, turn together at the wall,
+       and drop a row when they turn. Taking one out speeds up the rest. */
+    invader: { w: 8, h: 8, enemy: true, speed: 0, march: true, fires: 3.4, hp: 1 },
     spike:  { w: 8, h: 4,  enemy: true, speed: 0, still: true, hp: 99 },
     shot:   { w: 3, h: 3,  bullet: true, speed: 110 },
     mover:  { w: 16, h: 4, platform: true, speed: 26, span: 48 },
@@ -181,7 +185,11 @@
   // ---------- the game ----------
   function create(canvas, spec, opts = {}) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const MODES = ['platform', 'topdown', 'racer', 'shmup'];
+    /* `invaders` is a fixed screen: nothing scrolls, you hold the bottom of
+       it and they come down to you. It is the one arcade shape this engine
+       could not make - every other mode is a body travelling through a level,
+       and this is a level travelling towards a body. */
+    const MODES = ['platform', 'topdown', 'racer', 'shmup', 'invaders'];
     const mode = MODES.includes(spec.mode) ? spec.mode : 'platform';
     // Racer and shmup scroll the world past you; you never walk, you steer.
     const scrolling = mode === 'racer' || mode === 'shmup';
@@ -595,6 +603,7 @@
         scroll = Math.min(scrollCfg.max, scroll + scrollCfg.accel * dt);
         view.y -= scroll * dt;
       }
+      if (mode === 'invaders') marchStep(dt);
       for (const b of players) stepBody(b, b.input, dt, ctx2);
       if (scrolling && view.y <= 0) { view.y = 0; finish(); }
       updateEntities(dt, ctx2);
@@ -697,6 +706,23 @@
           // sliding down a wall is slower than falling
           if (P.wallJump && player.wall && player.vy > 30 && !player.grounded) player.vy = 30;
         }
+      } else if (mode === 'invaders') {
+        /* You hold the bottom of the screen and nothing else. One axis, no
+           gravity, and the gun points up because there is only one place
+           worth shooting. */
+        player.vy = 0;
+        player.y = (lvl.h - 3) * TILE;
+        player.aimX = 0; player.aimY = -1;
+        /* One shot on the screen at a time, the way this game has always
+           worked: you fire again when the last one has landed or left, which
+           is a rhythm rather than a cooldown. */
+        const mine = entities.some(o => o.alive && o.def.bullet && !o.foe);
+        if (P.attack && input.b && !mine) {
+          const shot = makeEntity({ type: 'shot', x: player.x + player.w / 2 - 1.5, y: player.y - 4 });
+          shot.vx = 0; shot.vy = -ENTITY.shot.speed * 1.3;
+          entities.push(shot); say('shoot');
+        }
+        player.shotHeld = input.b;
       } else {
         const vdir = (input.down ? 1 : 0) - (input.up ? 1 : 0);
         player.vy = vdir * P.speed;
@@ -787,7 +813,9 @@
       if (player.y > lvl.h * TILE + 40) die(player);
 
       // player shots
-      if (P.attack && input.b && !player.shotHeld && player.shotCool <= 0 && player.dash <= 0) {
+      // Invaders fires its own way, above, and must not fire again here.
+      if (P.attack && mode !== 'invaders' && input.b && !player.shotHeld
+          && player.shotCool <= 0 && player.dash <= 0) {
         // Sideways in a platformer; wherever you point in a top-down one.
         const ax = mode === 'topdown' ? player.aimX : player.face;
         const ay = mode === 'topdown' ? player.aimY : 0;
@@ -853,6 +881,40 @@
       return best;
     }
 
+    /* The formation. Everything in it moves by the same amount at the same
+       moment, turns at the wall together, and drops a row when it turns - a
+       crowd of things each deciding for itself is not a formation, it is a
+       swarm, and the whole tension of this game is that the wall is coming
+       down one step at a time whatever you do.
+
+       Fewer of them left means faster, which is the other half of it. */
+    let marchDir = 1, marchStart = 0;
+    function marchStep(dt) {
+      const rank = entities.filter(e => e.alive && !e.hidden && e.def.march);
+      if (!rank.length) return;
+      if (!marchStart) marchStart = rank.length;
+
+      const gone = 1 - rank.length / marchStart;
+      const pace = 12 + gone * 46;
+      let lo = Infinity, hi = -Infinity, low = -Infinity;
+      for (const e of rank) {
+        lo = Math.min(lo, e.x);
+        hi = Math.max(hi, e.x + e.w);
+        low = Math.max(low, e.y + e.h);
+      }
+      const edge = (marchDir > 0 && hi >= lvl.w * TILE - TILE)
+                || (marchDir < 0 && lo <= TILE);
+      if (edge) {
+        marchDir *= -1;
+        for (const e of rank) e.y += TILE;                 // down a row
+        say('break');
+      } else {
+        for (const e of rank) e.x += marchDir * pace * dt;
+      }
+      // Reaching the floor is losing, however many lives are left.
+      if (low >= (lvl.h - 2) * TILE) { lives = 0; state = 'over'; message = 'OVERRUN'; }
+    }
+
     function updateEntities(dt, ctx2) {
       for (const e of entities) {
         if (!e.alive) continue;
@@ -896,7 +958,7 @@
                                               b.x + b.w > e.x && b.x < e.x + e.w);
           const dxp = nx - e.x; e.x = nx;
           for (const b of riders) { b.x += dxp; b.y = e.y - b.h; }
-        } else if (d.enemy && !d.still) {
+        } else if (d.enemy && !d.still && !d.march) {
           if (d.chases) {
             const target = nearest(e);
             const dx = (target.x + target.w / 2) - (e.x + e.w / 2);
@@ -934,6 +996,18 @@
           e.cool -= dt;
           if (e.cool <= 0) {
             e.cool = d.fires;
+            /* In a formation only the one at the bottom of its column shoots,
+               and only a few bombs are in the air at once. Two dozen of them
+               each firing on their own clock is seven bombs a second - a wall
+               of fire that killed a standing player in under two, which is
+               not a difficulty setting, it is a coin toss. */
+            if (d.march) {
+              const below = entities.some(o => o.alive && !o.hidden && o.def.march && o !== e
+                && Math.abs(o.x - e.x) < e.w && o.y > e.y);
+              if (below) continue;
+              const inAir = entities.filter(o => o.alive && o.def.bullet && o.foe).length;
+              if (inAir >= 3) continue;
+            }
             const target = nearest(e);
             const dx = (target.x + target.w / 2) - (e.x + e.w / 2);
             const dy = (target.y + target.h / 2) - (e.y + e.h / 2);

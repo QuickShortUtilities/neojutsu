@@ -204,6 +204,18 @@ BUILD = r"""
         const want = ((L + R) / 2) * T + T / 2;
         g.input.left = want < p.x + p.w / 2 - 3;
         g.input.right = want > p.x + p.w / 2 + 3;
+      } else if (g.mode === 'invaders') {
+        // Get under the lowest one and fire. Holding a direction and hoping
+        // is not playing this game, and it is the only mode where a bot that
+        // does not shoot cannot get anywhere at all.
+        const rank = g.entities.filter(e => e.alive && e.def.march);
+        if (rank.length) {
+          const low = rank.reduce((a, b) => (b.y > a.y ? b : a));
+          const want = low.x + low.w / 2, me = p.x + p.w / 2;
+          g.input.left = want < me - 2;
+          g.input.right = want > me + 2;
+          g.input.b = Math.abs(want - me) < 6;
+        }
       } else if (g.mode === 'topdown') {
         // No gravity to jump with: a wall means going round it, so pick a
         // side and hold it for a while rather than jittering on the spot.

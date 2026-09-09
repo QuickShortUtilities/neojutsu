@@ -151,25 +151,26 @@
     turret: [577, 486],
     hunter: [273, 275],
     ghost:  [419, 417],
+    invader:[365, 366, 414],
   };
   const CAST = {
     platformer: BASE,
     dungeon: { player: [122, 171, 24], walker: [323, 276, 422], flyer: [320, 322, 416],
-               chaser: [324, 325, 129], jumper: [414, 365, 372], turret: [577, 486], hunter: [417, 275], ghost: [419, 417] },
+               chaser: [324, 325, 129], jumper: [414, 365, 372], turret: [577, 486], hunter: [417, 275], ghost: [419, 417], invader: [365, 414] },
     rpg:     { player: [24, 220, 26], walker: [421, 422, 370], flyer: [418, 369],
-               chaser: [323, 276], jumper: [372, 373], turret: [577, 486], hunter: [374, 371], ghost: [419, 417] },
+               chaser: [323, 276], jumper: [372, 373], turret: [577, 486], hunter: [374, 371], ghost: [419, 417], invader: [366, 365] },
     racing:  { player: [25, 74], walker: [269, 271], flyer: [418],
-               chaser: [324], jumper: [414], turret: [486, 577], hunter: [989, 990], ghost: [419] },
+               chaser: [324], jumper: [414], turret: [486, 577], hunter: [989, 990], ghost: [419], invader: [319, 320] },
     shooter: { player: [76, 129], walker: [271, 269], flyer: [319, 320],
-               chaser: [324, 325], jumper: [414], turret: [486, 577], hunter: [989, 990], ghost: [419] },
+               chaser: [324, 325], jumper: [414], turret: [486, 577], hunter: [989, 990], ghost: [419], invader: [319, 320] },
     scifi:   { player: [129, 324, 325], walker: [271, 274], flyer: [319, 320],
-               chaser: [324, 325], jumper: [414, 415], turret: [486, 577], hunter: [321, 322], ghost: [419] },
+               chaser: [324, 325], jumper: [414, 415], turret: [486, 577], hunter: [321, 322], ghost: [419], invader: [319, 320, 365] },
     adventure: { player: [26, 220, 31], walker: [421, 422], flyer: [418, 369],
-                 chaser: [323, 276], jumper: [372, 373], turret: [577], hunter: [417, 419], ghost: [419, 417] },
+                 chaser: [323, 276], jumper: [372, 373], turret: [577], hunter: [417, 419], ghost: [419, 417], invader: [365, 366] },
     strategy: { player: [30, 74], walker: [269, 273], flyer: [418],
-                chaser: [324], jumper: [414], turret: [486, 577], hunter: [989, 990], ghost: [419] },
+                chaser: [324], jumper: [414], turret: [486, 577], hunter: [989, 990], ghost: [419], invader: [319, 320] },
     twoplayer: { player: [25, 76], walker: [269, 421], flyer: [418, 320],
-                 chaser: [324], jumper: [372], turret: [577], hunter: [273, 417], ghost: [419] },
+                 chaser: [324], jumper: [372], turret: [577], hunter: [273, 417], ghost: [419], invader: [365, 319] },
   };
 
   // Pickups and the goal read the same in every game - a heart is a heart.
@@ -233,7 +234,7 @@
      better at being people than a 1-bit silhouette is. */
   // The mode owns the vehicles, because the mode is the vehicle: you are a
   // car in a race and a ship in space whatever the level is called.
-  const PLAYER_BY_MODE = { racer: 990, shmup: 1041 };
+  const PLAYER_BY_MODE = { racer: 990, shmup: 1041, invaders: 1041 };
   // A category may only ask for a body that walks. A shooter played as a
   // platformer is a person with a gun, not a rocket standing on a ledge.
   const PLAYER_BY_CAT = { scifi: 324, strategy: 1022 };

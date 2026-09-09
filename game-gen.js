@@ -91,7 +91,10 @@
     /* A maze you are chased round, eating as you go, is a different game from
        a dungeon with a flag in it - so it is asked first, before "maze" on its
        own settles for the dungeon. */
-    if (/pac.?man|maze chase|chase.*maze|eat the dots|dot.?muncher|ghosts?\b/.test(raw)) {
+    if (/space invaders|invaders|galaga|galaxian|fixed shooter|wave of aliens/.test(raw)) {
+      want.mode = 'invaders';
+    }
+    else if (/pac.?man|maze chase|chase.*maze|eat the dots|dot.?muncher|ghosts?\b/.test(raw)) {
       want.mode = 'topdown'; want.chase = true;
     }
     else if (/\brac(e|ing)|driv(e|ing)|car\b|speedway|highway|kart|rally\b/.test(raw)) want.mode = 'racer';
@@ -654,6 +657,44 @@
              keys: 0, clearAll: true, grace: 2.6 };
   }
 
+  /* A fixed screen with a wall of them coming down at you. The level is
+     almost nothing - a floor, a roof and four shields - because the level is
+     not the point: the formation is, and it arrives whatever the level says. */
+  function invaders(r, o) {
+    const { w, h, difficulty } = o;
+    const g = Array.from({ length: h }, () => Array(w).fill('0'));
+    for (let x = 0; x < w; x++) { g[0][x] = '2'; g[h - 1][x] = '2'; }
+    for (let y = 0; y < h; y++) { g[y][0] = '2'; g[y][w - 1] = '2'; }
+
+    /* Shields you shoot away by hiding behind them. Brick, because our own
+       shots break brick - so cover is something you spend, and by the end of
+       a game there is none of it left, which is the shape of the whole thing. */
+    const bays = 4;
+    for (let i = 0; i < bays; i++) {
+      const cx = Math.round((i + 0.5) * w / bays);
+      for (let dy = 0; dy < 2; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const y = h - 6 + dy, x = cx + dx;
+        if (g[y] && g[y][x] !== undefined) g[y][x] = '7';
+      }
+    }
+
+    const ents = [];
+    /* The formation has to be narrower than the room it marches in. Filling
+       the width meant it hit a wall on the first frame and dropped a row
+       every frame after, so it reached the floor before anybody had shot
+       twice - all the tension of this game is in the room it has left. */
+    const cols = 5;
+    const rows = 2 + difficulty;
+    const left = Math.round((w - cols * 2) / 2);
+    for (let ry = 0; ry < rows; ry++) {
+      for (let rx = 0; rx < cols; rx++) {
+        ents.push({ type: 'invader', x: (left + rx * 2) * T, y: (2 + ry * 2) * T });
+      }
+    }
+    return { g, ents, start: { x: Math.floor(w / 2) * T, y: (h - 3) * T },
+             keys: 0, clearFoes: true, grace: 1.6 };
+  }
+
   const TOPDOWN_SHAPES = { rooms: tdRooms, arena: tdArena, cross: topdown, maze: tdMaze };
 
   /* Which overhead layout the words asked for. A tank battle wants open
@@ -955,6 +996,10 @@
   function dress(r, o, built) {
     const D = DECOR[o.theme];
     if (!D) return [];
+    /* Nothing in the play area of a fixed shooter. The whole screen is the
+       fight, and a tree standing in it looks like a thing you are meant to
+       shoot at. */
+    if (o.mode === 'invaders') return [];
     const { w, h } = o, g = built.g, props = [];
     /* Solid means solid, not "not empty". Road, water, grass and a checkpoint
        are all tiles you walk through, and counting them as ground meant a
@@ -1044,7 +1089,10 @@
        what they meant; they just are not all identical to the tile. */
     const jog = (v, by, lo) => Math.max(lo, v + Math.round((r() - 0.5) * 2 * by));
     let w, h;
-    if (mode === 'racer' || mode === 'shmup') [w, h] = [jog(20, 2, 16), jog(pick(r, [70, 90, 120]), 12, 56)];
+    // A fixed screen is the screen. Nothing about it scrolls, so nothing
+    // about it may be bigger than what you can see.
+    if (mode === 'invaders') [w, h] = [20, 18];
+    else if (mode === 'racer' || mode === 'shmup') [w, h] = [jog(20, 2, 16), jog(pick(r, [70, 90, 120]), 12, 56)];
     else if (mode === 'topdown') {
       /* A chase has to fit the screen. Half the game is seeing where the
          things hunting you are, and a board that scrolls hides them. */
@@ -1064,6 +1112,8 @@
     if (mode === 'racer' || mode === 'shmup') {
       built = (mode === 'racer' ? roadway : starlane)(r, o);
       populate(r, o, built, mode);
+    } else if (mode === 'invaders') {
+      built = invaders(r, o);
     } else if (mode === 'topdown') {
       o.shape = chooseTopdown(want, r);
       built = TOPDOWN_SHAPES[o.shape](r, o);
@@ -1108,12 +1158,14 @@
     /* A board to clear has no target to hit and no flag to reach - clearing it
        is the ending. Say so in the rules, and do not also ask for a number. */
     const clearAll = !!built.clearAll;
+    const clearFoes = !!built.clearFoes;
     const pickups = built.ents.filter(e => e.type === 'coin' || e.type === 'gem').length;
     if (want.collect === undefined && pickups && r() < .75) need = Math.max(1, Math.round(pickups * pick(r, [.5, .7, 1])));
 
     const t = THEMES[theme];
     const player = { char: want.char || t.char };
-    if (mode === 'shmup') player.attack = true;
+    if (mode === 'shmup' || mode === 'invaders') player.attack = true;
+    if (mode === 'invaders') player.speed = 96;
     if (mode === 'racer' || mode === 'shmup') player.speed = 96;
     for (const a of (want.abilities || [])) player[a] = true;
     /* A tank is a vehicle with a gun. Asking for one and being handed an
@@ -1144,7 +1196,9 @@
       level: { w, h, tiles: built.g.map(row => row.join('')).join('\n') },
       entities: built.ents,
       props: dress(r, o, built),
-      rules: clearAll ? { collect: 0, keys, clearAll: true } : { collect: need, keys },
+      rules: clearAll ? { collect: 0, keys, clearAll: true }
+           : clearFoes ? { collect: 0, keys, clearFoes: true }
+           : { collect: need, keys },
       story: story(r, o, need),
       script: script(r, o, need),
     };
