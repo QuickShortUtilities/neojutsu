@@ -217,8 +217,17 @@ BUILD = r"""
        scroller the player is held in the frame and the world moves, so
        progress is whichever of the two actually travelled. */
     const x0 = g.player.x, y0 = g.player.y, vx0 = g.view.x, vy0 = g.view.y;
-    let far = 0;
+    let far = 0, landed = 0, lastPiece = null;
     const mark = () => {
+      /* A well has nobody in it to move. Measuring how far the player got
+         reads zero for every falling-block game ever generated, and threw
+         every one of them out as unplayable - so there, progress is pieces
+         that have come to rest. */
+      if (g.mode === 'blocks') {
+        if (g.piece && g.piece !== lastPiece) { if (lastPiece) landed++; lastPiece = g.piece; }
+        far = Math.max(far, landed * T, g.lines * T * 3);
+        return;
+      }
       const d = Math.max(Math.abs(g.player.x - x0), Math.abs(g.player.y - y0),
                          Math.abs(g.view.x - vx0), Math.abs(g.view.y - vy0));
       if (d > far) far = d;
@@ -235,6 +244,29 @@ BUILD = r"""
         const want = ((L + R) / 2) * T + T / 2;
         g.input.left = want < p.x + p.w / 2 - 3;
         g.input.right = want > p.x + p.w / 2 + 3;
+      } else if (g.mode === 'blocks') {
+        /* Drop into whichever column has the most room, which keeps the pile
+           flat enough to clear a row now and then. Holding a direction and
+           hoping builds a tower and stacks out in twenty seconds. */
+        const pc = g.piece;
+        if (pc) {
+          let bestX = null, bestD = -1;
+          for (let x = 1; x < g.level.w - 1; x++) {
+            if (info(x, 1).solid === true) continue;
+            let d = g.level.h;
+            for (let y = 0; y < g.level.h; y++) if (g.level.at(x, y)) { d = y; break; }
+            if (d > bestD) { bestD = d; bestX = x; }
+          }
+          g.input.left = bestX !== null && pc.x > bestX;
+          g.input.right = bestX !== null && pc.x < bestX;
+          g.input.down = bestX !== null && pc.x === bestX;
+          g.input.a = (i % 97) === 0;
+        }
+      } else if (g.mode === 'rider') {
+        // Keep it level. The throttle looks after itself; the landing does not.
+        g.input.up = p.pitch > 0.06;
+        g.input.down = p.pitch < -0.06;
+        g.input.a = p.grounded && (i % 45) === 0;
       } else if (g.mode === 'invaders') {
         // Get under the lowest one and fire. Holding a direction and hoping
         // is not playing this game, and it is the only mode where a bot that
@@ -335,10 +367,17 @@ BUILD = r"""
 
     const full = paint();
 
+    /* What the player has to be able to pick out. Usually that is the body
+       they are steering; in a falling-block game there is no body at all, and
+       the thing they are steering is the piece - measuring the body there
+       reads nothing and threw out every well as unreadable. */
     const py = g.player.y;
-    g.player.y = -99999;
+    const pc = g.piece;
+    if (g.mode === 'blocks') { if (pc) pc.y = -99999; }
+    else g.player.y = -99999;
     const noPlayer = paint();
-    g.player.y = py;
+    if (g.mode === 'blocks') { if (pc) pc.y = 0; }
+    else g.player.y = py;
 
     const hidden = [];
     for (const e of g.entities) if (e.alive) { e.alive = false; hidden.push(e); }
@@ -355,7 +394,8 @@ BUILD = r"""
        rubber stamp. */
     const sx = g.player.x + g.player.w / 2 - g.view.x;
     const sy = g.player.y + g.player.h / 2 - g.view.y;
-    const onScreen = sx > -8 && sx < 168 && sy > -8 && sy < 152;
+    const onScreen = g.mode === 'blocks' ? !!g.piece
+                   : (sx > -8 && sx < 168 && sy > -8 && sy < 152);
 
     const P = against(noPlayer), C = against(noCast);
     if (P.contrast === null) P.contrast = onScreen ? 0 : null;
@@ -469,8 +509,11 @@ def main():
                         why = 'theme not understood'
                     elif r.get('moved', 0) < args.min_moved:
                         why = f"a bot got {r.get('moved', 0)}px into it"
-                    elif r.get('cast', 0) < 12:
+                    elif r.get('cast', 0) < 12 and spec.get('mode') != 'blocks':
                         why = 'nothing of the cast is on screen'
+                    elif spec.get('mode') == 'blocks' and r.get('cast', 0) < 4:
+                        # a well has no cast; what has to be visible is the piece
+                        why = 'the falling piece cannot be seen'
                     elif r.get('contrast', 0) < args.min_contrast:
                         why = f"cast reads at {r.get('contrast', 0)} against the ground"
                     elif r.get('shades', 0) < args.min_shades:
