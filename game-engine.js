@@ -69,6 +69,19 @@
     return { w, h, tiles, at(x, y) { return (x < 0 || y < 0 || x >= w || y >= h) ? 0 : tiles[y * w + x]; } };
   }
 
+  /* `blocks` is the one shape here with no avatar in it at all. Everything
+     else is a body moving through a level; this is a level being built out
+     of the thing you are steering, and it stops when there is no room to
+     put the next one. It takes the tilemap, the renderer, the palette, the
+     HUD, the script layer and the packaging exactly as they are - what it
+     supplies is its own idea of what a frame is. */
+  /* `rider` is side-on and always moving: a bike over hills, where the
+     question is not whether you can reach the ledge but what angle you are
+     at when you meet the ground again. Same gravity and same collision as a
+     platformer - what it adds is a throttle you cannot let go of and a
+     pitch that has to be level when you land. */
+  const MODES = ['platform', 'topdown', 'racer', 'shmup', 'invaders', 'blocks', 'rider'];
+
   const tileInfo = id => TILES[id] || TILES[0];
   // A door is solid until it is opened, which is the only tile whose solidity
   // depends on the state of the game rather than on the tile alone.
@@ -193,18 +206,6 @@
        it and they come down to you. It is the one arcade shape this engine
        could not make - every other mode is a body travelling through a level,
        and this is a level travelling towards a body. */
-    /* `blocks` is the one shape here with no avatar in it at all. Everything
-       else is a body moving through a level; this is a level being built out
-       of the thing you are steering, and it stops when there is no room to
-       put the next one. It takes the tilemap, the renderer, the palette, the
-       HUD, the script layer and the packaging exactly as they are - what it
-       supplies is its own idea of what a frame is. */
-    /* `rider` is side-on and always moving: a bike over hills, where the
-       question is not whether you can reach the ledge but what angle you are
-       at when you meet the ground again. Same gravity and same collision as a
-       platformer - what it adds is a throttle you cannot let go of and a
-       pitch that has to be level when you land. */
-    const MODES = ['platform', 'topdown', 'racer', 'shmup', 'invaders', 'blocks', 'rider'];
     const mode = MODES.includes(spec.mode) ? spec.mode : 'platform';
     // Racer and shmup scroll the world past you; you never walk, you steer.
     const scrolling = mode === 'racer' || mode === 'shmup';
@@ -2115,9 +2116,38 @@
       } else if (!Array.isArray(lvl.tiles)) bad('level.tiles must be rows of digits or an array');
     }
 
-    const ents = spec.entities || [];
-    if (!Array.isArray(ents)) bad('entities must be a list');
-    else {
+    /* Where the player begins. Nothing checked this at all, so a spec that
+       said `"start": "here"` was accepted and the body appeared at nought,
+       nought - inside the wall, usually. A model gets told instead. */
+    if (spec.start !== undefined) {
+      const st = spec.start;
+      if (!st || typeof st !== 'object' || !Number.isFinite(+st.x) || !Number.isFinite(+st.y)) {
+        bad('start must be a point with an x and a y');
+      } else if (lvl && lvl.w && (st.x < 0 || st.y < 0
+                 || st.x > lvl.w * TILE || st.y > lvl.h * TILE)) {
+        warnings.push('the start is outside the level');
+      }
+    }
+    // A run of rooms is a list of them or it is nothing.
+    if (spec.levels !== undefined && !Array.isArray(spec.levels)) {
+      bad('levels must be a list of rooms');
+    }
+    // Things the engine copes with but nobody meant.
+    if (spec.mode !== undefined && !MODES.includes(spec.mode)) {
+      warnings.push(`unknown mode "${spec.mode}" - it will be played as a platformer`);
+    }
+    if (spec.lives !== undefined && !(spec.lives >= 0 && spec.lives <= 99)) {
+      warnings.push('lives outside 0 to 99 will be clamped');
+    }
+
+    /* One list, guarded once. The checks further down went on using this
+       whether it was a list or not, so a spec that said `"entities": "lots"`
+       - which a model will, sooner or later - crashed the validator instead
+       of being told what was wrong with it. */
+    const given = spec.entities;
+    if (given !== undefined && !Array.isArray(given)) bad('entities must be a list');
+    const ents = Array.isArray(given) ? given : [];
+    {
       if (ents.length > 400) bad(`too many entities (${ents.length})`);
       const unknown = [...new Set(ents.filter(e => !ENTITY[e && e.type]).map(e => e && e.type))];
       if (unknown.length) bad(`unknown entity types: ${unknown.slice(0, 5).join(', ')}`);
@@ -2125,6 +2155,9 @@
         const off = ents.filter(e => e && (e.x < 0 || e.y < 0 || e.x > lvl.w * TILE || e.y > lvl.h * TILE));
         if (off.length) warnings.push(`${off.length} piece(s) sit outside the level`);
       }
+      // A number that is not a number puts a thing nowhere at all.
+      const nowhere = ents.filter(e => e && (!Number.isFinite(+e.x) || !Number.isFinite(+e.y)));
+      if (nowhere.length) bad(`${nowhere.length} piece(s) have no position`);
     }
 
     const story = spec.story;
