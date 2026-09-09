@@ -163,6 +163,15 @@
     const scrollCfg = Object.assign({ speed: 46, accel: 2.6, max: 130 }, spec.scroll || {});
     let scroll = 0;
     const lvl = makeLevel(spec.level || { w: 20, h: 18, tiles: '' });
+
+    /* Decor. Props are scenery drawn from the sprite atlas and nothing else:
+       no collision, no rules, no script access. That is deliberate - it means
+       a level can be dressed with any of the atlas's 1078 drawings without any
+       of them being able to change how the game plays. */
+    let props = (spec.props || []).map(p => ({
+      i: p.i | 0, x: Math.round(p.x) || 0, y: Math.round(p.y) || 0,
+      t: typeof p.t === 'string' ? p.t.slice(0, 24) : '', b: !!p.b,
+    })).slice(0, 600);
     const rand = rng(spec.seed || 'neojutsu');
     const view = { w: canvas.width, h: canvas.height, x: 0, y: 0 };
 
@@ -618,9 +627,27 @@
       camera();
       const sx0 = shake ? (rand() - .5) * shake * 2 : 0, sy0 = shake ? (rand() - .5) * shake * 2 : 0;
       const ox = Math.round(view.x + sx0), oy = Math.round(view.y + sy0);
+
+      // Sprite art if the atlas is up, the engine's own rectangles if not.
+      // The fallback is not decorative: a packaged game opened somewhere the
+      // image will not decode still has to be playable.
+      const art = window.NeoSprites;
+      const useArt = !!(art && art.loaded && spec.sprites !== false);
+      const cat = spec.cat || '';
+
+      function drawProps(back) {
+        for (const pr of props) {
+          if (!!pr.b !== back) continue;
+          const px = Math.round(pr.x - ox), py = Math.round(pr.y - oy);
+          if (px < -24 || px > view.w + 24 || py < -24 || py > view.h + 24) continue;
+          art.draw(ctx, pr.i, px, py, { colour: pr.t || '#6f6890' });
+        }
+      }
       const sky = ctx.createLinearGradient(0, 0, 0, view.h);
       sky.addColorStop(0, spec.sky0 || '#1b2a5c'); sky.addColorStop(1, spec.sky1 || '#7fc4e8');
       ctx.fillStyle = sky; ctx.fillRect(0, 0, view.w, view.h);
+
+      if (useArt) drawProps(true);
 
       const x0 = Math.floor(ox / TILE), x1 = Math.ceil((ox + view.w) / TILE);
       const y0 = Math.floor(oy / TILE), y1 = Math.ceil((oy + view.h) / TILE);
@@ -649,12 +676,7 @@
         }
       }
 
-      // Sprite art if the atlas is up, the engine's own rectangles if not.
-      // The fallback is not decorative: a packaged game opened somewhere the
-      // image will not decode still has to be playable.
-      const art = window.NeoSprites;
-      const useArt = !!(art && art.loaded && spec.sprites !== false);
-      const cat = spec.cat || '';
+      if (useArt) drawProps(false);
 
       for (const e of entities) {
         if (!e.alive) continue;
@@ -813,6 +835,26 @@
         lvl.tiles[ty * lvl.w + tx] = id; draw(); return true;
       },
       addEntity(e) { const made = makeEntity(e); entities.push(made); draw(); return made; },
+      get props() { return props; },
+      addProp(pr) {
+        if (props.length >= 600) return null;
+        const made = { i: pr.i | 0, x: Math.round(pr.x) || 0, y: Math.round(pr.y) || 0,
+                       t: typeof pr.t === 'string' ? pr.t.slice(0, 24) : '', b: !!pr.b };
+        props.push(made); draw(); return made;
+      },
+      // Topmost first, so clicking removes what you can actually see.
+      removePropAt(x, y) {
+        for (let i = props.length - 1; i >= 0; i--) {
+          const pr = props[i];
+          const box = window.NeoSprites && window.NeoSprites.box(pr.i);
+          const w = box ? box.w : 8, h = box ? box.h : 8;
+          if (x >= pr.x - w / 2 - 1 && x <= pr.x + w / 2 + 1 && y >= pr.y - h - 1 && y <= pr.y + 1) {
+            props.splice(i, 1); draw(); return true;
+          }
+        }
+        return false;
+      },
+      setProps(list) { props = (list || []).map(pr => ({ i: pr.i | 0, x: pr.x | 0, y: pr.y | 0, t: pr.t || '', b: !!pr.b })).slice(0, 600); draw(); },
       removeEntityAt(x, y) {
         for (let i = entities.length - 1; i >= 0; i--) {
           const e = entities[i];
@@ -826,7 +868,8 @@
       snapshot() {
         return { ...spec, level: { w: lvl.w, h: lvl.h, tiles: Array.from(lvl.tiles) },
                  entities: entities.map(e => ({ type: e.type, x: Math.round(e.home.x), y: Math.round(e.home.y),
-                                                dir: e.vx < 0 ? -1 : 1 })) };
+                                                dir: e.vx < 0 ? -1 : 1 })),
+                 props: props.map(pr => ({ i: pr.i, x: pr.x, y: pr.y, ...(pr.t ? { t: pr.t } : {}), ...(pr.b ? { b: 1 } : {}) })) };
       },
     };
     draw();
@@ -866,6 +909,20 @@
       if (lvl && lvl.w) {
         const off = ents.filter(e => e && (e.x < 0 || e.y < 0 || e.x > lvl.w * TILE || e.y > lvl.h * TILE));
         if (off.length) warnings.push(`${off.length} piece(s) sit outside the level`);
+      }
+    }
+
+    const props = spec.props;
+    if (props !== undefined) {
+      if (!Array.isArray(props)) bad('props must be a list');
+      else {
+        if (props.length > 600) bad(`too much decor (${props.length} props)`);
+        const wrong = props.filter(pr => !pr || typeof pr.i !== 'number'
+                                      || !Number.isFinite(pr.x) || !Number.isFinite(pr.y));
+        if (wrong.length) bad(`${wrong.length} prop(s) are missing a sprite or a position`);
+        const tint = props.filter(pr => pr && pr.t !== undefined
+                                     && !(typeof pr.t === 'string' && /^#[0-9a-f]{3,8}$/i.test(pr.t)));
+        if (tint.length) bad(`${tint.length} prop(s) have a tint that is not a colour`);
       }
     }
 

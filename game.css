@@ -110,3 +110,34 @@
 .picker-cat.empty { opacity: .45; cursor: default; }
 .picker-cat.empty i { color: var(--yellow); }
 .game-frame .picker { background: rgba(7,6,12,.97); }
+
+/* ---------- decor ---------- */
+.decor-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: -4px 0 14px;
+}
+.tint-row { display: flex; gap: 4px; }
+.tint {
+  width: 18px; height: 18px; padding: 0; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 4px;
+}
+.tint:hover { border-color: var(--cyan); }
+.tint.current { border-color: var(--magenta); box-shadow: 0 0 0 2px rgba(255,46,136,.35); }
+
+/* A tile in the decor strip is the sprite and nothing else - there are too
+   many of them for a label to be worth the height. */
+#g-props .tilebtn { width: 34px; padding: 4px; }
+#g-props .tilebtn canvas { height: 20px; }
+
+/* .picker-body is a flexbox, so the grid has to claim it - without flex:1 it
+   sizes to its content and collapses into a single column. */
+.decor-grid {
+  flex: 1; overflow-y: auto; display: grid; gap: 6px; padding: 4px 2px 20px;
+  align-content: start; grid-auto-rows: max-content;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+}
+.decor-tile {
+  aspect-ratio: 1; display: grid; place-items: center; cursor: pointer;
+  background: #0b0913; border: 1px solid var(--line); border-radius: 6px; padding: 4px;
+}
+.decor-tile:hover { border-color: var(--cyan); }
+.decor-tile canvas { width: 100%; height: 100%; image-rendering: pixelated; }

@@ -172,6 +172,54 @@
   // shot has no room for a drawing, and a platform is a piece of level.
   const ITEM = { coin: 218, gem: 219, heart: 529, key: 572, goal: 824, shot: null, mover: null };
 
+  /* ---- browsing the sheet ----
+     The pack ships 1078 drawings under numbers, not names, so the groups
+     below are bands of the sheet rather than a catalogue. "Everything" is
+     listed first and is the honest one: any sprite not covered by a band is
+     still reachable there. "Handy" is the short list that was checked by eye.  */
+  const HANDY = [
+    49, 50, 51, 52, 53, 54, 55, 56,          // trees, bushes, cactus
+    98, 99, 100, 101, 102, 103, 104, 105,    // grass, saplings, mushroom
+    147, 148, 149, 152, 153, 196, 197, 198,  // fences and gates
+    8, 9, 10, 11, 12, 57, 58, 59, 60, 61,    // wall and building blocks
+    106, 107, 108, 109, 110,
+    218, 219, 529, 572, 824, 486, 567,       // coin, gem, heart, key, cup, bomb, flame
+    620, 622, 578, 337, 338, 339, 340,       // bone, skull, flask, potions
+    672, 674, 759, 766, 825, 826, 829,       // marks, cartridge, pad, house, save, gear
+    24, 25, 26, 74, 76, 122, 171, 220,       // people
+    269, 320, 323, 324, 372, 414, 418, 421,  // creatures
+  ];
+
+  const BANDS = [
+    ['all',    'Everything', '全', null],
+    ['handy',  'Handy',      '選', 'handy'],
+    ['nature', 'Nature',     '森', { c: [0, 7] }],
+    ['built',  'Structures', '館', { c: [8, 22] }],
+    ['people', 'People',     '人', { c: [23, 31], r: [0, 4] }],
+    ['beasts', 'Creatures',  '獣', { c: [23, 31], r: [5, 9] }],
+    ['arms',   'Weapons',    '刀', { c: [32, 42], r: [2, 10] }],
+    ['items',  'Items',      '宝', { c: [37, 45], r: [6, 13] }],
+    ['marks',  'Symbols',    '符', { c: [37, 48], r: [13, 21] }],
+  ];
+
+  // Only cells that actually carry ink; the sheet has blanks.
+  function group(key) {
+    const band = BANDS.find(b => b[0] === key);
+    const spanOf = band && band[3];
+    if (spanOf === 'handy') return HANDY.filter(i => box(i));
+    const out = [];
+    for (let i = 0; i < COUNT; i++) {
+      if (!box(i)) continue;
+      if (spanOf) {
+        const c = i % COLS, r = (i / COLS) | 0;
+        if (c < spanOf.c[0] || c > spanOf.c[1]) continue;
+        if (spanOf.r && (r < spanOf.r[0] || r > spanOf.r[1])) continue;
+      }
+      out.push(i);
+    }
+    return out;
+  }
+
   function castFor(cat) { return CAST[cat] || BASE; }
 
   // Sprite for one entity, chosen from its category cast and pinned by the
@@ -185,6 +233,7 @@
     TS, COLS, ROWS, COUNT,
     ready(fn) { if (loaded) fn(); else waiters.push(fn); },
     get loaded() { return loaded; },
-    box, draw, drawFit, pick, castFor, forEntity, CAST, ITEM, BASE,
+    box, draw, drawFit, pick, castFor, forEntity, group,
+    CAST, ITEM, BASE, BANDS, HANDY,
   };
 })();

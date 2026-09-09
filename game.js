@@ -25,6 +25,10 @@
                      'walker', 'flyer', 'chaser', 'jumper', 'turret', 'spike', 'mover'];
 
   let game = null, spec = null, brush = { kind: 'tile', id: 1 }, painting = false;
+  // Decor colour. Scenery is tinted at draw time rather than baked, so the
+  // same drawing can be a green tree or a dead one.
+  const TINTS = ['#6f6890', '#3fbf4a', '#c08a4a', '#2ef2ff', '#ffd23f', '#ff2e88', '#c060ff', '#ece8f5'];
+  let decorTint = TINTS[0], decorCat = 'handy', decorOpen = false;
   let audio = null, gain = null, music = null, buffer = null, savedTracks = [];
 
   const low = document.createElement('canvas');
@@ -195,6 +199,13 @@
     if (!game || !cfg().edit) return;
     const p = tileAtEvent(e);
     if (brush.kind === 'tile') game.setTile(p.tx, p.ty, erase ? 0 : brush.id);
+    else if (brush.kind === 'prop') {
+      // Decor stands on the tile it was dropped on, centred, so scenery lines
+      // up with the ground instead of floating at a corner.
+      if (erase) game.removePropAt(p.x, p.y);
+      else if (!game.removePropAt(p.x, p.y))
+        game.addProp({ i: brush.id, x: p.tx * T + T / 2, y: p.ty * T + T, t: decorTint, b: $('g-decor-back').checked });
+    }
     else if (erase) game.removeEntityAt(p.x, p.y);
     else if (!game.removeEntityAt(p.x, p.y)) game.addEntity({ type: brush.id, x: p.tx * T, y: p.ty * T, dir: cfg().dir });
     present(); meta(); save();
@@ -255,8 +266,12 @@
     const ents = $('g-entities'); ents.innerHTML = '';
     for (const type of PLACEABLE) {
       const def = window.NeoGame.ENTITY[type];
+      const tint = def.goal ? '#3fbf4a' : def.enemy ? '#ff5a3c' : def.key ? '#2ef2ff' : def.heal ? '#ff2e88' : '#ffd23f';
       const btn = pieceButton(type, x => {
-        x.fillStyle = def.goal ? '#3fbf4a' : def.enemy ? '#ff5a3c' : def.key ? '#2ef2ff' : def.heal ? '#ff2e88' : '#ffd23f';
+        const S = window.NeoSprites;
+        const idx = S && S.loaded ? S.forEntity(type, (spec && spec.cat) || '', 0) : null;
+        if (idx != null && S.drawFit(x, idx, 0, 0, 20, 16, tint)) return;
+        x.fillStyle = tint;
         x.fillRect(6, 4, Math.min(10, def.w), Math.min(10, def.h));
       }, () => { brush = { kind: 'entity', id: type }; markCurrent(); });
       btn.dataset.piece = `entity:${type}`;
@@ -424,6 +439,97 @@
       window.NeoPalette.snap(t.ctx, t.w, t.h, { chip: c.chip, dither: c.dither, dithAmt: .6 });
     }
   }
+  // ---------- decor ----------
+  function decorButton(idx, host) {
+    const S = window.NeoSprites;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'tilebtn'; b.title = `Sprite ${idx}`;
+    const c = document.createElement('canvas'); c.width = 20; c.height = 16;
+    const x = c.getContext('2d');
+    x.fillStyle = '#0b0913'; x.fillRect(0, 0, 20, 16);
+    S.drawFit(x, idx, 0, 0, 20, 16, decorTint);
+    b.append(c);
+    b.dataset.piece = `prop:${idx}`;
+    b.addEventListener('click', () => { brush = { kind: 'prop', id: idx }; markCurrent(); });
+    host.append(b);
+    return b;
+  }
+
+  // The strip is a shortlist. Everything else is behind "All decor".
+  function buildDecorStrip() {
+    const host = $('g-props'); if (!host) return;
+    host.innerHTML = '';
+    const S = window.NeoSprites;
+    if (!S || !S.loaded) { host.textContent = ''; return; }
+    for (const idx of S.HANDY.slice(0, 18)) decorButton(idx, host);
+    markCurrent();
+  }
+
+  function buildTints() {
+    const host = $('g-decor-tints'); if (!host) return;
+    host.innerHTML = '';
+    for (const t of TINTS) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'tint' + (t === decorTint ? ' current' : '');
+      b.style.background = t; b.title = t;
+      b.setAttribute('aria-label', `Decor colour ${t}`);
+      b.addEventListener('click', () => {
+        decorTint = t; buildTints(); buildDecorStrip();
+        if (decorOpen) buildDecorGrid();
+      });
+      host.append(b);
+    }
+  }
+
+  function buildDecorCats() {
+    const host = $('g-decor-cats'); if (!host) return;
+    host.innerHTML = '';
+    const S = window.NeoSprites;
+    for (const [key, label, kanji] of S.BANDS) {
+      const n = S.group(key).length;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'picker-cat' + (key === decorCat ? ' current' : '') + (n ? '' : ' empty');
+      b.innerHTML = `<span class="pc-k">${kanji}</span>${label}<i>${n || '0'}</i>`;
+      if (n) b.addEventListener('click', () => { decorCat = key; buildDecorCats(); buildDecorGrid(); });
+      else b.disabled = true;
+      host.append(b);
+    }
+  }
+
+  function buildDecorGrid() {
+    const grid = $('g-decor-grid'); if (!grid) return;
+    grid.innerHTML = '';
+    const S = window.NeoSprites;
+    const list = S.group(decorCat);
+    for (const idx of list) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'decor-tile'; b.title = `Sprite ${idx}`;
+      const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+      const x = c.getContext('2d');
+      S.drawFit(x, idx, 0, 0, 32, 32, decorTint);
+      b.append(c);
+      b.addEventListener('click', () => {
+        brush = { kind: 'prop', id: idx };
+        if (!$('g-props').querySelector(`[data-piece="prop:${idx}"]`)) {
+          const host = $('g-props');
+          decorButton(idx, host);
+          while (host.children.length > 24) host.removeChild(host.firstChild);
+        }
+        markCurrent(); closeDecor();
+      });
+      grid.append(b);
+    }
+    $('g-decor-count').textContent = `${list.length} sprite${list.length === 1 ? '' : 's'}`;
+  }
+
+  function openDecor() {
+    if (!window.NeoSprites || !window.NeoSprites.loaded) return;
+    decorOpen = true; $('g-decor').hidden = false;
+    buildDecorCats(); buildDecorGrid();
+  }
+  function closeDecor() { decorOpen = false; $('g-decor').hidden = true; }
+
   function openPicker() {
     pickerOpen = true; pLast = 0;
     $('g-picker').hidden = false;
@@ -501,10 +607,13 @@ end`;
   // The level and its pieces are small, so history is whole snapshots rather
   // than a diff - simpler, and impossible to get subtly wrong.
   const past = [], future = [];
+  function snapState() {
+    const sp = game.snapshot();
+    return JSON.stringify({ tiles: Array.from(game.level.tiles), entities: sp.entities, props: sp.props });
+  }
   function mark() {
     if (!game) return;
-    past.push(JSON.stringify({ tiles: Array.from(game.level.tiles),
-                               entities: game.snapshot().entities }));
+    past.push(snapState());
     if (past.length > 60) past.shift();
     future.length = 0;
     syncHistory();
@@ -515,17 +624,18 @@ end`;
     for (let i = 0; i < lvl.tiles.length; i++) lvl.tiles[i] = st.tiles[i] || 0;
     const sp = game.snapshot();
     sp.entities = st.entities;
+    sp.props = st.props || [];
     sp.level = { w: lvl.w, h: lvl.h, tiles: Array.from(lvl.tiles) };
     build(sp);
   }
   function undo() {
     if (!past.length) return;
-    future.push(JSON.stringify({ tiles: Array.from(game.level.tiles), entities: game.snapshot().entities }));
+    future.push(snapState());
     restoreState(past.pop()); syncHistory(); save();
   }
   function redo() {
     if (!future.length) return;
-    past.push(JSON.stringify({ tiles: Array.from(game.level.tiles), entities: game.snapshot().entities }));
+    past.push(snapState());
     restoreState(future.pop()); syncHistory(); save();
   }
   function syncHistory() {
@@ -546,6 +656,7 @@ end`;
     const sp = game.snapshot();
     sp.level = { w, h, tiles: out };
     sp.entities = sp.entities.filter(e => e.x < w * T && e.y < h * T);
+    sp.props = (sp.props || []).filter(pr => pr.x < w * T && pr.y < h * T);
     build(sp); save();
   }
 
@@ -911,17 +1022,27 @@ present();
     fillTracks();
     build(saved || window.NeoGameTemplates[tsel.value]);
     buildPalette(); wireInput(); wireBuild();
+    buildTints();
+    // The atlas decodes an inlined image, so the decor strip and the entity
+    // previews are filled in when it is ready rather than assumed present.
+    window.NeoSprites?.ready(() => { buildDecorStrip(); buildPalette(); });
     window.NeoSelect?.refreshAll?.();
 
     $('g-play').addEventListener('click', toggle);
     $('g-reset').addEventListener('click', () => { game.reset(); present(); readout(); });
     $('g-pick-open').addEventListener('click', () => pickerOpen ? closePicker() : openPicker());
     $('g-picker-close').addEventListener('click', closePicker);
+    $('g-decor-open').addEventListener('click', () => decorOpen ? closeDecor() : openDecor());
+    $('g-decor-close').addEventListener('click', closeDecor);
     $('g-picker-grid').addEventListener('scroll', syncPickerScroll);
     $('g-picker-more').addEventListener('click', () => {
       const g = $('g-picker-grid'); g.scrollBy({ top: g.clientHeight * .8, behavior: 'smooth' });
     });
-    addEventListener('keydown', e => { if (e.key === 'Escape' && pickerOpen) closePicker(); });
+    addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      if (pickerOpen) closePicker();
+      if (decorOpen) closeDecor();
+    });
     $('g-template').addEventListener('change', () => {
       const t = window.NeoGameTemplates[$('g-template').value];
       if (t) { build(t); save(); }

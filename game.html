@@ -97,6 +97,14 @@
       <p class="hint">Pick a piece, then draw on the game. Right-click or pick Erase to clear.</p>
       <div class="tilebar" id="g-tiles"></div>
       <div class="tilebar" id="g-entities"></div>
+      <div class="tilebar" id="g-props"></div>
+      <div class="decor-row">
+        <button class="mini" id="g-decor-open" type="button" title="Every sprite in the pack">飾 All decor…</button>
+        <div class="tint-row" id="g-decor-tints" role="group" aria-label="Decor colour"></div>
+        <label class="check" title="Draw this decor behind the level instead of on top">
+          <input type="checkbox" id="g-decor-back"><span>Behind</span>
+        </label>
+      </div>
       <div class="two-up">
         <label class="field"><span>Facing</span>
           <select id="g-dir"><option value="1" selected>Right</option><option value="-1">Left</option></select>
@@ -128,6 +136,17 @@
     <section class="panel stage" aria-label="Game">
       <div class="stage-frame game-frame">
         <canvas id="g-canvas" width="160" height="144" aria-label="Game"></canvas>
+        <div class="picker" id="g-decor" role="dialog" aria-label="Choose decor" hidden>
+          <div class="picker-head">
+            <span class="eyebrow">CHOOSE DECOR</span>
+            <span class="picker-count" id="g-decor-count"></span>
+            <button class="mini" id="g-decor-close" type="button">Close</button>
+          </div>
+          <div class="picker-cats" id="g-decor-cats" role="tablist" aria-label="Kinds of decor"></div>
+          <div class="picker-body">
+            <div class="decor-grid" id="g-decor-grid"></div>
+          </div>
+        </div>
         <div class="picker" id="g-picker" role="dialog" aria-label="Choose a game" hidden>
           <div class="picker-head">
             <span class="eyebrow" id="g-picker-title">CHOOSE A GAME</span>
