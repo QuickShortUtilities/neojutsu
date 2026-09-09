@@ -262,7 +262,9 @@ BUILD = r"""
       if (g.state !== 'play') break;
       const p = g.player;
       if (g.mode === 'racer' || g.mode === 'shmup') {
-        const row = Math.floor((p.y + p.h / 2) / T);
+        // The road that is coming, not the one you are in: the world arrives
+        // from the top, so your own row is where you already are.
+        const row = Math.max(0, Math.floor((p.y + p.h / 2) / T) - 3);
         const here = Math.floor((p.x + p.w / 2) / T);
         let L = here, R = here;
         while (L > 0 && info(L - 1, row).solid !== true && here - L < 12) L--;

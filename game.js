@@ -732,8 +732,12 @@
     }
 
     if (g.mode === 'racer' || g.mode === 'shmup') {
-      // Steer for the middle of whatever road is open on this row.
-      const row = Math.floor((p.y + p.h / 2) / T);
+      /* Steer for the middle of the road that is coming, not the one you are
+         standing in. The world arrives from the top of the level, so reading
+         your own row is reading where you already are - and on a road that
+         splits, the island is on screen for three tiles before it reaches
+         you and this saw it at the moment it hit. */
+      const row = Math.max(0, Math.floor((p.y + p.h / 2) / T) - 3);
       const here = Math.floor((p.x + p.w / 2) / T);
       let left = here, right = here;
       while (left > 0 && !solid(left - 1, row) && here - left < 12) left--;

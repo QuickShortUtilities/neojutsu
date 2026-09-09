@@ -330,7 +330,121 @@
     return { g, ents, spots, start: { x: sx * T, y: sy * T }, ground: null };
   }
 
-  const SHAPES = { islands, cavern, tower, corridor, stairs, roadway, starlane };
+  /* A road that makes you choose a line rather than only hold one. Every so
+     often it splits round an island and closes up again; the two channels are
+     never both the obvious one, because obstacles go in whichever side the
+     last one did not. A racing level with one shape is a racing level with
+     one level in it, however many times you generate it. */
+  function circuit(r, o) {
+    const { w, h, theme } = o, g = blank(w, h), ents = [], spots = [];
+    let left = 2, right = w - 3;
+    const lane = [];
+    for (let y = h - 1; y >= 0; y--) {
+      if (r() < .26) { left += r() < .5 ? -1 : 1; right += r() < .5 ? -1 : 1; }
+      // Wider than a plain road, because it has to be split down the middle.
+      left = Math.max(1, Math.min(left, Math.floor(w / 2) - 5));
+      right = Math.min(w - 2, Math.max(right, Math.floor(w / 2) + 5));
+      for (let x = 0; x <= left; x++) put(g, x, y, '2');
+      for (let x = right; x < w; x++) put(g, x, y, '2');
+      for (let x = left + 1; x < right; x++) put(g, x, y, 'j');
+      lane[y] = [left, right];
+    }
+    // The islands, and a marker line down the middle where there is not one.
+    const split = new Array(h).fill(false);
+    let side = 1;
+    for (let y = h - 12; y > 6; y -= 12 + Math.floor(r() * 9)) {
+      const run = 4 + Math.floor(r() * 5);
+      for (let i = 0; i < run && y - i > 3; i++) {
+        const [l, rt] = lane[y - i];
+        const mid = Math.round((l + rt) / 2);
+        // Only where both channels stay wide enough to drive down.
+        if (mid - l < 4 || rt - mid < 4) continue;
+        put(g, mid, y - i, '2');
+        if (rt - l >= 12) put(g, mid + 1, y - i, '2');
+        split[y - i] = true;
+      }
+      // Something in one channel, so the split is a decision and not a coin toss.
+      const at = y - 1 - Math.floor(r() * Math.max(1, run - 2));
+      if (split[at]) {
+        const [l, rt] = lane[at], mid = Math.round((l + rt) / 2);
+        const bx = side > 0 ? mid + 2 + Math.floor(r() * Math.max(1, rt - mid - 3))
+                            : l + 1 + Math.floor(r() * Math.max(1, mid - l - 2));
+        put(g, bx, at, theme === 'volcano' ? 'e' : '7');
+        side *= -1;
+      }
+    }
+    for (let y = h - 1; y >= 0; y--) {
+      if (split[y] || y % 4 >= 2) continue;
+      const [l, rt] = lane[y];
+      put(g, Math.round((l + rt) / 2), y, 'k');
+    }
+    for (let y = h - 10; y > 4; y--) {
+      if (split[y] || r() > .1) continue;
+      const [l, rt] = lane[y];
+      spots.push([l + 1 + Math.floor(r() * Math.max(1, rt - l - 2)), y]);
+    }
+    for (let x = 1; x < w - 1; x++) put(g, x, 0, 'i');
+    const sy = h - 4, [l0, r0] = lane[sy] || [2, w - 3];
+    const sx = Math.round((l0 + r0) / 2);
+    for (let y = sy - 3; y <= Math.min(h - 1, sy + 2); y++) {
+      const [ll, rr] = lane[y] || [l0, r0];
+      for (let x = Math.max(ll + 1, sx - 2); x <= Math.min(rr - 1, sx + 2); x++) put(g, x, y, 'j');
+    }
+    return { g, ents, spots, start: { x: sx * T, y: sy * T }, ground: null };
+  }
+
+  /* Not open space: a climb up the inside of something. The walls lean in and
+     out and there are guns set into them, so the game is threading rather
+     than dodging - which is the other half of what a vertical shooter is, and
+     the studio only had the first half. */
+  function starkeep(r, o) {
+    const { w, h, difficulty } = o, g = blank(w, h), ents = [], spots = [];
+    // Never narrower than this many open tiles, and never moving faster than
+    // a ship can cross - the same rule the cave runs on, one axis over.
+    const LEAST = [8, 7, 6][difficulty] ?? 7;
+    const lft = new Array(h), rgt = new Array(h);
+    let l = 1, rt = w - 2, ld = 0, rd = 0;
+    for (let y = h - 1; y >= 0; y--) {
+      if ((h - y) % 2 === 0) {
+        if (r() < .4) ld = r() < .5 ? -1 : 1;
+        if (r() < .4) rd = r() < .5 ? -1 : 1;
+        l = Math.max(0, Math.min(w - 3 - LEAST, l + ld));
+        rt = Math.min(w - 1, Math.max(l + LEAST + 1, rt + rd));
+        if (rt - l - 1 < LEAST) rt = Math.min(w - 1, l + LEAST + 1);
+      }
+      lft[y] = l; rgt[y] = rt;
+    }
+    // Open at the bottom, where you start already moving.
+    for (let y = h - 1; y > h - 8; y--) { lft[y] = 0; rgt[y] = w - 1; }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x <= lft[y]; x++) put(g, x, y, '2');
+      for (let x = rgt[y]; x < w; x++) put(g, x, y, '2');
+    }
+    // Guns set into the wall, and breakable cover out in the middle.
+    for (let y = h - 12; y > 5; y -= 5 + Math.floor(r() * 6)) {
+      if (r() < .55) {
+        const onLeft = r() < .5;
+        ents.push({ type: 'turret', x: (onLeft ? lft[y] + 1 : rgt[y] - 1) * T, y: y * T });
+      } else {
+        /* Cover, with a way past it on both sides. It is breakable, so a gun
+           is one answer - but a shooter should never be the only answer, and
+           a block that leaves a single tile beside it is a block you have to
+           shoot. */
+        const room = rgt[y] - lft[y] - 1;
+        const span = Math.max(1, Math.min(2 + Math.floor(r() * 3), room - 4));
+        const bx = lft[y] + 3 + Math.floor(r() * Math.max(1, room - span - 4));
+        for (let i = 0; i < span; i++) put(g, bx + i, y, '7');
+      }
+      if (r() < .5) spots.push([Math.round((lft[y] + rgt[y]) / 2), y - 1]);
+    }
+    for (let x = 1; x < w - 1; x++) put(g, x, 0, 'i');
+    const sy = h - 4, sx = Math.floor(w / 2);
+    for (let y = sy - 3; y <= Math.min(h - 1, sy + 2); y++)
+      for (let x = sx - 2; x <= sx + 2; x++) put(g, x, y, '0');
+    return { g, ents, spots, start: { x: sx * T, y: sy * T }, ground: null };
+  }
+
+  const SHAPES = { islands, cavern, tower, corridor, stairs, roadway, starlane, circuit, starkeep };
 
   function chooseShape(want, theme, mech, size, r) {
     if (want.shape) return want.shape;
@@ -1012,11 +1126,34 @@
       const ents = built.ents, spots = built.spots || [];
       coinsOn(ents, spots, r, 6 + Math.floor(r() * 4));
       const foes = scrollMode === 'shmup' ? ['flyer', 'turret', 'chaser'] : ['flyer', 'walker'];
+      /* In the open part of the level, not in the verge. These were dropped
+         at a random x and a random y over the whole board, so a share of every
+         racing level's traffic and every shooter's fighters were sealed inside
+         the wall - alive, counted, and unreachable. */
+      const clear = (tx, ty) => built.g[ty] && built.g[ty][tx] === '0'
+                             || (built.g[ty] && built.g[ty][tx] === 'j');
       for (let i = 0; i < 4 + difficulty * 3; i++) {
-        const ex = 2 + Math.floor(r() * (w - 5)), ey = 6 + Math.floor(r() * (h - 14));
+        let ex = 0, ey = 0, ok = false;
+        for (let tries = 0; tries < 24 && !ok; tries++) {
+          ex = 2 + Math.floor(r() * (w - 5)); ey = 6 + Math.floor(r() * (h - 14));
+          ok = clear(ex, ey) && clear(ex, ey + 1);
+        }
+        if (!ok) continue;
         ents.push({ type: pick(r, foes), x: ex * T, y: ey * T, dir: r() < .5 ? 1 : -1 });
       }
-      if (r() < .6) ents.push({ type: 'heart', x: Math.floor(w / 2) * T, y: Math.floor(h * .4) * T });
+      // The bonus goes in the road, not in the verge beside it. Dropped at the
+      // middle of the level regardless, it landed inside an island or a wall
+      // as often as the level had one.
+      if (r() < .6) {
+        const hy = Math.floor(h * .4);
+        for (let dx = 0; dx < w; dx++) {
+          const tx = Math.floor(w / 2) + (dx % 2 ? -Math.ceil(dx / 2) : dx / 2);
+          if (tx > 0 && tx < w - 1 && clear(tx, hy) && clear(tx, hy + 1)) {
+            ents.push({ type: 'heart', x: tx * T, y: hy * T });
+            break;
+          }
+        }
+      }
       const safeY = (h - 4) * T;
       built.ents = ents.filter(e => !ENEMY_TYPES.has(e.type) || Math.abs(e.y - safeY) > 10 * T);
       return;                       // the finish is the exit strip at the top
@@ -1377,7 +1514,14 @@
     const o = { w, h, mech, theme, difficulty, timed: !!want.timed, boss: !!want.boss, armed };
     let built;
     if (mode === 'racer' || mode === 'shmup') {
-      built = (mode === 'racer' ? roadway : starlane)(r, o);
+      /* Two shapes each, chosen by the seed. One builder per genre is one
+         level per genre however many times you press the button. */
+      const shape = mode === 'racer' ? (r() < .42 ? 'circuit' : 'roadway')
+                                     : (r() < .42 ? 'starkeep' : 'starlane');
+      // Reported back like every other choice, so the harness can tell which
+      // of the two it got rather than having to infer it from the tilemap.
+      o.shape = shape; want.shape = shape;
+      built = SHAPES[shape](r, o);
       populate(r, o, built, mode);
     } else if (mode === 'scramble') {
       built = cavernRun(r, o);
