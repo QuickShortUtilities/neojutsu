@@ -42,3 +42,20 @@
 
 #g-readout { color: var(--cyan); font: 13px var(--mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .wide-mini { width: 100%; margin-bottom: 10px; }
+
+/* script editor */
+#g-script {
+  width: 100%; min-height: 150px; resize: vertical;
+  background: #07060c; color: #cfe8ff; border: 1px solid var(--line); border-radius: 6px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.6; padding: 10px; tab-size: 2;
+}
+#g-script:focus { outline: none; border-color: var(--cyan); }
+.script-msg { font-size: 10px; line-height: 1.6; margin: 6px 0 0; color: var(--muted); }
+.script-msg.bad { color: var(--magenta); }
+.script-msg.good { color: var(--cyan); }
+.script-log {
+  margin: 8px 0 0; padding: 8px; max-height: 110px; overflow: auto;
+  background: #07060c; border: 1px solid var(--line); border-radius: 6px;
+  font-family: var(--mono); font-size: 10px; color: #9a92b3; white-space: pre-wrap;
+}
+.fold p.hint b { color: var(--text); font-weight: 400; }

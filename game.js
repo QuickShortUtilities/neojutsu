@@ -91,10 +91,12 @@
     spec.player.wallJump = c.wallJump;
     spec.player.dash = c.dash;
     spec.player.attack = c.attack;
+    if (spec.script === undefined) spec.script = '';
     spec.rules = { ...(spec.rules || {}), collect: c.goal || 0 };
     [spec.sky0, spec.sky1] = SKIES[c.sky] || SKIES.day;
     sizeCanvas();
-    game = window.NeoGame.create(low, spec, { onFrame: () => { present(); readout(); } });
+    game = window.NeoGame.create(low, spec, { onFrame: () => { present(); readout(); pumpScriptLog(); } });
+    if ($('g-script')) { $('g-script').value = spec.script || ''; showScriptState({ errors: [] }); }
     present(); readout(); meta();
   }
 
@@ -273,6 +275,32 @@
       ? `${savedTracks.length} track${savedTracks.length > 1 ? 's' : ''} found in this browser.`
       : 'No tracks yet. Make one in the Audio Studio and it will appear here.';
     window.NeoSelect?.refreshAll?.();
+  }
+
+  // ---------- script ----------
+  function showScriptState(res) {
+    const msg = $('g-script-msg');
+    if (res && res.errors && res.errors.length) {
+      msg.className = 'script-msg bad';
+      msg.textContent = `${res.errors.length} problem${res.errors.length > 1 ? 's' : ''}: ${res.errors.slice(0, 3).join('; ')}`;
+    } else if ($('g-script').value.trim()) {
+      msg.className = 'script-msg good'; msg.textContent = 'Script running.';
+    } else { msg.className = 'script-msg'; msg.textContent = ''; }
+  }
+  function applyScript() {
+    if (!game) return;
+    const res = game.setScript($('g-script').value);
+    showScriptState(res);
+    present(); readout(); save();
+  }
+  function pumpScriptLog() {
+    if (!game) return;
+    const log = $('g-script-log');
+    const lines = game.scriptLog || [];
+    const fault = game.scriptFault;
+    const text = (fault ? `! ${fault}\n` : '') + lines.join('\n');
+    log.hidden = !text;
+    if (text !== log.textContent) { log.textContent = text; log.scrollTop = log.scrollHeight; }
   }
 
   // ---------- saving ----------
@@ -478,6 +506,8 @@ document.getElementById('pad').addEventListener('pointerdown',begin,{once:true})
       present(); save();
     });
     $('g-title').addEventListener('input', save);
+    $('g-script-apply').addEventListener('click', applyScript);
+    $('g-script-clear').addEventListener('click', () => { $('g-script').value = ''; applyScript(); });
     $('g-vol').addEventListener('input', () => { $('g-vol-v').textContent = $('g-vol').value; if (gain) gain.gain.value = cfg().vol; save(); });
     $('g-audio-src').addEventListener('change', async () => { await loadMusic(); save(); });
     $('g-audio-refresh').addEventListener('click', fillTracks);

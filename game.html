@@ -76,6 +76,22 @@
         <label class="chk"><input type="checkbox" id="g-attack"> <span>Shoot (B)</span></label>
       </div>
 
+      <details class="fold" id="g-script-fold">
+        <summary><span class="k">記</span> Rules &amp; script</summary>
+        <p class="hint">A tiny language of its own — no JavaScript, no access to
+          the page or the network. Read <b>score keys lives time x y enemies coins
+          grounded facing random</b>; do <b>message win lose open give heal hurt
+          spawn tile warp push gravity speed shake print</b>.</p>
+        <textarea id="g-script" spellcheck="false" rows="10"
+          placeholder="on start&#10;  message &quot;GO&quot;&#10;end&#10;&#10;on collect&#10;  if score >= 5&#10;    open&#10;  end&#10;end"></textarea>
+        <div class="cloud-actions">
+          <button class="mini" id="g-script-apply" type="button">Apply &amp; restart</button>
+          <button class="mini" id="g-script-clear" type="button">Clear</button>
+        </div>
+        <p class="script-msg" id="g-script-msg"></p>
+        <pre class="script-log" id="g-script-log" hidden></pre>
+      </details>
+
       <h2 class="panel-title"><span class="k">筆</span> Build</h2>
       <p class="hint">Pick a piece, then draw on the game. Right-click or pick Erase to clear.</p>
       <div class="tilebar" id="g-tiles"></div>
@@ -175,6 +191,7 @@
   <script src="neo-cloud.js"></script>
   <script src="chip.js"></script>
   <script src="video-gen.js"></script>
+  <script src="game-script.js"></script>
   <script src="game-engine.js"></script>
   <script src="game-templates.js"></script>
   <script src="game.js"></script>

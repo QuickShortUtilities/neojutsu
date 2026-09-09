@@ -164,7 +164,7 @@
                               doubleJump: false, wallJump: false, dash: false, attack: false },
                             spec.player || {});
     let player, entities, state, score, keys, lives, message, elapsed, won;
-    let doorsOpen, respawn, fired, effects, messageAt;
+    let doorsOpen, respawn, fired, effects, messageAt, shake = 0;
 
     function reset() {
       const start = spec.start || { x: TILE, y: TILE };
@@ -176,8 +176,74 @@
       entities = (spec.entities || []).map(makeEntity);
       score = 0; keys = 0; lives = spec.lives ?? 3; elapsed = 0; won = false;
       state = 'play'; message = ''; messageAt = 0;
-      doorsOpen = false; fired = []; effects = [];
+      doorsOpen = false; fired = []; effects = []; shake = 0;
+      if (scriptEnv) { scriptEnv.vars = {}; scriptFault = ''; scriptLog = []; }
+      if (program) fire('start');
     }
+    // The script sees numbers and may call actions. It never sees the engine,
+    // the page, or anything it could use to reach either.
+    let program = null, scriptLog = [], scriptFault = '';
+    function compileScript() {
+      scriptLog = []; scriptFault = '';
+      if (!spec.script || !window.NeoScript) { program = null; return { errors: [] }; }
+      const r = window.NeoScript.compile(spec.script);
+      program = r.empty ? null : r;
+      return r;
+    }
+    compileScript();
+
+    const scriptEnv = {
+      vars: {},
+      random: () => rand(),
+      read(name) {
+        switch (name) {
+          case 'score': return score; case 'keys': return keys; case 'lives': return lives;
+          case 'time': return elapsed; case 'x': return player.x / TILE; case 'y': return player.y / TILE;
+          case 'vx': return player.vx; case 'vy': return player.vy;
+          case 'enemies': return entities.filter(e => e.alive && e.def.enemy).length;
+          case 'coins': return entities.filter(e => e.alive && e.def.collect && !e.def.key).length;
+          case 'deaths': return (spec.lives ?? 3) - lives;
+          case 'grounded': return player.grounded ? 1 : 0;
+          case 'facing': return player.face;
+        }
+        return 0;
+      },
+      act(name, args) {
+        const n = v => (typeof v === 'number' && isFinite(v) ? v : 0);
+        switch (name) {
+          case 'message': message = String(args[0]).slice(0, 24).toUpperCase(); messageAt = elapsed; break;
+          case 'win': state = 'won'; won = true; message = 'CLEAR'; break;
+          case 'lose': state = 'over'; message = 'GAME OVER'; break;
+          case 'open': doorsOpen = true; break;
+          case 'give': score += Math.max(-99, Math.min(99, Math.round(n(args[0])))); break;
+          case 'hurt': die(); break;
+          case 'heal': lives = Math.max(0, Math.min(9, lives + Math.round(n(args[0])))); break;
+          case 'spawn': {
+            if (entities.length > 400) break;                       // a script cannot flood the level
+            const type = String(args[0]);
+            if (!Object.prototype.hasOwnProperty.call(ENTITY, type)) break;
+            entities.push(makeEntity({ type, x: n(args[1]) * TILE, y: n(args[2]) * TILE }));
+            break;
+          }
+          case 'tile': {
+            const tx = Math.round(n(args[0])), ty = Math.round(n(args[1])), id = Math.round(n(args[2]));
+            if (tx >= 0 && ty >= 0 && tx < lvl.w && ty < lvl.h && TILES[id]) lvl.tiles[ty * lvl.w + tx] = id;
+            break;
+          }
+          case 'warp': player.x = n(args[0]) * TILE; player.y = n(args[1]) * TILE; player.vx = player.vy = 0; break;
+          case 'push': player.vx += Math.max(-400, Math.min(400, n(args[0])));
+                       player.vy += Math.max(-400, Math.min(400, n(args[1]))); break;
+          case 'gravity': P.gravity = Math.max(0, Math.min(2000, n(args[0]))); break;
+          case 'speed': P.speed = Math.max(10, Math.min(400, n(args[0]))); break;
+          case 'shake': shake = Math.max(0, Math.min(8, n(args[0]))); break;
+          case 'print': if (scriptLog.length < 50) scriptLog.push(String(args[0]).slice(0, 80)); break;
+        }
+      },
+      fault(msg) { if (!scriptFault) scriptFault = msg; },
+    };
+    const fire = name => { if (program) window.NeoScript.run(program, name, scriptEnv); };
+
+    // Only now, because reset fires the script's start event.
     reset();
 
     const input = { left: false, right: false, up: false, down: false, a: false, b: false };
@@ -185,7 +251,7 @@
 
     function die() {
       if (player.hurt > 0) return;
-      lives--; player.hurt = 1.1;
+      lives--; player.hurt = 1.1; fire('hurt');
       effects.push({ kind: 'pop', x: player.x, y: player.y, t: 0 });
       if (lives <= 0) { state = 'over'; message = 'GAME OVER'; }
       else {
@@ -322,6 +388,8 @@
 
       updateEntities(dt, ctx2);
       runTriggers();
+      fire('tick');
+      if (shake > 0) shake = Math.max(0, shake - dt * 12);
     }
 
     function breakTile(tx, ty) {
@@ -401,7 +469,7 @@
             if (!other.alive || !other.def.enemy || other.def.hp >= 99) continue;
             if (!overlaps(e, other)) continue;
             other.hp -= 1; e.alive = false;
-            if (other.hp <= 0) { other.alive = false; score += 1; effects.push({ kind: 'pop', x: other.x, y: other.y, t: 0 }); }
+            if (other.hp <= 0) { other.alive = false; score += 1; effects.push({ kind: 'pop', x: other.x, y: other.y, t: 0 }); fire('kill'); }
             break;
           }
           if (!e.alive) continue;
@@ -414,6 +482,7 @@
           else if (d.heal) lives = Math.min(9, lives + 1);
           else score += d.score || 1;
           effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 });
+          fire('collect');
         } else if (d.goal) {
           finish();
         } else if ((d.enemy || (d.bullet && e.foe)) && player.hurt <= 0) {
@@ -421,7 +490,7 @@
           else if (mode === 'platform' && player.vy > 40 && player.y + player.h - player.vy * dt <= e.y + 4 && !d.still) {
             e.hp -= 1;
             player.vy = -P.jump * 0.7;
-            if (e.hp <= 0) { e.alive = false; score += 1; effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 }); }
+            if (e.hp <= 0) { e.alive = false; score += 1; effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 }); fire('kill'); }
           } else die();
         }
       }
@@ -479,7 +548,8 @@
 
     function draw() {
       camera();
-      const ox = Math.round(view.x), oy = Math.round(view.y);
+      const sx0 = shake ? (rand() - .5) * shake * 2 : 0, sy0 = shake ? (rand() - .5) * shake * 2 : 0;
+      const ox = Math.round(view.x + sx0), oy = Math.round(view.y + sy0);
       const sky = ctx.createLinearGradient(0, 0, 0, view.h);
       sky.addColorStop(0, spec.sky0 || '#1b2a5c'); sky.addColorStop(1, spec.sky1 || '#7fc4e8');
       ctx.fillStyle = sky; ctx.fillRect(0, 0, view.w, view.h);
@@ -604,6 +674,9 @@
       get player() { return player; },
       get level() { return lvl; },
       get view() { return view; },
+      get scriptLog() { return scriptLog; },
+      get scriptFault() { return scriptFault; },
+      setScript(src) { spec.script = src; const r = compileScript(); reset(); draw(); return r; },
       get entities() { return entities; },
       get elapsed() { return elapsed; },
       input,
