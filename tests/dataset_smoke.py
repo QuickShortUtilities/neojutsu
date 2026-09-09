@@ -59,6 +59,22 @@ try:
     if total != len(rows):
         issues.append(f'per-genre files hold {total} records, combined holds {len(rows)}')
 
+    # nothing outside the level it belongs to. A shape that clamps the tiles
+    # it draws and forgets the pickups it puts on them leaves a coin past the
+    # right-hand edge, and a collect target nobody can ever meet.
+    for i, spec in enumerate(specs):
+        lvl = spec.get('level') or {}
+        wpx, hpx = (lvl.get('w') or 0) * 8, (lvl.get('h') or 0) * 8
+        for e in (spec.get('entities') or []):
+            if not (0 <= e.get('x', -1) < wpx and 0 <= e.get('y', -1) < hpx):
+                issues.append(f"record {i}: a {e.get('type')} sits outside the level")
+                break
+        coins = sum(1 for e in (spec.get('entities') or [])
+                    if e.get('type') in ('coin', 'gem'))
+        want = (spec.get('rules') or {}).get('collect') or 0
+        if want > coins:
+            issues.append(f'record {i}: asks for {want} pickups but has {coins}')
+
     # every level distinct - a dataset of duplicates teaches one level
     tiles = [s['level']['tiles'] for s in specs if 'level' in s]
     if len(set(tiles)) != len(tiles):

@@ -138,11 +138,14 @@
       const top = Math.max(4, Math.min(h - 4, (h - 6) + Math.floor((r() - .5) * 6)));
       if (x === 0) firstTop = top;
       fillRect(g, x, top, Math.min(x + span, w), Math.min(top + 2 + Math.floor(r() * 2), h), '1');
-      for (let i = 1; i < span - 1; i += 2) spots.push([x + i, top - 1]);
+      /* The island is clamped to the level; the places to put a coin on it
+         were not, so the last island in a wide level put its pickups past the
+         right-hand edge where nobody could reach them. */
+      for (let i = 1; i < span - 1; i += 2) if (x + i < w - 1) spots.push([x + i, top - 1]);
       if (r() < .45) {
         const ly = top - 3 - Math.floor(r() * 2);
         fillRect(g, x + 1, ly, Math.min(x + span - 1, w), ly + 1, '3');
-        spots.push([x + 2, ly - 1]);
+        if (x + 2 < w - 1) spots.push([x + 2, ly - 1]);
       }
       x += span + 2 + Math.floor(r() * 3);
     }
@@ -956,6 +959,11 @@
       }
     }
     makeStartSafe(built, { w, h });
+    /* Nothing outside the level. Shapes clamp the tiles they draw and have
+       more than once forgotten to clamp the things they put on them, and a
+       coin past the right-hand edge is a pickup target nobody can ever meet.
+       One place to catch it, rather than trusting six. */
+    built.ents = built.ents.filter(e => e.x >= 0 && e.x < w * T && e.y >= 0 && e.y < h * T);
     const keys = built.ents.filter(e => e.type === 'key').length;
     // The script and the story are written for the level that was actually
     // built, not for the one the words asked for.
