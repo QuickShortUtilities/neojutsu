@@ -114,6 +114,34 @@ with sync_playwright() as p:
     if 'guard' not in named:
         issues.append(f'naming a piece in the editor did not take: {named!r}')
 
+    # --- the panel tells the truth about how a game ends ---
+    # Five of the seven kinds do not end at a flag, and the control said
+    # "Just the flag" for every one of them.
+    report['endings'] = page.evaluate("""()=>{
+      const out={};
+      for (const k of Object.keys(window.NeoGameTemplates)) {
+        const t=window.NeoGameTemplates[k];
+        const stg=(t.levels&&t.levels[0])||t;
+        const r=stg.rules||t.rules||{};
+        const want = r.clearAll ? 'Clear the board'
+                   : r.clearFoes ? 'Clear the room'
+                   : r.lines ? (r.lines + ' lines')
+                   : r.beat ? ('Beat ' + r.beat)
+                   : r.collect ? ('Collect ' + r.collect)
+                   : 'Just the flag';
+        out[k] = want;
+      }
+      return out;
+    }""")
+    for key, want in report['endings'].items():
+        page.evaluate("""(k)=>{const s=document.getElementById('g-template');
+          s.value=k; s.dispatchEvent(new Event('change',{bubbles:true}));}""", key)
+        page.wait_for_timeout(220)
+        got = page.evaluate("""()=>{const s=document.getElementById('g-goal');
+          return s.selectedOptions[0] ? s.selectedOptions[0].textContent : '?';}""")
+        if got != want:
+            issues.append(f'{key}: finishes by "{want}" and the panel says "{got}"')
+
     if err: issues.append(f'errors: {err[:3]}')
     b.close()
 print(json.dumps({'report':report,'issues':issues}, indent=2))

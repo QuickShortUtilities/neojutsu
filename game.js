@@ -111,7 +111,11 @@
     spec.player.attack = c.attack;
     spec.coop = c.coop;
     if (spec.script === undefined) spec.script = '';
-    spec.rules = { ...(spec.rules || {}), collect: c.goal || 0 };
+    /* A game whose ending is not a pickup count keeps the rules it came
+       with: the dropdown is showing that ending, not choosing one. */
+    if (String($('g-goal').value) !== 'own') {
+      spec.rules = { ...(spec.rules || {}), collect: c.goal || 0 };
+    }
     [spec.sky0, spec.sky1] = (c.sky === 'own' && ownSky) ? ownSky : (SKIES[c.sky] || SKIES.day);
     sizeCanvas();
     game = window.NeoGame.create(low, spec, {
@@ -396,7 +400,30 @@
       const o = document.createElement('option'); o.value = lives; o.textContent = lives; $('g-lives').append(o);
     }
     $('g-lives').value = lives;
-    const need = String((spec.rules && spec.rules.collect) || 0);
+    /* What finishes this game. Five of the seven kinds do not end at a flag,
+       and the control said "Just the flag" for every one of them - a label
+       that is not merely unhelpful but wrong. Where the ending is not a
+       pickup count, the control says what it is and leaves it alone. */
+    const stages = Array.isArray(spec.levels) && spec.levels.length ? spec.levels : null;
+    const rules = ((stages ? stages[0] : spec).rules) || spec.rules || {};
+    const ending = rules.clearAll ? 'Clear the board'
+                 : rules.clearFoes ? 'Clear the room'
+                 : rules.lines ? `${rules.lines} lines`
+                 : rules.beat ? `Beat ${rules.beat}`
+                 : null;
+    const sel = $('g-goal');
+    let own = [...sel.options].find(o => o.value === 'own');
+    if (ending) {
+      if (!own) { own = document.createElement('option'); own.value = 'own'; sel.append(own); }
+      own.textContent = ending;
+      sel.value = 'own';
+    } else if (own) {
+      own.remove();
+    }
+    if (ending) { window.NeoSelect?.refreshAll?.(); return; }
+    // From the room, not the game: a run keeps its rules on each room, so a
+    // three-stage quest that asks for a pickup read as "just the flag".
+    const need = String(rules.collect || 0);
     if (![...$('g-goal').options].some(o => o.value === need)) {
       const o = document.createElement('option'); o.value = need;
       o.textContent = need === '0' ? 'Just the flag' : `Collect ${need}`;
