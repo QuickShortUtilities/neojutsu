@@ -1293,9 +1293,10 @@
           out.levels = stageList.map((st, i) => (i === stageIndex
             ? { ...st, ...here, story: stageStory }
             : st));
-          // A run keeps its stories on its stages; a stray top-level one
-          // would be a second copy nobody reads.
-          delete out.story;
+          /* A run keeps its rooms on its stages. Leaving a top-level copy
+             behind is a third of the file saying something nobody reads,
+             and the first thing to go stale when a stage is edited. */
+          delete out.story; delete out.level; delete out.entities; delete out.props;
         }
         return out;
       },

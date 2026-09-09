@@ -984,6 +984,30 @@ end`;
   // The level and its pieces are small, so history is whole snapshots rather
   // than a diff - simpler, and impossible to get subtly wrong.
   const past = [], future = [];
+  /* Any edit to a level has to land on the stage you are looking at. A run
+     keeps its rooms in `levels`, and the engine ignores the top-level copy
+     entirely - so writing there is writing to nothing, which is how resizing
+     a three room game silently did not resize it. */
+  function withStage(sp, patch) {
+    const i = game ? game.stage : 0;
+    if (Array.isArray(sp.levels) && sp.levels.length) {
+      sp.levels = sp.levels.map((st, n) => (n === i ? { ...st, ...patch } : st));
+      // No second copy to go stale behind the one that counts.
+      delete sp.level; delete sp.entities; delete sp.props; delete sp.story;
+    } else {
+      Object.assign(sp, patch);
+    }
+    return sp;
+  }
+
+  // Rebuilding starts a run at its first room; this puts you back.
+  function buildAtStage(sp) {
+    const i = game ? game.stage : 0;
+    build(sp);
+    if (i > 0 && game && game.stages > i) game.goToStage(i);
+    present(); readout(); meta();
+  }
+
   function snapState() {
     const sp = game.snapshot();
     return JSON.stringify({ tiles: Array.from(game.level.tiles), entities: sp.entities, props: sp.props, story: game.story });
@@ -999,12 +1023,13 @@ end`;
     const st = JSON.parse(str);
     const lvl = game.level;
     for (let i = 0; i < lvl.tiles.length; i++) lvl.tiles[i] = st.tiles[i] || 0;
-    const sp = game.snapshot();
-    sp.entities = st.entities;
-    sp.props = st.props || [];
-    sp.story = st.story || [];
-    sp.level = { w: lvl.w, h: lvl.h, tiles: Array.from(lvl.tiles) };
-    build(sp);
+    const sp = withStage(game.snapshot(), {
+      entities: st.entities,
+      props: st.props || [],
+      story: st.story || [],
+      level: { w: lvl.w, h: lvl.h, tiles: Array.from(lvl.tiles) },
+    });
+    buildAtStage(sp);
   }
   function undo() {
     if (!past.length) return;
@@ -1032,10 +1057,12 @@ end`;
     for (let y = 0; y < Math.min(h, lvl.h); y++)
       for (let x = 0; x < Math.min(w, lvl.w); x++) out[y * w + x] = lvl.at(x, y);
     const sp = game.snapshot();
-    sp.level = { w, h, tiles: out };
-    sp.entities = sp.entities.filter(e => e.x < w * T && e.y < h * T);
-    sp.props = (sp.props || []).filter(pr => pr.x < w * T && pr.y < h * T);
-    build(sp); save();
+    withStage(sp, {
+      level: { w, h, tiles: out },
+      entities: (sp.entities || []).filter(e => e.x < w * T && e.y < h * T),
+      props: (sp.props || []).filter(pr => pr.x < w * T && pr.y < h * T),
+    });
+    buildAtStage(sp); save();
   }
 
   // ---------- audio ----------
