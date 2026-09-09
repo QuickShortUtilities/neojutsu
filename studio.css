@@ -125,12 +125,12 @@
 .eyebrow { font: 10px var(--mono); letter-spacing: 2px; color: var(--cyan); }
 .session-name input { color: var(--text); background: transparent; border: 0; border-bottom: 1px solid transparent; font: 600 20px Inter, sans-serif; width: 100%; max-width: 300px; padding: 2px 0; }
 .session-name input:hover { border-bottom-color: var(--line); }
-#autosave-status, #v-autosave { color: var(--muted); font: 10px var(--mono); }
+#autosave-status, #v-autosave, #g-autosave { color: var(--muted); font: 10px var(--mono); }
 .session-controls, .session-actions { display: flex; align-items: center; gap: 16px; }
 .session-controls .tempo { width: 120px; margin: 0; }
 /* Shared by both studios. Tabular figures so the clock does not reflow the
    bar as the digits change. */
-#position, #v-position { color: var(--cyan); font: 15px var(--mono); white-space: nowrap;
+#position, #v-position, #g-readout { color: var(--cyan); font: 15px var(--mono); white-space: nowrap;
   font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
 .btn-export { color: #090e13; background: var(--cyan); border-color: var(--cyan); font-size: 11px; white-space: nowrap; box-shadow: 0 0 24px #2ef2ff18; }
 .btn-export:hover { background: #99f8ff; transform: translateY(-1px); }

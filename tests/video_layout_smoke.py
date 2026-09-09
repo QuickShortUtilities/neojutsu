@@ -37,6 +37,32 @@ with sync_playwright() as p:
         if err: issues.append(f'{label}: console errors {err[:1]}')
         page.close()
     b.close()
+    # The three rooms share one chrome. Each page uses its own element ids, and
+    # three separate times a shared rule failed to reach one of them - so the
+    # bars are compared directly rather than trusted to match.
+with sync_playwright() as p2:
+    b2=p2.chromium.launch(headless=True)
+    pg=b2.new_context(viewport={"width":1512,"height":950}).new_page()
+    bars={}
+    for f,(auto,read) in [('studio.html',('autosave-status','position')),
+                          ('video.html',('v-autosave','v-position')),
+                          ('game.html',('g-autosave','g-readout'))]:
+        pg.goto(ROOT.as_uri()+'/'+f); pg.wait_for_timeout(800)
+        bars[f]=pg.evaluate("""([a,r])=>{
+          const bar=document.querySelector('.session-bar');
+          const cs=e=>{const x=getComputedStyle(e);return x.fontSize+' '+x.fontFamily.split(',')[0];};
+          const A=document.getElementById(a), R=document.getElementById(r);
+          return {h:Math.round(bar.getBoundingClientRect().height),
+                  autosave:A?cs(A):'missing', readout:R?cs(R):'missing'};}""", [auto,read])
+    b2.close()
+    report['session_bars']=bars
+    heights={v['h'] for v in bars.values()}
+    if len(heights)!=1: issues.append(f'session bars differ in height: {[(k,v["h"]) for k,v in bars.items()]}')
+    autos={v['autosave'] for v in bars.values()}
+    if len(autos)!=1: issues.append(f'autosave lines styled differently: {autos}')
+    reads={v['readout'] for v in bars.values()}
+    if len(reads)!=1: issues.append(f'readouts styled differently: {reads}')
+
 print(json.dumps({'viewports':report,'issues':issues}, indent=2))
 if issues: print('\nFAILED'); sys.exit(1)
 print('\nLayout holds at every viewport.')

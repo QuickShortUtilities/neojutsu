@@ -40,7 +40,6 @@
 .pad button:active, .pad button.on { border-color: var(--magenta); color: var(--magenta); background: #1a1024; }
 @media (hover: none), (max-width: 760px) { .pad { display: flex; } }
 
-#g-readout { color: var(--cyan); font: 13px var(--mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .wide-mini { width: 100%; margin-bottom: 10px; }
 
 /* script editor */
