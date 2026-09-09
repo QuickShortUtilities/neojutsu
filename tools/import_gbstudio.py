@@ -142,10 +142,23 @@ def emit_routines(ctx, defs):
     return out
 
 
-def decode_bitfield(bits, n):
-    """GB Studio 1.x and 2.x packed collisions as one bit per tile, eight to a
-    byte, rather than the run-length hex that 3.x and 4.x use."""
-    return [1 if (bits[i >> 3] >> (i & 7)) & 1 else 0 for i in range(n)] if bits else [0] * n
+def decode_bitfield(col, n):
+    """The old single-file format stores collisions two different ways.
+
+    Some projects write one value per tile - the same face bits 3.x and 4.x
+    use - and some pack one bit per tile, eight to a byte. The length says
+    which, and it matters: reading a value-per-tile layer as a bitfield turns
+    a town into a tidy repeating stripe, which looks enough like a level to
+    pass unnoticed and teaches a model nothing but the stripe. Most of this
+    corpus was being read that way.
+    """
+    if not col:
+        return [0] * n
+    if len(col) >= n:                                   # one value per tile
+        return list(col[:n])
+    if len(col) >= (n + 7) // 8:                        # one bit per tile
+        return [0x0f if (col[i >> 3] >> (i & 7)) & 1 else 0 for i in range(n)]
+    return [0] * n
 
 
 def load_legacy(path):
@@ -173,7 +186,9 @@ def load_legacy(path):
             # 1.x had no scene types; everything was walked around from above.
             'type': sc.get('type') or 'TOPDOWN',
             'width': w, 'height': h,
-            'grid': [[1 if cells[y * w + x] else 0 for x in range(w)] for y in range(h)],
+            # Face bits, not a yes-or-no: the old format carries ledges and
+            # ladders too, and flattening them threw that away.
+            'grid': [[tile_for(cells[y * w + x]) for x in range(w)] for y in range(h)],
             'scripts': scripts,
         })
     routines = {c.get('id'): gbs_script.slug(c.get('name')) for c in (d.get('customEvents') or [])}
