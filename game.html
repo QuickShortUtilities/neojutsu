@@ -67,6 +67,7 @@
         </button>
       </label>
       <select id="g-template" hidden aria-hidden="true" data-neo="skip" tabindex="-1"></select>
+      <div class="panel-window" data-window="hero" data-kanji="姿" data-label="Hero">
       <label class="field"><span>Hero</span><select id="g-char"></select></label>
       <div class="hero-row">
         <canvas id="g-hero-view" width="32" height="32" aria-label="The hero as drawn"></canvas>
@@ -75,6 +76,7 @@
           <button class="mini" id="g-hero-drawn" type="button" title="Go back to the drawn character">Drawn</button>
         </div>
         <div class="tint-row" id="g-hero-tints" role="group" aria-label="Hero colour"></div>
+      </div>
       </div>
       <div class="two-up lead-tight">
         <label class="field"><span>Lives</span>
@@ -90,7 +92,7 @@
         </label>
       </div>
 
-      <h2 class="panel-title"><span class="k">技</span> Abilities</h2>
+      <div class="panel-window" data-window="abilities" data-kanji="技" data-label="Abilities">
       <div class="toggle-row">
         <label class="chk"><input type="checkbox" id="g-double"> <span>Double jump</span></label>
         <label class="chk"><input type="checkbox" id="g-wall"> <span>Wall jump</span></label>
@@ -103,9 +105,10 @@
         <label class="chk" title="A second player on the same keyboard: WASD and F/G"><input type="checkbox" id="g-coop"> <span>Two player</span></label>
       </div>
       <p class="hint" id="g-coop-hint" hidden>P1 arrows · Z jump · X action &nbsp;/&nbsp; P2 WASD · F jump · G action. Lives are shared.</p>
+      </div>
 
 
-      <h2 class="panel-title"><span class="k">筆</span> Build</h2>
+      <div class="panel-window" data-window="build" data-kanji="筆" data-label="Build">
       <p class="hint">Pick a piece, then draw on the game. Right-click or pick Erase to clear.</p>
       <div class="tilebar" id="g-tiles"></div>
       <div class="tilebar" id="g-entities"></div>
@@ -135,6 +138,8 @@
           </select>
         </label>
       </div>
+      </div>
+      <div class="window-bar" id="g-window-bar" role="group" aria-label="Open a panel"></div>
       <div class="cloud-actions">
         <button class="mini" id="g-undo" type="button" title="Undo the last edit">↶ Undo</button>
         <button class="mini" id="g-redo" type="button" title="Redo">↷ Redo</button>
@@ -385,6 +390,7 @@
   <script src="game-templates.js"></script>
   <script src="game-recipes.js"></script>
   <script src="game-gen.js"></script>
+  <script src="game-windows.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

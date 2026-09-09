@@ -34,6 +34,7 @@ with sync_playwright() as p:
         if n == 0: issues.append(f'band {k} is empty')
 
     # the strip fills and the picker opens
+    page.evaluate("NeoWindows.open('build')"); page.wait_for_timeout(200)
     report['ui'] = page.evaluate("""() => {
       const strip = document.querySelectorAll('#g-props .tilebtn').length;
       document.getElementById('g-decor-open').click();

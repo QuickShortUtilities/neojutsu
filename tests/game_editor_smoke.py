@@ -49,6 +49,7 @@ with sync_playwright() as p:
       const before={w:g.level.w,h:g.level.h};
       let solid=0; for(let y=0;y<Math.min(14,g.level.h);y++) for(let x=0;x<Math.min(24,g.level.w);x++) if(g.level.at(x,y)) solid++;
       return {before, solidInCorner:solid};}""")
+    page.evaluate("NeoWindows.open('build')"); page.wait_for_timeout(200)
     page.select_option('#g-size','24x14'); page.wait_for_timeout(800)
     after = page.evaluate("""()=>{const g=window.NeoGameStudio.game;
       let solid=0; for(let y=0;y<g.level.h;y++) for(let x=0;x<g.level.w;x++) if(g.level.at(x,y)) solid++;

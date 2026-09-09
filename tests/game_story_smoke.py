@@ -152,6 +152,7 @@ with sync_playwright() as p:
     # ---- the hero, and the story, survive the editor ----
     page.evaluate("document.getElementById('g-hero-open').click()"); page.wait_for_timeout(500)
     page.evaluate("document.querySelectorAll('#g-decor-grid .decor-tile')[2].click()"); page.wait_for_timeout(500)
+    page.evaluate("NeoWindows.open('hero')"); page.wait_for_timeout(200)
     page.evaluate("document.querySelectorAll('#g-hero-tints .tint')[2].click()"); page.wait_for_timeout(500)
     page.evaluate("document.getElementById('g-story-add').click()"); page.wait_for_timeout(400)
     saved = page.evaluate("(JSON.parse(localStorage.getItem('neojutsu.game.v1')||'{}').spec||{})")

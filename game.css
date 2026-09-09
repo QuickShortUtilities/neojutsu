@@ -226,3 +226,23 @@
 .hero-actions { display: flex; gap: 6px; }
 .hero-actions .mini { padding: 6px 8px; }
 .hero-row .tint-row { flex-basis: 100%; }
+
+/* ---------- panels that float ---------- */
+.window-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+.window-open {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  background: #0b0913; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); font-family: var(--mono); font-size: 11px; padding: 7px 13px 7px 9px;
+}
+.window-open:hover { border-color: var(--cyan); color: var(--text); }
+.window-open.on { border-color: var(--magenta); color: var(--magenta); }
+.window-open .wk { font-family: var(--kanji); font-weight: 900; font-size: 13px; line-height: 1; }
+
+/* The frame is the Video Studio's, so a panel looks the same wherever it is. */
+.game-window { width: min(340px, calc(100vw - 16px)); }
+.game-window .game-window-body { padding: 12px 12px 2px; max-height: 68vh; overflow-y: auto; }
+.game-window .panel-window { display: block; }
+.game-window .panel-title { display: none; }
+.game-window .hint { margin-top: 0; }
+/* Wider, because a tile palette in a narrow window is a column of buttons. */
+.game-window[data-window="build"] { width: min(348px, calc(100vw - 16px)); }
