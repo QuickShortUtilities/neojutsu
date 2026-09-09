@@ -31,6 +31,32 @@
   const rgb = hex => [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
   const paletteRGB = key => (PALETTES[key] || PALETTES.gameboy).colors.map(rgb);
   const clamp255 = v => v < 0 ? 0 : v > 255 ? 255 : v;
+  const lumOf = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
+
+  /* Some chips are one colour at four brightnesses. The Game Boy's four
+     greens are separated by nothing but light, so light is the only thing
+     that can say which one a pixel belongs to - and matching on raw distance
+     instead sent bright cyan to the second-darkest green, because cyan's blue
+     is far from every shade of green and the greens' own differences got lost
+     underneath that. A hero drawn in the studio's own colour came out darker
+     than the ground he stood on.
+
+     A palette qualifies when no two of its colours are close in brightness:
+     brightness then identifies an entry on its own, so matching by it is not
+     an approximation, it is the same answer arrived at honestly. The Game Boy
+     clears this by 14 and one-bit by 255; every colour chip fails it by 3 or
+     less, and keeps the distance match that suits it. */
+  const rampCache = new Map();
+  function rampOf(pal) {
+    const key = pal.map(c => c.join(',')).join('|');
+    if (rampCache.has(key)) return rampCache.get(key);
+    const byLum = pal.map((c, i) => ({ l: lumOf(c), i })).sort((a, b) => a.l - b.l);
+    let ramp = byLum.length > 1;
+    for (let k = 1; k < byLum.length; k++) if (byLum[k].l - byLum[k - 1].l <= 12) { ramp = false; break; }
+    const out = ramp ? byLum : null;
+    rampCache.set(key, out);
+    return out;
+  }
 
   // Brightness and contrast, then dither, then the nearest hardware colour.
   function snap(ctx, w, h, cfg = {}) {
@@ -42,6 +68,7 @@
 
     const frame = ctx.getImageData(0, 0, w, h), data = frame.data;
     const pal = paletteRGB(chip), levels = pal.length;
+    const ramp = rampOf(pal);
     const contrast = (259 * (contrastAmt + 255)) / (255 * (259 - contrastAmt));
     const spread = bay ? (255 / levels) * dithAmt : 0;
     for (let y = 0; y < h; y++) {
@@ -57,10 +84,18 @@
         }
         r = clamp255(r); g = clamp255(g); b = clamp255(b);
         let best = 0, bestD = Infinity;
-        for (let p = 0; p < levels; p++) {
-          const c = pal[p], dr = r - c[0], dg = g - c[1], db = b - c[2];
-          const d = dr * dr + dg * dg + db * db;
-          if (d < bestD) { bestD = d; best = p; }
+        if (ramp) {
+          const l = r * 0.299 + g * 0.587 + b * 0.114;
+          for (const step of ramp) {
+            const d = Math.abs(l - step.l);
+            if (d < bestD) { bestD = d; best = step.i; }
+          }
+        } else {
+          for (let p = 0; p < levels; p++) {
+            const c = pal[p], dr = r - c[0], dg = g - c[1], db = b - c[2];
+            const d = dr * dr + dg * dg + db * db;
+            if (d < bestD) { bestD = d; best = p; }
+          }
         }
         const c = pal[best];
         data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2];
