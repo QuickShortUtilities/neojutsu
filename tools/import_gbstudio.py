@@ -102,6 +102,84 @@ def build_spec(scene, name, rng):
     return furnish(grid, w, h, mode, name)
 
 
+def emit_routines(ctx, defs):
+    """Every routine reachable from the scripts, not only the ones called
+    directly. Translating a routine body turns up more routines, so this runs
+    to a fixed point - iterating the set once left every script referring to a
+    routine that was never written out, and none of them compiled."""
+    out, emitted = [], set()
+    pending = set(ctx.used_routines)
+    while pending:
+        name = pending.pop()
+        if name in emitted:
+            continue
+        emitted.add(name)
+        ctx.self_tag = ''
+        lines = [l for l in gbs_script.translate(defs.get(name) or [], ctx) if l.strip()]
+        body = '\n'.join('  ' + l for l in lines) if lines else '  print "todo"'
+        out.append(f'define {name}\n{body}\nend')
+        pending |= (ctx.used_routines - emitted)
+    return out
+
+
+def decode_bitfield(bits, n):
+    """GB Studio 1.x and 2.x packed collisions as one bit per tile, eight to a
+    byte, rather than the run-length hex that 3.x and 4.x use."""
+    return [1 if (bits[i >> 3] >> (i & 7)) & 1 else 0 for i in range(n)] if bits else [0] * n
+
+
+def load_legacy(path):
+    """A whole project in one file: scenes, actors, triggers and scripts all
+    inline. Everything before GB Studio 3 is shaped this way, which is most of
+    what is published."""
+    d = json.loads(path.read_text(encoding='utf-8'))
+    scenes, names = [], {}
+    for sc in d.get('scenes') or []:
+        w, h = int(sc.get('width') or 0), int(sc.get('height') or 0)
+        if not (w and h):
+            continue
+        cells = decode_bitfield(sc.get('collisions') or [], w * h)
+        names[sc.get('id')] = sc.get('name') or 'room'
+        scripts = []
+        for tr in sc.get('triggers') or []:
+            if tr.get('script'):
+                scripts.append(('start', tr['script'], '', f"trigger in {sc.get('name')}"))
+        for ac in sc.get('actors') or []:
+            if ac.get('script'):
+                scripts.append(('start', ac['script'], gbs_script.slug(ac.get('id', '')[:8]),
+                                f"actor in {sc.get('name')}"))
+        scenes.append({
+            'name': sc.get('name') or 'room',
+            # 1.x had no scene types; everything was walked around from above.
+            'type': sc.get('type') or 'TOPDOWN',
+            'width': w, 'height': h,
+            'grid': [[1 if cells[y * w + x] else 0 for x in range(w)] for y in range(h)],
+            'scripts': scripts,
+        })
+    routines = {c.get('id'): gbs_script.slug(c.get('name')) for c in (d.get('customEvents') or [])}
+    defs = {gbs_script.slug(c.get('name')): c.get('script') or [] for c in (d.get('customEvents') or [])}
+    actors = {}
+    for sc in d.get('scenes') or []:
+        for ac in sc.get('actors') or []:
+            actors[ac.get('id')] = gbs_script.slug(ac.get('id', '')[:8])
+    return scenes, names, routines, defs, actors
+
+
+def find_projects(src):
+    """Every project under a folder, new format or old."""
+    out = []
+    for f in sorted(src.rglob('*.gbsproj')):
+        try:
+            d = json.loads(f.read_text(encoding='utf-8'))
+        except Exception:
+            continue
+        if isinstance(d.get('scenes'), list) and d['scenes']:
+            out.append(('legacy', f))
+        elif (f.parent / 'project' / 'scenes').exists():
+            out.append(('split', f.parent))
+    return out
+
+
 def read_scripts(src):
     """Every script in a project, translated, plus what would not translate."""
     actors, routines, defs = {}, {}, {}
@@ -170,13 +248,7 @@ def read_scripts(src):
         take(d.get('updateScript'), 'tick', tag, f'actor {d.get("name")} each frame')
 
     # Routines that got used, written out so a translated script compiles.
-    used = []
-    for name in sorted(ctx.used_routines):
-        ctx.self_tag = ''
-        lines = [l for l in gbs_script.translate(defs.get(name) or [], ctx) if l.strip()]
-        body = '\n'.join('  ' + l for l in lines) if lines else '  print "todo"'
-        used.append(f'define {name}\n{body}\nend')
-    return out, used, ctx.missing
+    return out, emit_routines(ctx, defs), ctx.missing
 
 
 def main():
@@ -191,15 +263,47 @@ def main():
     args = ap.parse_args()
 
     src = Path(args.src).expanduser()
-    scenes = sorted(src.rglob('scenes/**/scene.gbsres'))
-    if not scenes:
-        print(f'no GB Studio scenes under {src}', file=sys.stderr)
+    projects = find_projects(src)
+    split = sorted(src.rglob('scenes/**/scene.gbsres'))
+    if not projects and not split:
+        print(f'no GB Studio projects under {src}', file=sys.stderr)
         return 1
-    print(f'{len(scenes)} scene(s)', file=sys.stderr)
 
     rng = random.Random(args.seed)
     made, rejects = [], []
-    for f in scenes:
+    legacy_scripts, legacy_routines = [], []
+
+    # The old single-file layout, which is most of what has been published.
+    for kind, path in projects:
+        if kind != 'legacy':
+            continue
+        try:
+            scenes_l, names, routines, defs, actors = load_legacy(path)
+        except Exception as e:
+            rejects.append({'scene': str(path), 'why': f'unreadable: {e}'}); continue
+        ctx = gbs_script.Ctx(actors=actors, routines=routines, scenes=names)
+        for sc in scenes_l:
+            spec, why = furnish(sc['grid'], sc['width'], sc['height'],
+                                MODES.get(sc['type'], 'topdown'), f"{path.stem}/{sc['name']}")
+            if spec is None:
+                rejects.append({'scene': sc['name'], 'why': why})
+            else:
+                made.append((sc['name'], spec, sc))
+            for event, nodes, self_tag, where in sc['scripts']:
+                ctx.self_tag = self_tag
+                lines = [l for l in gbs_script.translate(nodes, ctx) if l.strip()]
+                if len(lines) < 2:
+                    continue
+                body = '\n'.join('  ' + l for l in lines)
+                legacy_scripts.append({'where': where, 'event': event, 'lines': len(lines),
+                                       'script': f'on {event}\n{body}\nend',
+                                       'describe': gbs_script.describe(lines, event)})
+        legacy_routines += emit_routines(ctx, defs)
+
+    print(f'{len(split)} split scene(s), {len(made)} from single-file projects', file=sys.stderr)
+
+    # The split layout that GB Studio 3 and 4 write.
+    for f in split:
         try:
             scene = json.loads(f.read_text(encoding='utf-8'))
         except Exception as e:
@@ -214,6 +318,8 @@ def main():
     # Scripts travel separately from levels: they are the part a generator
     # cannot invent, and the part our language was missing until now.
     scripts, routines, missing = read_scripts(src)
+    scripts = scripts + legacy_scripts
+    routines = routines + legacy_routines
     if args.scripts and scripts:
         sp = ROOT / args.scripts
         sp.parent.mkdir(parents=True, exist_ok=True)
@@ -271,7 +377,7 @@ def main():
     by = {}
     for _, spec in kept:
         by[spec['mode']] = by.get(spec['mode'], 0) + 1
-    print(json.dumps({'scenes': len(scenes), 'written': len(kept), 'file': str(out),
+    print(json.dumps({'scenes': len(split) + len(made), 'written': len(kept), 'file': str(out),
                       'by_mode': by, 'rejected': len(rejects),
                       'why': [r['why'][:50] for r in rejects[:6]],
                       'scripts': {'translated': len(scripts), 'routines': len(routines),
