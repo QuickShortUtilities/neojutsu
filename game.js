@@ -437,6 +437,7 @@
       try {
         const ctx2 = cv.getContext('2d', { willReadFrequently: true });
         const game = window.NeoGame.create(cv, JSON.parse(JSON.stringify(t)), { hud: false });
+        tile._preview = game;              // reachable for debugging and for tests
         tiles.push({ ctx: ctx2, game, w: TILE_W, h: th });
       } catch {}
     }
@@ -451,15 +452,60 @@
     $('g-picker-more').hidden = !more;
   }
 
+  /* A preview that only holds right walks into the first hazard, dies three
+     times and sits on GAME OVER for as long as the picker is open - which
+     turned the whole grid into a wall of dead games. These play instead:
+     enough of a bot to get past a wall, a gap or a spike, and a restart when
+     one of them finally does lose. */
+  function previewInfo(g, tx, ty) { return window.NeoGame.TILES[g.level.at(tx, ty)] || {}; }
+
+  function previewDrive(t, dt) {
+    const g = t.game;
+    if (g.state !== 'play') {
+      // let the loss read for a moment, then go again
+      t.over = (t.over || 0) + dt;
+      if (t.over > 1.1) { g.reset(); t.over = 0; }
+      g.tick(dt);
+      return;
+    }
+    t.over = 0;
+    const p = g.player, T = 8;
+    const solid = (tx, ty) => previewInfo(g, tx, ty).solid === true;
+    const harmful = (tx, ty) => !!previewInfo(g, tx, ty).hazard;
+
+    if (g.mode === 'racer' || g.mode === 'shmup') {
+      // Steer for the middle of whatever road is open on this row.
+      const row = Math.floor((p.y + p.h / 2) / T);
+      const here = Math.floor((p.x + p.w / 2) / T);
+      let left = here, right = here;
+      while (left > 0 && !solid(left - 1, row) && here - left < 12) left--;
+      while (right < g.level.w - 1 && !solid(right + 1, row) && right - here < 12) right++;
+      const want = ((left + right) / 2) * T + T / 2;
+      g.input.left = want < p.x + p.w / 2 - 3;
+      g.input.right = want > p.x + p.w / 2 + 3;
+      g.tick(dt);
+      return;
+    }
+
+    const ahead = Math.floor((p.x + p.w + 2) / T);
+    const mid = Math.floor((p.y + p.h / 2) / T);
+    const foot = Math.floor((p.y + p.h + 2) / T);
+    const blocked = solid(ahead, mid);
+    const gap = !solid(ahead, foot) && !harmful(ahead, foot);
+    const spike = harmful(ahead, foot) || harmful(ahead, mid);
+    g.input.right = true;
+    g.input.a = blocked || gap || spike;
+    g.tick(dt);
+    g.input.a = false;                    // released, so the next jump has an edge
+  }
+
   function pickerLoop(now) {
     if (!pickerOpen) return;
     pRaf = requestAnimationFrame(pickerLoop);
     const dt = Math.min(.06, (now - pLast) / 1000 || 0); pLast = now;
     const c = cfg();
     for (const t of tiles) {
-      // nudge each one along so the grid is alive without anyone playing it
-      t.game.input.right = true;
-      t.game.tick(dt);
+      previewDrive(t, dt);
       window.NeoPalette.snap(t.ctx, t.w, t.h, { chip: c.chip, dither: c.dither, dithAmt: .6 });
     }
   }

@@ -979,6 +979,7 @@
       speak(text, who, secs) { speak(text, who, secs); },
       get coop() { return coop; },
       get level() { return lvl; },
+      get mode() { return mode; },
       get view() { return view; },
       get freeCam() { return freeCam; },
       set freeCam(v) { freeCam = !!v; if (!v) camera(); draw(); },
