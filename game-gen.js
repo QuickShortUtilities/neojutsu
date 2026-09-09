@@ -559,7 +559,7 @@
       const cv = document.createElement('canvas');
       cv.width = 160; cv.height = 144;
       const g = window.NeoGame.create(cv, JSON.parse(JSON.stringify(spec)), { hud: false });
-      g.tick(1.6);
+      g.tick(3.2);
       if (g.state !== 'play') return false;
       if (g.lives < (spec.lives ?? 3)) return false;      // hit before moving
       if (g.player.y > spec.level.h * 8 + 40) return false;

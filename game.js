@@ -710,7 +710,7 @@ end`;
     const btn = $('g-package');
     btn.disabled = true; const was = btn.textContent; btn.textContent = 'Packing…';
     try {
-      const files = ['neo-palette.js', 'chip.js', 'video-gen.js', 'game-sfx.js', 'game-script.js', 'game-engine.js'];
+      const files = ['neo-palette.js', 'chip.js', 'video-gen.js', 'game-sprites.js', 'game-sfx.js', 'game-script.js', 'game-engine.js'];
       const src = [];
       for (const f of files) {
         const r = await fetch(f);
@@ -926,10 +926,12 @@ present();
       const t = window.NeoGameTemplates[$('g-template').value];
       if (t) { build(t); save(); }
     });
-    for (const id of ['g-chip', 'g-dither', 'g-zoom', 'g-sky']) $(id).addEventListener('input', () => {
+    for (const id of ['g-chip', 'g-dither', 'g-zoom']) $(id).addEventListener('input', () => {
       $('g-zoom-v').textContent = $('g-zoom').value;
       sizeCanvas(); present(); save();
     });
+    // Sky colours live in the spec, so changing them means rebuilding it.
+    $('g-sky').addEventListener('input', () => { build(game ? game.snapshot() : spec); save(); });
     for (const id of ['g-char', 'g-lives', 'g-goal', 'g-double', 'g-wall', 'g-dash', 'g-attack']) $(id).addEventListener('change', () => {
       build(game ? game.snapshot() : spec); save();
     });

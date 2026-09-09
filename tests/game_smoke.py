@@ -81,7 +81,9 @@ with sync_playwright() as p:
     if not collect.get('coinGone') or collect.get('score',0)<1: issues.append(f'collecting a coin did nothing: {collect}')
 
     # --- hazards cost a life ---
-    hazard = E(page, """()=>{const g=window.NeoGameStudio.game; g.reset();
+    # The player is briefly invulnerable on arriving, so a turret already aimed
+    # at the spawn cannot land a hit before anyone moves. Wait that out first.
+    hazard = E(page, """()=>{const g=window.NeoGameStudio.game; g.reset(); g.tick(1.5);
       const before=g.lives; const T=window.NeoGame.TILE, L=g.level;
       let hit=null;
       for(let y=0;y<L.h&&!hit;y++) for(let x=0;x<L.w;x++) if(L.at(x,y)===4){hit={x,y};break;}

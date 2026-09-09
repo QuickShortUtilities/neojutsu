@@ -24,6 +24,8 @@
   async function probe() {
     if (probed) return available;
     probed = true;
+    // Opened from disk there is nothing to probe, and trying logs an error.
+    if (location.protocol === 'file:') { available = false; notify(); return false; }
     try {
       const me = await api('/api/me');
       user = me.user || null; available = true;

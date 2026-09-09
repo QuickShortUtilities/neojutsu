@@ -19,6 +19,11 @@ CHECK = """(key)=>{
   g.tick(1.5);
   const settled = g.player.y < lvl.h*8 + 40;
   const startsAlive = g.state === 'play';
+  // and must not be punished before touching a control: no free pickups sitting
+  // on the spawn, and nothing landing a hit while standing still
+  const g2 = window.NeoGame.create(cv, JSON.parse(JSON.stringify(t)), {hud:false});
+  g2.tick(3.2);
+  const fairOpening = g2.state === 'play' && g2.lives === (t.lives ?? 3);
   // walking right for a while must not throw and must not instantly end it
   g.input.right = true;
   for (let i=0;i<240;i++) g.tick(1/60);
@@ -34,7 +39,7 @@ CHECK = """(key)=>{
     // Scrolling games finish by arriving at the exit strip, not at a flag.
     hasGoal: (t.entities||[]).some(e=>e.type==='goal') || /i/.test(String(t.level.tiles||'')),
     distinctTiles: tiles.size, startsAlive, settled,
-    scriptErrors: script.errors, fault: g.scriptFault,
+    scriptErrors: script.errors, fault: g.scriptFault, fairOpening,
     stateAfterWalk: g.state, lives: g.lives,
     bytes: JSON.stringify(t).length,
   };
@@ -55,6 +60,7 @@ with sync_playwright() as p:
                    'tiles':r['distinctTiles'],'kb':round(r['bytes']/1024,1),
                    'need':r['need'],'coins':r['coins']}
         if not r['startsAlive']: issues.append(f'{k}: does not start in play')
+        if not r['fairOpening']: issues.append(f'{k}: loses or gains a life in the first three seconds')
         if not r['settled']: issues.append(f'{k}: the player falls out of the world at the start')
         if not r['hasGoal']: issues.append(f'{k}: has no goal to reach')
         if r['need'] > r['coins']: issues.append(f"{k}: asks for {r['need']} pickups but only has {r['coins']}")

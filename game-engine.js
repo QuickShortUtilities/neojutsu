@@ -184,7 +184,10 @@
       player = { x: start.x, y: start.y, w: 6, h: 12, vx: 0, vy: 0, grounded: false,
                  face: 1, coyote: 0, buffer: 0, walk: 0, hurt: 0,
                  wall: 0, dash: 0, dashLeft: P.dash ? 1 : 0, doubleLeft: P.doubleJump ? 1 : 0,
-                 shotCool: 0, shotHeld: false, bWasDown: false };
+                 shotCool: 0, shotHeld: false, bWasDown: false,
+                 // A moment of grace on arriving, so a turret already aimed at
+                 // the spawn cannot land a hit before anyone has moved.
+                 hurt: P.grace ?? 1.1 };
       entities = (spec.entities || []).map(makeEntity);
       score = 0; keys = 0; lives = spec.lives ?? 3; elapsed = 0; won = false;
       state = 'play'; message = ''; messageAt = 0;
@@ -264,7 +267,7 @@
 
     function die() {
       if (player.hurt > 0) return;
-      lives--; player.hurt = 1.1; fire('hurt');
+      lives--; player.hurt = Math.max(1.1, P.grace ?? 1.1); fire('hurt');
       effects.push({ kind: 'pop', x: player.x, y: player.y, t: 0 });
       if (lives <= 0) { state = 'over'; message = 'GAME OVER'; say('lose'); }
       else {
@@ -646,10 +649,18 @@
         }
       }
 
+      // Sprite art if the atlas is up, the engine's own rectangles if not.
+      // The fallback is not decorative: a packaged game opened somewhere the
+      // image will not decode still has to be playable.
+      const art = window.NeoSprites;
+      const useArt = !!(art && art.loaded && spec.sprites !== false);
+      const cat = spec.cat || '';
+
       for (const e of entities) {
         if (!e.alive) continue;
         const sx = Math.round(e.x - ox), sy = Math.round(e.y - oy);
         if (sx < -16 || sx > view.w + 16) continue;
+        if (useArt && drawEntityArt(e, sx, sy, cat)) continue;
         if (e.def.collect) {
           const bob = Math.sin(elapsed * 4 + e.t) * 1.5;
           ctx.fillStyle = e.def.key ? '#2ef2ff' : e.def.heal ? '#ff2e88' : '#ffd23f';
@@ -678,12 +689,46 @@
         }
       }
 
+      // One sprite for one entity. The choice is pinned to the entity's home
+      // tile rather than its runtime id, so a level looks the same after a
+      // restart and on someone else's machine - the same promise the seeded
+      // audio and video make.
+      function drawEntityArt(e, sx, sy, cat) {
+        const idx = art.forEntity(e.type, cat, e.home.x * 7 + e.home.y * 13);
+        if (idx == null) return false;
+        const locked = spec.rules && spec.rules.collect && score < spec.rules.collect;
+        const colour = e.def.key ? '#2ef2ff'
+                     : e.def.heal ? '#ff2e88'
+                     : e.def.collect ? '#ffd23f'
+                     : e.def.goal ? (locked ? '#7a7a8a' : '#3fbf4a')
+                     : e.def.chases ? '#ff2e88'
+                     : e.def.fires ? '#c060ff'
+                     : e.def.hops ? '#ffd23f'
+                     : e.def.floats ? '#c060ff' : '#ff5a3c';
+        // Collectibles bob; walkers take a one-pixel step. The art has no
+        // animation frames, so the motion has to come from the transform.
+        const bob = e.def.collect || e.def.goal ? Math.sin(elapsed * 4 + e.t) * 1.5
+                  : Math.abs(e.vx) > 2 ? (Math.floor(elapsed * 9 + e.t) % 2) * -1 : 0;
+        const ok = art.draw(ctx, idx, sx + e.w / 2, sy + e.h + bob,
+                            { colour, outline: '#0a0714', flip: e.vx > 0 });
+        if (ok && e.def.enemy && e.hp > 1) {
+          ctx.fillStyle = '#ffd23f';
+          ctx.fillRect(sx, sy - 5, Math.min(e.w, e.hp * 3), 1);
+        }
+        return ok;
+      }
+
       // the player, drawn with the studio's own character sprites
       const psx = Math.round(player.x + player.w / 2 - ox), psy = Math.round(player.y + player.h - oy);
       const blink = player.hurt > 0 && Math.floor(player.hurt * 20) % 2;
       if (!blink) {
         const chars = window.NeoScene && window.NeoScene.CHARS;
-        if (chars && chars[P.char]) window.NeoScene.drawChar(ctx, chars[P.char], psx, psy, 1, player.walk, player.face);
+        const pStep = player.grounded && Math.abs(player.vx) > 6 ? (Math.floor(elapsed * 10) % 2) * -1 : 0;
+        const pArt = useArt && typeof P.sprite === 'number'
+          && art.draw(ctx, P.sprite, psx, psy + pStep,
+                      { colour: P.tint || '#2ef2ff', outline: '#0a0714', flip: player.face < 0 });
+        if (pArt) { /* drawn from the atlas */ }
+        else if (chars && chars[P.char]) window.NeoScene.drawChar(ctx, chars[P.char], psx, psy, 1, player.walk, player.face);
         else { ctx.fillStyle = '#2ef2ff'; ctx.fillRect(psx - 3, psy - 12, 6, 12); }
       }
 
