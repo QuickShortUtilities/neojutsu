@@ -283,12 +283,19 @@ def main():
             rejects.append({'scene': str(path), 'why': f'unreadable: {e}'}); continue
         ctx = gbs_script.Ctx(actors=actors, routines=routines, scenes=names)
         for sc in scenes_l:
-            spec, why = furnish(sc['grid'], sc['width'], sc['height'],
-                                MODES.get(sc['type'], 'topdown'), f"{path.stem}/{sc['name']}")
-            if spec is None:
-                rejects.append({'scene': sc['name'], 'why': why})
-            else:
-                made.append((sc['name'], spec, sc))
+            # Projects before GB Studio 3 record no scene type, so importing
+            # them all as top-down made every level the same kind of game.
+            # Build each mode the geometry could support and let the bot say
+            # which one it plays as, the same way a Tiled map is read.
+            want = [MODES[sc['type']]] if sc.get('type') in MODES and sc['type'] != 'TOPDOWN' \
+                else ['platform', 'topdown']
+            for m in want:
+                spec, why = furnish(sc['grid'], sc['width'], sc['height'], m,
+                                    f"{path.stem}/{sc['name']}" + ('' if len(want) == 1 else f' {m}'))
+                if spec is None:
+                    rejects.append({'scene': sc['name'] + f' ({m})', 'why': why})
+                else:
+                    made.append((sc['name'], spec, sc))
             for event, nodes, self_tag, where in sc['scripts']:
                 ctx.self_tag = self_tag
                 lines = [l for l in gbs_script.translate(nodes, ctx) if l.strip()]
