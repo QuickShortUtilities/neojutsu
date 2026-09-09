@@ -132,6 +132,25 @@ def collect_of(spec):
     return (spec.get('rules') or {}).get('collect')
 
 
+# The words the generator reads as a setting. This mirrors THEMES[*].words
+# in game-gen.js, and is here for one job: a genre phrase that already names a
+# place has already chosen the setting, and appending another one asks for two.
+# The generator settles that by which word comes first in the sentence, which
+# is the genre phrase every time - so "a cave flyer, in a factory" quietly
+# became a cave, and every one of those was thrown away as a theme the
+# generator did not understand. 114 of 180 rejections, all from one clause.
+PLACE_WORDS = (
+    'cave', 'cavern', 'underground', 'tunnel', 'mine',
+    'ice', 'icy', 'frozen', 'snow', 'glacier', 'cold', 'winter',
+    'sky', 'cloud', 'island', 'air', 'high', 'floating',
+    'sunset', 'dusk', 'evening', 'pink', 'romantic',
+    'factory', 'machine', 'robot', 'industrial', 'belt', 'steel', 'assembly',
+    'ruin', 'castle', 'fortress', 'keep', 'knight', 'medieval',
+    'volcano', 'lava', 'fire', 'burning', 'hell', 'magma',
+    'temple', 'shrine', 'sanctuary', 'magic', 'mage', 'ancient',
+)
+
+
 def make_prompt(rng):
     """A description, and the things it commits the generator to."""
     mode, kinds = rng.choice(KINDS)
@@ -140,7 +159,9 @@ def make_prompt(rng):
     expect = {'mode': mode}
     arcade = kind in ARCADE
 
-    theme = rng.choice(list(PLACES)) if rng.random() < 0.8 else None
+    # Only where the genre phrase has not named one already.
+    settled = any(w in kind for w in PLACE_WORDS)
+    theme = rng.choice(list(PLACES)) if not settled and rng.random() < 0.8 else None
     if theme:
         parts.append(rng.choice(PLACES[theme]))
         expect['theme'] = theme

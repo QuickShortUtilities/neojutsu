@@ -80,7 +80,7 @@ some of it is worth nothing, so:
 - **Other people's levels, redrawn.** Fine for you at home, a licensing
   problem the day it ships. Original layouts and CC0 sources stay clean.
 
-## Seven kinds of game, not one with seven skins
+## Eight kinds of game, not one with eight skins
 
 For a long while every mode here was the same game: a body moving through a
 tilemap, collecting things, reaching a flag. Gravity on or off, scrolling or
@@ -94,19 +94,32 @@ vary now:
 | `platform` | a body under gravity | reaching the flag |
 | `topdown` | a body on a floor | the flag, or clearing the dots, or beating the rivals |
 | `racer` | the world coming at you | arriving at the far end |
-| `shmup` | the world coming at you, with a gun | arriving at the far end |
+| `shmup` | the world coming down at you, with a gun | arriving at the far end |
+| `scramble` | the world coming at you sideways, with a gun | arriving at the far end |
 | `invaders` | a formation coming down at you | clearing it |
 | `rider` | a bike with the throttle on | reaching the finish, having landed level |
 | `blocks` | a piece falling into a well | clearing enough rows |
 
 The endings are `collect`, `clearAll`, `clearFoes`, `lines` and `beat`, plus
 walking into a goal. A new genre almost always means a new ending; if it does
-not, it is probably a skin.
+not, it is probably a skin. `scramble` is the one that is not - it shares an
+ending with `shmup` and earns its place on the frame alone, because a
+corridor closing in front of you is not a thing coming down at you however
+you paint it.
+
+Watch the vocabulary as well as the genre. A genre phrase that names a place
+has already chosen the setting: "a cave flyer" is a cave, and appending "in a
+factory" asks for two things at once. The generator settles that by which word
+comes first, which is the genre phrase every time, so the harness threw away
+every one of those as a theme it did not understand - 114 rejections out of
+180, all from one clause. `make_dataset.py` keeps a list of the words that
+name a place for exactly this, and leaves the setting alone when the genre has
+already said one.
 
 ## What the generated half covers
 
 Prompts are built from a vocabulary, so what the vocabulary cannot say is not
-in the corpus however many games you generate. It asks for all seven genres,
+in the corpus however many games you generate. It asks for all eight genres,
 eight places, seven mechanics, five abilities including a tank's turret, a
 boss, a clock, two players, a run of several rooms, a hero, a number of
 lives, five level shapes and a pickup count - and it is worth checking that
@@ -165,10 +178,19 @@ python3 tools/train_lora.py --data data/games.jsonl \
 ```
 
 That is roughly 4,600 examples: 3,000 generated levels, 810 imported ones and
-824 scripts. The generated 3,000 come out as all seven genres and all five
-endings - roughly 330 of each of the arcade kinds, the rest overhead and
-side-on - in 603 different level sizes, at a 97.8% accept rate. The generated half teaches the shape; the imported half is the
-only part with anyone's taste in it.
+824 scripts. The generated 3,000 come out as all eight genres and all five
+endings - a little over 300 of each kind, the rest overhead - in 628 different
+level sizes, from 2,983 different descriptions, at a 97.8% accept rate. What
+is left over is worth reading: all 66 rejections are a bot failing to get
+anywhere in a level, which is the honest kind. The generated half teaches the
+shape; the imported half is the only part with anyone's taste in it.
+
+They are not all one size. A single room is around a thousand tokens and a run
+of eight rooms is closer to eight thousand, so `--maxlen` defaults to 8192 and
+`train_lora.py` counts the corpus before it starts. It will not train on a
+game it would have to cut in half: a JSON object with the end sliced off is
+not a shorter lesson, it is a wrong one. Pass `--drop-long` to leave the
+handful that still overflow out of the run.
 
 The script count went *down* when the corpus got better: 616 of the 1,439 were
 exact repeats, because a published game uses the same script for the same door

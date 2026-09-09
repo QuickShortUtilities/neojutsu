@@ -33,8 +33,15 @@ def main():
     ap.add_argument('--accum', type=int, default=16)
     ap.add_argument('--lr', type=float, default=1e-4)
     ap.add_argument('--rank', type=int, default=32)
-    ap.add_argument('--maxlen', type=int, default=4096)
+    # The corpus is not all one size. A single room is a thousand tokens and
+    # a run of eight is closer to eight thousand, so a window that fits the
+    # median throws away the games that are hardest to write - which are the
+    # ones worth training on.
+    ap.add_argument('--maxlen', type=int, default=8192)
     ap.add_argument('--eval-frac', type=float, default=0.03)
+    ap.add_argument('--drop-long', action='store_true',
+                    help='leave out examples that will not fit in --maxlen, '
+                         'rather than training on them cut in half')
     args = ap.parse_args()
 
     import torch
@@ -54,13 +61,38 @@ def main():
         raise SystemExit('no training rows')
     print(f'{len(rows)} examples from {1 + len(args.extra)} file(s)')
 
-    ds = Dataset.from_list(rows).shuffle(seed=7)
-    cut = max(1, int(len(ds) * args.eval_frac))
-    train_ds, eval_ds = ds.select(range(cut, len(ds))), ds.select(range(cut))
-
     tok = AutoTokenizer.from_pretrained(args.model)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
+
+    # How long these actually are. The trainer cuts anything over
+    # --maxlen and says nothing, and a game cut off mid-JSON is not a
+    # shorter lesson, it is a wrong one: the model is shown an object that
+    # never closes and learns that objects sometimes do not.
+    def token_len(row):
+        try:
+            return len(tok.apply_chat_template(row['messages'], tokenize=True))
+        except Exception:
+            return len(tok(json.dumps(row['messages']))['input_ids'])
+
+    lens = [token_len(r) for r in rows]
+    ranked = sorted(lens)
+    over = [i for i, n in enumerate(lens) if n > args.maxlen]
+    print(f'tokens: median {ranked[len(ranked) // 2]}, '
+          f'p95 {ranked[int(len(ranked) * 0.95)]}, max {ranked[-1]}')
+    if over:
+        print(f'{len(over)} of {len(rows)} examples are longer than --maxlen '
+              f'{args.maxlen} and would be cut off part way through the game.')
+        if args.drop_long:
+            rows = [r for i, r in enumerate(rows) if i not in set(over)]
+            print(f'dropped them; {len(rows)} left')
+        else:
+            raise SystemExit(f'raise --maxlen to {ranked[-1] + 64}, or pass '
+                             f'--drop-long to leave those examples out')
+
+    ds = Dataset.from_list(rows).shuffle(seed=7)
+    cut = max(1, int(len(ds) * args.eval_frac))
+    train_ds, eval_ds = ds.select(range(cut, len(ds))), ds.select(range(cut))
 
     quant = BitsAndBytesConfig(
         load_in_4bit=True,
