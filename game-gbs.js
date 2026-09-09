@@ -67,6 +67,10 @@
     invaders: 'TOPDOWN',       // a fixed screen; they have no name for one
     racer:    'TOPDOWN',
     shmup:    'SHMUP',         // this one they do have
+    /* GB Studio's SHMUP scrolls up. A cave that travels sideways lands as a
+       platform scene with no gravity to speak of - the corridor and the cast
+       arrive intact, and the scrolling is the part that does not travel. */
+    scramble: 'PLATFORM',
     blocks:   null,            // a well is not a scene
   };
 

@@ -34,6 +34,8 @@ with sync_playwright() as pw:
       const s = g0.spec, v = NeoGame.validate(s);
       return { mode: s.mode, valid: v.ok, errors: v.errors.slice(0,2),
                size: [s.level.w, s.level.h], props: (s.props||[]).length,
+               // scenery is allowed behind the course, never on the riding line
+               onTrack: (s.props||[]).filter(p => p.b !== 1).length,
                // a course ends at a strip you ride into, not at a flag
                hasFinish: /i/.test(s.level.tiles) };
     }""", PROMPT)
@@ -42,7 +44,10 @@ with sync_playwright() as pw:
     if not bt['valid']: issues.append(f"a course does not validate: {bt['errors']}")
     if not bt['hasFinish']: issues.append('a course with no finish on it')
     if bt['size'][0] < 40: issues.append(f"a course only {bt['size'][0]} tiles long")
-    if bt['props']: issues.append(f"{bt['props']} pieces of scenery standing on the track")
+    if bt['onTrack']:
+        issues.append(f"{bt['onTrack']} pieces of scenery standing on the track")
+    if not bt['props']:
+        issues.append('a course with nothing at all behind it')
 
     report['riding'] = page.evaluate("""(prompt) => {
       const s = NeoGameGen.generate(prompt, 'rd').spec;

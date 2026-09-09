@@ -59,6 +59,10 @@ def _scene_types():
     src = (ROOT / 'game-gbs.js').read_text(encoding='utf-8')
     i = src.index('const SCENE_TYPE = {')
     body = src[i + len('const SCENE_TYPE = '):src.index('};', i) + 1]
+    # Both kinds of comment. Stripping only the line kind meant that the first
+    # time somebody explained a mapping in a block comment, this stopped
+    # being able to read the table at all.
+    body = re.sub(r'/\*.*?\*/', '', body, flags=re.S)
     body = re.sub(r'//[^\n]*', '', body)
     body = re.sub(r'([A-Za-z_][A-Za-z_0-9]*)\s*:', r'"\1":', body)
     body = re.sub(r"'([^']*)'", r'"\1"', body)          # their quotes, not ours

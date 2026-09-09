@@ -111,6 +111,14 @@
     else if (/pac.?man|maze chase|chase.*maze|eat the dots|dot.?muncher|ghosts?\b/.test(raw)) {
       want.mode = 'topdown'; want.chase = true;
     }
+    /* A cave you fly through, which is a different game from a climb you fly
+       up: one is about a corridor closing in front of you and the other is
+       about what is coming down at you. It has to be read before the plain
+       shooter below, because "space shooter" is in both of their vocabularies
+       and only one of them is side-on. */
+    else if (/gradius|r.?type|scramble|defender|side.?scroll\w* shoot|horizontal shoot|side.?on shoot|cave flyer|fly through a cave|through the caves?\b/.test(raw)) {
+      want.mode = 'scramble';
+    }
     else if (/\brac(e|ing)|driv(e|ing)|car\b|speedway|highway|kart|rally\b/.test(raw)) want.mode = 'racer';
     else if (/shoot.?.?em.?up|shmup|space shooter|starfighter|dogfight|bullet hell/.test(raw)) want.mode = 'shmup';
     else if (/top.?down|overhead|dungeon|maze|room|zelda|tank/.test(raw)) want.mode = 'topdown';
@@ -830,8 +838,93 @@
     return { g, ents, start: { x: 2 * T, y: (sy - 2) * T }, keys: 0, ground: null };
   }
 
+  /* A cave that comes at you. Floor and roof are two height lines with a
+     corridor between them, and the corridor is the whole of the game: it
+     leans, it pinches, it opens into a chamber with something in it. The one
+     rule it may never break is closing, because a screen that carries you
+     into a wall you had no way to avoid is not difficulty, it is a bug the
+     player has to take the blame for. */
+  function cavernRun(r, o) {
+    const { w, h, difficulty } = o;
+    const g = blank(w, h);
+    /* How many open tiles across the corridor, at its narrowest. A ship is
+       one tile wide and a tile and a half tall; four open tiles is thirty-two
+       pixels of daylight, which is tight to fly and possible to read. */
+    const LEAST = [6, 5, 4][difficulty] ?? 5;
+    /* And how fast either face is allowed to move. This is the whole of the
+       fairness: at the speed the cave travels, a wall that steps a tile every
+       column sweeps past the ship faster than the ship can climb, so the
+       first version killed a bot in a second and a bit through no mistake of
+       its own. One tile every third column is slower than the ship. */
+    const EVERY = 3;
+    const floor = new Array(w), roof = new Array(w);
+    const ryMax = h - 3 - LEAST, fyMin = 2 + LEAST;
+    let fy = h - 4, ry = 2, fd = 0, rd = 0;
+    for (let x = 0; x < w; x++) {
+      if (x % EVERY === 0) {
+        if (r() < 0.42) fd = r() < 0.5 ? -1 : 1;
+        else if (r() < 0.5) fd = 0;
+        if (r() < 0.42) rd = r() < 0.5 ? -1 : 1;
+        else if (r() < 0.5) rd = 0;
+        ry = Math.max(1, Math.min(ryMax, ry + rd));
+        fy = Math.max(fyMin, Math.min(h - 2, fy + fd));
+        /* Hold it open. Both faces come off a shared middle rather than one
+           being shoved, so a pinch stays where the cave was going. */
+        if (fy - ry - 1 < LEAST) {
+          const mid = Math.round((fy + ry) / 2);
+          ry = Math.max(1, Math.min(ryMax, mid - Math.ceil((LEAST + 1) / 2)));
+          fy = Math.min(h - 2, ry + LEAST + 1);
+          if (fy - ry - 1 < LEAST) { fy = h - 2; ry = Math.max(1, fy - LEAST - 1); }
+        }
+      }
+      floor[x] = fy; roof[x] = ry;
+    }
+    /* Open at the mouth, and opening gradually rather than at a step: you are
+       put into the cave already moving, and a pinch in the first second reads
+       as the game killing you before you have touched a key. */
+    for (let x = 0; x < 14; x++) {
+      const ease = Math.min(1, x / 13);
+      roof[x] = Math.round(1 + (roof[x] - 1) * ease);
+      floor[x] = Math.round((h - 2) + (floor[x] - (h - 2)) * ease);
+    }
+    for (let x = 0; x < w; x++) {
+      for (let y = floor[x]; y < h; y++) put(g, x, y, '2');
+      for (let y = 0; y <= roof[x]; y++) put(g, x, y, '2');
+    }
+    /* The mouth at the far end, as a strip you fly into. The scroll arriving
+       would end the run on its own, but then the finish is a thing that
+       happens to you rather than a thing you can see coming - and every other
+       course in the studio shows you where it stops. */
+    for (let y = 0; y < h; y++) put(g, w - 2, y, 'i');
+    for (let y = 0; y < h; y++) put(g, w - 1, y, '0');
+
+    /* What is in it. Guns stand on the cave floor and fire the way they do in
+       every game of this shape; anything that flies is met head on. Nothing
+       goes in the opening stretch, and nothing in a pinch, so the cave is
+       never the thing that kills you while you are busy aiming. */
+    const ents = [], roomy = x => floor[x] - roof[x] - 1;
+    for (let x = 20; x < w - 8; x += 7 + Math.floor(r() * 9)) {
+      if (roomy(x) < LEAST + 1) continue;
+      const air = () => (roof[x] + 1 + Math.floor(r() * Math.max(1, roomy(x) - 1))) * T;
+      const roll = r();
+      if (roll < 0.40) ents.push({ type: 'turret', x: x * T, y: (floor[x] - 1) * T });
+      else if (roll < 0.76) ents.push({ type: 'flyer', x: x * T, y: air(), dir: -1 });
+      else ents.push({ type: 'coin', x: x * T, y: air() });
+    }
+    const openAt = x => Math.round((roof[x] + floor[x]) / 2 - 1);
+    return { g, ents, start: { x: 3 * T, y: openAt(3) * T }, keys: 0, ground: null,
+             sky: ['#050410', '#1b1038'],
+             /* Slower than a road. A cave is read rather than driven through,
+                and the corridor only stays fair while the ship can out-climb
+                the wall coming at it. */
+             scroll: { speed: 42, accel: 1.4, max: 78 } };
+  }
+
   const TOPDOWN_SHAPES = { rooms: tdRooms, arena: tdArena, cross: topdown,
                            maze: tdMaze, quest: tdQuest };
+
+  // The three where the world moves and you only steer.
+  const SCROLLERS = new Set(['racer', 'shmup', 'scramble']);
 
   /* Which overhead layout the words asked for. A tank battle wants open
      ground and cover; a dungeon wants rooms and a locked door; anything else
@@ -846,6 +939,9 @@
     if (mode === 'invaders') return 'shooter';
     if (mode === 'racer') return 'racing';
     if (mode === 'shmup') return 'shooter';
+    // The one shape in the studio that is only ever science fiction: a ship,
+    // a cave and a gun. The shelf had nothing on it but reskinned platformers.
+    if (mode === 'scramble') return 'scifi';
     if ((want.abilities || []).includes('aimLock')) return 'shooter';
     /* Overhead is settled by the layout before the palette gets a say. A
        dungeon of rooms is a dungeon whatever colour the sky happens to be. */
@@ -1065,19 +1161,27 @@
      three of them. A story that can say something when you find the key or
      when you reach the far end is a story about the game being played rather
      than about the clock. */
-  function story(r, o, need) {
+  function story(r, o, need, ents) {
     /* Not in an arcade game. A speech bubble is three lines of text on a
        screen a hundred and sixty pixels wide, and covering half a maze while
        something is chasing you through it is not a story beat, it is a
-       blindfold. Those games talk through the banner instead. */
-    if (o.mode === 'invaders' || o.mode === 'blocks' || o.win === 'clear') return [];
+       blindfold. Those games talk through the banner instead.
+       A bike belongs in that list for the same reason: the throttle is
+       never off, so there is no moment in a course where you can afford to
+       stop and read three lines. */
+    if (o.mode === 'invaders' || o.mode === 'blocks' || o.mode === 'rider'
+        || o.mode === 'scramble' || o.win === 'clear') return [];
     const beats = [{ at: +(0.6 + r() * 0.5).toFixed(1),
                      text: pick(r, ARRIVE[o.theme] || ['Here we go.']) }];
     if (need >= 4 && r() < 0.75) {
       beats.push({ score: Math.max(1, Math.round(need / 2)), text: pick(r, HALFWAY) });
     }
     if (o.keys > 0 && r() < 0.8) beats.push({ keys: 1, text: pick(r, KEYED) });
-    if (r() < 0.45) beats.push({ on: 'kill', text: pick(r, KILLED) });
+    // Only where there is something to kill. A line waiting on a kill in a
+    // game with no enemies in it is not a quiet beat, it is a dead one.
+    const CAST = (window.NeoGame && window.NeoGame.ENTITY) || {};
+    const foes = (ents || []).some(e => CAST[e.type] && CAST[e.type].enemy);
+    if (foes && r() < 0.45) beats.push({ on: 'kill', text: pick(r, KILLED) });
     /* Three quarters of the way across. Only where crossing the level is
        what you do: a racer and a shooter scroll past you and hold you in the
        frame, so a beat waiting on your x would fire at the start or never. */
@@ -1147,8 +1251,14 @@
        shoot at. */
     /* Nothing standing on the track. A course is read at speed and the
        terrain is the whole of the information; scenery in the middle of it is
-       one more thing to mistake for ground. */
-    if (o.mode === 'invaders' || o.mode === 'blocks' || o.mode === 'rider') return [];
+       one more thing to mistake for ground.
+       That argument is about things standing on the riding line, and on a
+       bike course the ground is the line - there is no verge to put a tree
+       on. Behind it there is: distant scenery is drawn under the level and
+       cannot be ridden into, so a rider gets the far layer and nothing else.
+       The alternative was the only mode in the studio with a bare sky. */
+    if (o.mode === 'invaders' || o.mode === 'blocks') return [];
+    const backOnly = o.mode === 'rider' || o.mode === 'scramble';
     const { w, h } = o, g = built.g, props = [];
     /* Solid means solid, not "not empty". Road, water, grass and a checkpoint
        are all tiles you walk through, and counting them as ground meant a
@@ -1200,10 +1310,12 @@
     // wall fragments hanging in the sky, which reads as debris, not depth.
     if (D.back.length) {
       for (const [x, y] of spots) {
-        if (r() > .10) continue;
+        if (r() > (backOnly ? .16 : .10)) continue;
         props.push({ i: pick(r, D.back), x: x * T + T / 2, y: y * T + 3, t: dim(D.tint), b: 1 });
       }
     }
+
+    if (backOnly) return props;
 
     const density = [.22, .17, .13][o.difficulty] ?? .17;
     for (const [x, y] of spots) {
@@ -1243,6 +1355,10 @@
     if (mode === 'invaders' || mode === 'blocks') [w, h] = [20, 18];
     // A course is long and not very tall: it is a journey along a surface.
     else if (mode === 'rider') [w, h] = [jog(pick(r, [96, 128, 160]), 12, 72), 18];
+    // A cave is the same shape as a course, and one screen tall for the same
+    // reason: the corridor is the game, and a corridor you cannot see all of
+    // is a corridor you cannot fly.
+    else if (mode === 'scramble') [w, h] = [jog(pick(r, [104, 136, 168]), 12, 80), 18];
     else if (mode === 'racer' || mode === 'shmup') [w, h] = [jog(20, 2, 16), jog(pick(r, [70, 90, 120]), 12, 56)];
     else if (mode === 'topdown') {
       /* A chase has to fit the screen. Half the game is seeing where the
@@ -1263,6 +1379,8 @@
     if (mode === 'racer' || mode === 'shmup') {
       built = (mode === 'racer' ? roadway : starlane)(r, o);
       populate(r, o, built, mode);
+    } else if (mode === 'scramble') {
+      built = cavernRun(r, o);
     } else if (mode === 'rider') {
       built = ramps(r, o);
     } else if (mode === 'blocks') {
@@ -1301,7 +1419,7 @@
     // If a number of pickups was asked for, make sure that many exist rather
     // than quietly settling for however many the level happened to get.
     let need = 0;
-    if ((mode === 'racer' || mode === 'shmup') && want.collect === undefined) need = 0;
+    if (SCROLLERS.has(mode) && want.collect === undefined) need = 0;
     else if (want.collect !== undefined) {
       need = want.collect;
       const ground = mode === 'topdown' ? null : h - 3;
@@ -1320,16 +1438,24 @@
     const lineTarget = built.lines || 0;
     const beatTarget = built.beat || 0;
     const pickups = built.ents.filter(e => e.type === 'coin' || e.type === 'gem').length;
-    if (want.collect === undefined && pickups && r() < .75) need = Math.max(1, Math.round(pickups * pick(r, [.5, .7, 1])));
+    /* Not in a game that scrolls. What you flew past is gone, so a count is
+       a demand to have been perfect first time rather than a target - and
+       arriving at the end short of it is a loss you cannot see coming. */
+    if (want.collect === undefined && !SCROLLERS.has(mode) && pickups && r() < .75) {
+      need = Math.max(1, Math.round(pickups * pick(r, [.5, .7, 1])));
+    }
 
     const t = THEMES[theme];
     const player = { char: want.char || t.char };
-    if (mode === 'shmup' || mode === 'invaders') player.attack = true;
+    if (mode === 'shmup' || mode === 'invaders' || mode === 'scramble') player.attack = true;
     // A bike has more of everything than a person on foot.
     /* Quick, but not so quick that a course is over before you have read it:
        at a hundred and thirty a bike crossed ninety tiles in three seconds,
        which is four landings and no time to think between them. */
     if (mode === 'rider') { player.speed = 96; player.accel = 260; player.jump = 205; }
+    // A ship climbs faster than a person walks, because in a cave that is the
+    // only thing it does.
+    if (mode === 'scramble') player.speed = 104;
     if (mode === 'invaders') player.speed = 96;
     if (mode === 'racer' || mode === 'shmup') player.speed = 96;
     for (const a of (want.abilities || [])) player[a] = true;
@@ -1357,6 +1483,9 @@
       // A builder may ask for its own background, where the theme's would be
       // wrong for the kind of game it is.
       sky0: (built.sky || t.sky)[0], sky1: (built.sky || t.sky)[1],
+      // A builder may set the pace it needs, where the default is wrong for
+      // the shape of game it just made.
+      ...(built.scroll ? { scroll: built.scroll } : {}),
       player,
       start: built.start,
       lives: want.lives ?? [4, 3, 2][difficulty],
@@ -1368,7 +1497,7 @@
            : lineTarget ? { collect: 0, keys, lines: lineTarget }
            : beatTarget ? { collect: 0, keys, beat: beatTarget }
            : { collect: need, keys },
-      story: story(r, o, need),
+      story: story(r, o, need, built.ents),
       script: script(r, o, need),
     };
     return { spec, understood: want };

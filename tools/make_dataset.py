@@ -46,6 +46,9 @@ KINDS = [
                   'a stunt bike run', 'a trials course over jumps']),
     ('blocks',   ['a tetris style falling blocks game', 'a falling block puzzle',
                   'a stacker', 'a line clearing puzzle']),
+    # The shape that is only ever science fiction: a ship, a cave and a gun.
+    ('scramble', ['a gradius style side scrolling shooter', 'an r-type style horizontal shooter',
+                  'a side-on shooter through a cave', 'a cave flyer with turrets']),
 ]
 PLACES = {
     'cave':    ['underground', 'in a cave', 'in a dark cavern', 'in a deep mine'],
@@ -114,7 +117,9 @@ ARCADE = {'a space invaders game', 'a fixed shooter', 'a galaga style game',
           'an overworld with creature battles', 'a game of duels on a map',
           'a monster battler',
           'a motocross rider over hills', 'a dirt bike course',
-          'a stunt bike run', 'a trials course over jumps'}
+          'a stunt bike run', 'a trials course over jumps',
+          'a gradius style side scrolling shooter', 'an r-type style horizontal shooter',
+          'a side-on shooter through a cave', 'a cave flyer with turrets'}
 
 
 def collect_of(spec):
@@ -262,6 +267,20 @@ BUILD = r"""
           g.input.down = bestX !== null && pc.x === bestX;
           g.input.a = (i % 97) === 0;
         }
+      } else if (g.mode === 'scramble') {
+        /* Down the middle of the corridor, read a little ahead of the nose:
+           by the time rock is beside you it is too late to be anywhere else.
+           The trigger simply stays down - in a cave everything worth
+           shooting is in front of you. */
+        const col = Math.min(g.level.w - 1, Math.floor((p.x + p.w + 10) / T));
+        const here = Math.floor((p.y + p.h / 2) / T);
+        let U = here, D = here;
+        while (U > 0 && info(col, U - 1).solid !== true && here - U < 12) U--;
+        while (D < g.level.h - 1 && info(col, D + 1).solid !== true && D - here < 12) D++;
+        const want = ((U + D) / 2) * T + T / 2;
+        g.input.up = want < p.y + p.h / 2 - 3;
+        g.input.down = want > p.y + p.h / 2 + 3;
+        g.input.b = true;
       } else if (g.mode === 'rider') {
         // Keep it level. The throttle looks after itself; the landing does not.
         g.input.up = p.pitch > 0.06;
