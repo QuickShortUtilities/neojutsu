@@ -122,9 +122,36 @@ with sync_playwright() as p:
         if v[k]: issues.append(f'validate accepted {k}')
     if not v['goodOk']: issues.append('validate rejected good decor')
 
+    # a generated level should arrive dressed, and dressed the same way twice
+    report['generated'] = page.evaluate("""() => {
+      const G = window.NeoGameGen, out = {};
+      const qs = ['a dark cave with mushrooms', 'a ruined castle with a key', 'a volcano run'];
+      out.runs = qs.map(q => {
+        const g = G.generateValid(q);
+        const props = g.spec.props || [];
+        const lvl = g.spec.level;
+        const off = props.filter(pr => pr.x < 0 || pr.y < 0 || pr.x > lvl.w * 8 || pr.y > lvl.h * 8);
+        return { q, ok: g.validation.ok, props: props.length, offLevel: off.length,
+                 tinted: props.every(pr => /^#[0-9a-f]{6}$/i.test(pr.t || '')) };
+      });
+      const a = JSON.stringify(G.generate('a dark cave', 'seed1').spec.props);
+      const same = JSON.stringify(G.generate('a dark cave', 'seed1').spec.props);
+      const other = JSON.stringify(G.generate('a dark cave', 'seed2').spec.props);
+      out.seeded = { same: a === same, differs: a !== other };
+      return out;
+    }""")
+    gen = report['generated']
+    for run in gen['runs']:
+        if not run['ok']: issues.append(f"generated {run['q']!r} did not validate")
+        if run['props'] < 3: issues.append(f"{run['q']!r} came back bare ({run['props']} props)")
+        if run['offLevel']: issues.append(f"{run['q']!r} put {run['offLevel']} prop(s) outside the level")
+        if not run['tinted']: issues.append(f"{run['q']!r} has an untinted prop")
+    if not gen['seeded']['same']: issues.append('same seed gave different decor')
+    if not gen['seeded']['differs']: issues.append('a different seed gave identical decor')
+
     if err: issues.append(f'page errors: {err[:3]}')
     b.close()
 
 print(json.dumps({'report': report, 'issues': issues}, indent=2))
-print('\nDecor dresses a level without changing it.' if not issues else f'\n{len(issues)} issue(s).')
+print('\nDecor dresses a level, generated or built, without changing it.' if not issues else f'\n{len(issues)} issue(s).')
 sys.exit(1 if issues else 0)

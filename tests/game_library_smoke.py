@@ -33,6 +33,43 @@ CHECK = """(key)=>{
   const script = t.script ? window.NeoScript.compile(t.script) : {errors:[]};
   let tiles = new Set();
   for (let y=0;y<lvl.h;y++) for (let x=0;x<lvl.w;x++) tiles.add(lvl.at(x,y));
+
+  /* Can you see yourself? The studio keeps losing silhouettes to palettes
+     that collapse - a dark hero on dark ground, a pale one on a pale sky.
+     Draw the frame twice, once with the player lifted out, and compare only
+     the pixels the player owns against the ones around it. Contrast is the
+     larger of the two directions, because a dark character on a light
+     background reads perfectly well. */
+  const shot = (hide) => {
+    const s2 = JSON.parse(JSON.stringify(t));
+    const cv = document.createElement('canvas'); cv.width = 192; cv.height = 160;
+    const gg = window.NeoGame.create(cv, s2, { hud: false });
+    gg.freeCam = true;
+    gg.panTo(Math.max(0, gg.player.x - 96), Math.max(0, gg.player.y - 80));
+    if (hide) gg.player.y = -9999;
+    gg.draw();
+    return cv.getContext('2d').getImageData(0, 0, 192, 160).data;
+  };
+  const on = shot(false), off = shot(true);
+  let owned = 0, mn = 255, mx = 0, box = [999, 999, -1, -1];
+  for (let i = 0, px = 0; i < on.length; i += 4, px++) {
+    if (on[i] === off[i] && on[i+1] === off[i+1] && on[i+2] === off[i+2]) continue;
+    const l = on[i]*.299 + on[i+1]*.587 + on[i+2]*.114;
+    owned++; if (l < mn) mn = l; if (l > mx) mx = l;
+    const x = px % 192, y = (px / 192) | 0;
+    if (x < box[0]) box[0] = x; if (y < box[1]) box[1] = y;
+    if (x > box[2]) box[2] = x; if (y > box[3]) box[3] = y;
+  }
+  let bgSum = 0, bgN = 0;
+  if (box[2] >= 0) for (let y = Math.max(0, box[1]-7); y < Math.min(160, box[3]+7); y++)
+    for (let x = Math.max(0, box[0]-7); x < Math.min(192, box[2]+7); x++) {
+      const i = (y*192 + x) * 4;
+      if (on[i] === off[i] && on[i+1] === off[i+1] && on[i+2] === off[i+2]) {
+        bgSum += off[i]*.299 + off[i+1]*.587 + off[i+2]*.114; bgN++;
+      }
+    }
+  const bg = bgN ? bgSum / bgN : null;
+  const contrast = bg === null ? 0 : Math.round(Math.max(mx - bg, bg - mn));
   return {
     mode: t.mode, size:[lvl.w,lvl.h], entities:(t.entities||[]).length,
     coins, need,
@@ -40,6 +77,7 @@ CHECK = """(key)=>{
     hasGoal: (t.entities||[]).some(e=>e.type==='goal') || /i/.test(String(t.level.tiles||'')),
     distinctTiles: tiles.size, startsAlive, settled,
     scriptErrors: script.errors, fault: g.scriptFault, fairOpening,
+    playerPixels: owned, playerContrast: contrast,
     stateAfterWalk: g.state, lives: g.lives,
     bytes: JSON.stringify(t).length,
   };
@@ -61,6 +99,9 @@ with sync_playwright() as p:
                    'need':r['need'],'coins':r['coins']}
         if not r['startsAlive']: issues.append(f'{k}: does not start in play')
         if not r['fairOpening']: issues.append(f'{k}: loses or gains a life in the first three seconds')
+        if not r['playerPixels']: issues.append(f'{k}: the player draws nothing')
+        elif r['playerContrast'] < 45:
+            issues.append(f"{k}: the player is hard to see (contrast {r['playerContrast']})")
         if not r['settled']: issues.append(f'{k}: the player falls out of the world at the start')
         if not r['hasGoal']: issues.append(f'{k}: has no goal to reach')
         if r['need'] > r['coins']: issues.append(f"{k}: asks for {r['need']} pickups but only has {r['coins']}")

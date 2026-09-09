@@ -479,6 +479,74 @@
   }
   const ENEMY_TYPES = new Set(['walker', 'flyer', 'chaser', 'jumper', 'turret', 'spike']);
 
+  /* ---- dressing the level ----
+     A generated level used to arrive bare: correct, playable, and looking
+     like a diagram. Decor is inert, so it can be scattered freely - the only
+     rules are that it stands on a surface and never sits on top of something
+     the player needs to see.
+
+     Sprite numbers come from the atlas in game-sprites.js. */
+  const DECOR = {
+    cave:    { tint: '#6f6890', on: [105, 103, 620, 622], back: [106, 107, 108] },
+    ice:     { tint: '#9fd8f0', on: [50, 51, 98],         back: [57, 58] },
+    sky:     { tint: '#cfe6ff', on: [52, 53, 99],         back: [] },
+    sunset:  { tint: '#d4789f', on: [54, 103, 99],        back: [147, 148] },
+    factory: { tint: '#7a7a8a', on: [8, 9, 10, 829],      back: [106, 108, 109] },
+    ruins:   { tint: '#8a7f6a', on: [147, 148, 196, 622], back: [106, 107, 110] },
+    volcano: { tint: '#c04a3a', on: [620, 622, 567],      back: [106, 107] },
+    temple:  { tint: '#7fa8c4', on: [12, 57, 61, 567],    back: [107, 108, 109] },
+  };
+
+  // Distance is depth: the same tint, darker, is what puts a thing behind
+  // the thing in front of it.
+  const dim = (hex, k = .5) => {
+    const n = parseInt(hex.slice(1), 16);
+    const c = i => Math.round(((n >> i) & 255) * k);
+    return '#' + ((1 << 24) | (c(16) << 16) | (c(8) << 8) | c(0)).toString(16).slice(1);
+  };
+
+  function dress(r, o, built) {
+    const D = DECOR[o.theme];
+    if (!D) return [];
+    const { w, h } = o, g = built.g, props = [];
+    const solid = (x, y) => y >= 0 && y < h && x >= 0 && x < w && g[y][x] !== '0';
+
+    // Nothing may be dropped where the player starts or where a piece sits;
+    // scenery that hides a coin is worse than no scenery.
+    const taken = new Set();
+    const claim = (x, y) => { for (let d = -1; d <= 1; d++) taken.add(`${x + d},${y}`); };
+    if (built.start) claim(Math.floor(built.start.x / T), Math.floor(built.start.y / T));
+    for (const e of built.ents) claim(Math.floor(e.x / T), Math.floor(e.y / T));
+
+    // The top surface of each column, which is where scenery belongs.
+    const spots = [];
+    for (let x = 1; x < w - 1; x++) {
+      for (let y = 1; y < h; y++) {
+        if (solid(x, y) && !solid(x, y - 1) && !solid(x, y - 2)) { spots.push([x, y]); break; }
+      }
+    }
+
+    // Distant scenery stands on the same surfaces as the rest, and is simply
+    // drawn behind the level. Scattering it at a random height instead left
+    // wall fragments hanging in the sky, which reads as debris, not depth.
+    if (D.back.length) {
+      for (const [x, y] of spots) {
+        if (r() > .14) continue;
+        props.push({ i: pick(r, D.back), x: x * T + T / 2, y: y * T + 3, t: dim(D.tint), b: 1 });
+      }
+    }
+
+    const density = [.30, .24, .18][o.difficulty] ?? .24;
+    for (const [x, y] of spots) {
+      if (props.length >= 60) break;
+      if (r() > density) continue;
+      if (taken.has(`${x},${y - 1}`)) continue;
+      props.push({ i: pick(r, D.on), x: x * T + T / 2, y: y * T, t: D.tint });
+      claim(x, y - 1);
+    }
+    return props;
+  }
+
   function generate(prompt, seed) {
     const want = read(prompt);
     const s = seed || Math.random().toString(36).slice(2, 8);
@@ -545,6 +613,7 @@
       lives: want.lives ?? [4, 3, 2][difficulty],
       level: { w, h, tiles: built.g.map(row => row.join('')).join('\n') },
       entities: built.ents,
+      props: dress(r, o, built),
       rules: { collect: need, keys },
       script: script(r, o, need),
     };
