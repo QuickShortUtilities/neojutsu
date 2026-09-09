@@ -441,6 +441,18 @@
     const fixedScreen = spec.mode === 'invaders' || spec.mode === 'blocks';
     const sizeField = $('g-size') && $('g-size').closest('label');
     if (sizeField) sizeField.hidden = fixedScreen;
+    /* Not every game has a Game Boy equivalent. A well is rules rather than a
+       room, and GB Studio has no scene type that is one - the exporter has
+       said so from the start, but only once you had pressed the button and
+       waited. Asked here instead, off the exporter's own table. */
+    const gbs = $('g-gbs'), types = window.NeoGBS && window.NeoGBS.SCENE_TYPE;
+    if (gbs && types) {
+      const travels = types[spec.mode] !== null;
+      gbs.disabled = !travels;
+      gbs.title = travels
+        ? 'A GB Studio project: open the folder there and Build to get a .gb'
+        : `A ${spec.mode} game is its rules rather than its rooms, and only rooms travel this way`;
+    }
 
     // Which sky this game came with: one of the presets, or its own.
     if (spec.sky0 && spec.sky1) {
@@ -921,9 +933,23 @@
         });
       }
 
+      /* Who says it. The engine has always resolved a speaker by tag as well
+         as by player - `speaker()` looks for a live piece with that name - and
+         the panel only ever offered the two players, so the one thing a story
+         beat usually is, a guard saying something as you walk past him, could
+         not be written here at all. Every name in the game is on the list, and
+         P2 only where there is a P2 to speak: offered on a one-player game it
+         quietly spoke as P1. */
       const who = document.createElement('select');
       who.className = 'mini-select';
-      for (const [v, label] of [['player', 'P1'], ['p2', 'P2']]) {
+      const named = new Set();
+      for (const e of (game ? game.entities : [])) if (e.tag) named.add(e.tag);
+      const twoUp = !!(spec && (spec.coop || spec.players === 2));
+      const voices = [['player', 'P1'], ...(twoUp ? [['p2', 'P2']] : []),
+                      ...[...named].sort().map(t => [t, t])];
+      // A beat may already name someone who has since been deleted or renamed.
+      if (beat.who && !voices.some(([v]) => v === beat.who)) voices.push([beat.who, `${beat.who} (gone)`]);
+      for (const [v, label] of voices) {
         const o = document.createElement('option'); o.value = v; o.textContent = label;
         if ((beat.who || 'player') === v) o.selected = true;
         who.append(o);

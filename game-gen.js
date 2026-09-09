@@ -352,7 +352,11 @@
     // The islands, and a marker line down the middle where there is not one.
     const split = new Array(h).fill(false);
     let side = 1;
-    for (let y = h - 12; y > 6; y -= 12 + Math.floor(r() * 9)) {
+    /* The first island is a good way up the road. Eight rows from the start
+       line is under a second at racing speed, which is not enough to read
+       where the road goes - and a car that has not moved yet is a car whose
+       driver has not seen it. */
+    for (let y = h - 26; y > 6; y -= 12 + Math.floor(r() * 9)) {
       const run = 4 + Math.floor(r() * 5);
       for (let i = 0; i < run && y - i > 3; i++) {
         const [l, rt] = lane[y - i];
@@ -1518,18 +1522,20 @@
          level per genre however many times you press the button. */
       const shape = mode === 'racer' ? (r() < .42 ? 'circuit' : 'roadway')
                                      : (r() < .42 ? 'starkeep' : 'starlane');
-      // Reported back like every other choice, so the harness can tell which
-      // of the two it got rather than having to infer it from the tilemap.
-      o.shape = shape; want.shape = shape;
+      o.shape = shape;
       built = SHAPES[shape](r, o);
       populate(r, o, built, mode);
     } else if (mode === 'scramble') {
+      o.shape = 'cavernRun';
       built = cavernRun(r, o);
     } else if (mode === 'rider') {
+      o.shape = 'ramps';
       built = ramps(r, o);
     } else if (mode === 'blocks') {
+      o.shape = 'well';
       built = blocks(r, o);
     } else if (mode === 'invaders') {
+      o.shape = 'formation';
       built = invaders(r, o);
     } else if (mode === 'topdown') {
       o.shape = chooseTopdown(want, r);
@@ -1577,6 +1583,11 @@
     }
     /* A board to clear has no target to hit and no flag to reach - clearing it
        is the ending. Say so in the rules, and do not also ask for a number. */
+    /* What it turned out to be. `want.shape` until now was whatever the
+       words asked for, so a falling-block game reported "cavern" because the
+       description said "in a cave" - a shape that mode has no builder for and
+       never used. What is reported is the builder that ran. */
+    want.shape = o.shape;
     const clearAll = !!built.clearAll;
     const clearFoes = !!built.clearFoes;
     const lineTarget = built.lines || 0;

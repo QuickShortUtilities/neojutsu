@@ -176,6 +176,46 @@ with sync_playwright() as p:
     if report['editor']['beatsAfterUndo'] >= report['editor']['beats']:
         issues.append('undo did not take the beat back')
 
+    # ---- and anyone in the game can be the one who says it ----
+    report['voices'] = page.evaluate("""() => {
+      const $ = i => document.getElementById(i);
+      const pick = id => { const s = $('g-template'); s.value = id;
+                           s.dispatchEvent(new Event('change', { bubbles: true })); };
+      const rowVoices = () => {
+        const row = document.querySelector('#g-story-rows .story-row');
+        if (!row) return [];
+        const sels = row.querySelectorAll('select');
+        return [...sels[sels.length - 1].options].map(o => o.value);
+      };
+      const out = {};
+      pick('platformer');
+      const foe = NeoGameStudio.game.entities.find(e => e.def.enemy);
+      if (foe) foe.tag = 'guard';
+      $('g-story-add').click();
+      out.oneUp = rowVoices();
+      pick('sofa');
+      $('g-story-add').click();
+      out.twoUp = rowVoices();
+      // a beat naming somebody who is gone keeps its name rather than
+      // being quietly reassigned to the player
+      pick('platformer');
+      const sp = NeoGameStudio.game.snapshot();
+      sp.story = [{ at: 1, who: 'nobodyhere', text: 'still here' }];
+      NeoGameStudio.build(sp);
+      out.missing = rowVoices();
+      out.kept = ((NeoGameStudio.game.story || [])[0] || {}).who;
+      return out;
+    }""")
+    v = report['voices']
+    if 'guard' not in v['oneUp']:
+        issues.append(f"a named piece cannot be given a line: {v['oneUp']}")
+    if 'p2' in v['oneUp']:
+        issues.append('a one-player game offers P2, who does not exist to speak')
+    if 'p2' not in v['twoUp']:
+        issues.append(f"a two-player game does not offer P2: {v['twoUp']}")
+    if v['kept'] != 'nobodyhere':
+        issues.append(f"a beat lost its speaker when they left the level: {v['kept']!r}")
+
     if err: issues.append(f'page errors: {err[:3]}')
     b.close()
 

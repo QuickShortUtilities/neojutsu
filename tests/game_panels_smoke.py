@@ -74,6 +74,7 @@ with sync_playwright() as pw:
           goal: ($('g-goal').selectedOptions[0] || {}).textContent || '',
           goalLocked: $('g-goal').disabled,
           sizeShown: shown($('g-size') && $('g-size').closest('label')),
+          canExport: !($('g-gbs') || {}).disabled,
           // Which scripts the panel is willing to paste into this game.
           recipes: [...document.querySelectorAll('#g-recipes [data-recipe]')]
                      .filter(b => !b.hidden).map(b => b.dataset.recipe),
@@ -124,6 +125,10 @@ with sync_playwright() as pw:
         fixed = mode in ('invaders', 'blocks')
         if row['sizeShown'] == fixed:
             issues.append(f"{row['id']} ({mode}) offers a level size: {row['sizeShown']}")
+        # And the Game Boy export is offered only where there is one to make.
+        travels = mode != 'blocks'
+        if row['canExport'] != travels:
+            issues.append(f"{row['id']} ({mode}) export button enabled: {row['canExport']}")
 
     # A recipe is a script the panel will paste in. The generator has always
     # filtered them by mode and ending; the panel used to offer all of them.

@@ -520,6 +520,7 @@ def main():
     kept, rejects = [], []
     seen = set()
     reasons = Counter()
+    shapes = Counter()
 
     srv, port = serve()
     try:
@@ -572,6 +573,12 @@ def main():
                                         'spec': spec if spec else None})
                     else:
                         kept.append((prompt, spec))
+                        # Which layout it came out as. Two modes have two
+                        # shapes each and the tilemap does not say which, so
+                        # without this there is no way to tell a corpus that
+                        # covers both from one that only ever built the first.
+                        sh = (r.get('understood') or {}).get('shape')
+                        if sh: shapes.update([f"{spec.get('mode')}:{sh}"])
                 print(f'\rkept {len(kept)}/{args.count}  tried {guard}  '
                       f'rejected {len(rejects)}', end='', file=sys.stderr)
             b.close()
@@ -612,6 +619,7 @@ def main():
         'rejected': len(rejects),
         'accept_rate': round(len(kept) / max(1, len(kept) + len(rejects)), 3),
         'chars': {'min': sizes[0], 'median': sizes[len(sizes) // 2], 'max': sizes[-1]},
+        'by_shape': dict(sorted(shapes.items())),
         'top_rejections': dict(reasons.most_common(6)),
     }, indent=2))
 
