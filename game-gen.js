@@ -934,10 +934,20 @@
     const difficulty = want.difficulty ?? Math.floor(r() * 3);
     const size = want.size || pick(r, ['small', 'normal', 'wide']);
 
+    /* How big. These were four, three and three fixed pairs, so every game
+       ever generated was one of ten canvases - which is a thing a model
+       would learn as a rule rather than as a habit. The shapes still mean
+       what they meant; they just are not all identical to the tile. */
+    const jog = (v, by, lo) => Math.max(lo, v + Math.round((r() - 0.5) * 2 * by));
     let w, h;
-    if (mode === 'racer' || mode === 'shmup') [w, h] = [20, pick(r, [70, 90, 120])];
-    else if (mode === 'topdown') [w, h] = pick(r, [[26, 20], [30, 22], [34, 24]]);
-    else [w, h] = { small: [28, 16], normal: [40, 18], wide: [56, 18], tall: [22, 34] }[size];
+    if (mode === 'racer' || mode === 'shmup') [w, h] = [jog(20, 2, 16), jog(pick(r, [70, 90, 120]), 12, 56)];
+    else if (mode === 'topdown') {
+      const [bw, bh] = pick(r, [[26, 20], [30, 22], [34, 24]]);
+      [w, h] = [jog(bw, 4, 22), jog(bh, 3, 18)];
+    } else {
+      const [bw, bh] = { small: [28, 16], normal: [40, 18], wide: [56, 18], tall: [22, 34] }[size];
+      [w, h] = [jog(bw, 4, 20), jog(bh, 2, 14)];
+    }
 
     const armed = !!(want.abilities || []).includes('aimLock');
     const o = { w, h, mech, theme, difficulty, timed: !!want.timed, boss: !!want.boss, armed };
