@@ -235,7 +235,7 @@
      better at being people than a 1-bit silhouette is. */
   // The mode owns the vehicles, because the mode is the vehicle: you are a
   // car in a race and a ship in space whatever the level is called.
-  const PLAYER_BY_MODE = { racer: 990, shmup: 1041, invaders: 1041 };
+  const PLAYER_BY_MODE = { racer: 990, shmup: 1041, invaders: 1041, rider: 992 };
   // A category may only ask for a body that walks. A shooter played as a
   // platformer is a person with a gun, not a rocket standing on a ledge.
   const PLAYER_BY_CAT = { scifi: 324, strategy: 1022 };

@@ -97,6 +97,11 @@
     if (/pokemon|pok\u00e9mon|turn.?based|creature battl|monster battl|rpg battl|duel/.test(raw)) {
       want.mode = 'topdown'; want.fights = true;
     }
+    /* A bike over hills, which is a different game from a car on a road: one
+       is about steering and the other is about what angle you land at. */
+    else if (/motocross|dirt bike|excitebike|stunt bike|bike over|\brider\b|trials\b/.test(raw)) {
+      want.mode = 'rider';
+    }
     else if (/tetris|falling blocks?|block puzzle|stacker|drop the blocks|line clear/.test(raw)) {
       want.mode = 'blocks';
     }
@@ -777,6 +782,54 @@
              keys: 0, beat: rivals, grace: 1.4 };
   }
 
+  /* A course to ride. Rolling ground with ramps thrown up out of it and gaps
+     cut through it, laid out left to right, with the finish at the far end.
+     The ground is a height line rather than a set of ledges: a rider is not
+     hopping between platforms, they are following a surface, and the surface
+     is what decides the angle they are in the air at. */
+  function ramps(r, o) {
+    const { w, h, difficulty } = o;
+    const g = blank(w, h);
+    const base = h - 5;
+    const top = new Array(w).fill(base);
+    /* Rolling, not stepped. Changing height every sixth column by two or
+       three gave long flats with a cliff between them; a rider wants a
+       surface that leans, so it moves a tile at a time and more often. */
+    let y = base, drift = 0;
+    for (let x = 0; x < w; x++) {
+      if (r() < 0.34) drift = Math.round((r() - 0.5) * 2.4);
+      y = Math.max(5, Math.min(h - 3, y + drift));
+      top[x] = y;
+    }
+    // Ramps: a short run of rising ground with nothing on the far side of it.
+    const jumps = [];
+    for (let x = 8; x < w - 12; x += 9 + Math.floor(r() * 8)) {
+      const rise = 2 + Math.floor(r() * (2 + difficulty));
+      const run = 3 + Math.floor(r() * 3);
+      for (let i = 0; i < run; i++) {
+        if (x + i < w) top[x + i] = Math.max(4, top[x] - Math.round(rise * (i + 1) / run));
+      }
+      jumps.push(x + run);
+      const gap = 2 + Math.floor(r() * (1 + difficulty));
+      for (let i = 0; i < gap; i++) if (x + run + i < w - 4) top[x + run + i] = -1;
+    }
+    for (let x = 0; x < w; x++) {
+      if (top[x] < 0) continue;                          // a gap has no ground
+      for (let yy = top[x]; yy < h; yy++) put(g, x, yy, yy === top[x] ? '1' : '2');
+    }
+    // The finish, as a strip you ride into.
+    for (let yy = 0; yy < h; yy++) put(g, w - 2, yy, 'i');
+
+    const ents = [];
+    for (const jx of jumps) {
+      if (jx + 1 >= w - 4) continue;
+      const near = top[jx - 1] >= 0 ? top[jx - 1] : base;
+      ents.push({ type: 'coin', x: (jx + 1) * T, y: Math.max(2, near - 4) * T });
+    }
+    const sy = top[2] >= 0 ? top[2] : base;
+    return { g, ents, start: { x: 2 * T, y: (sy - 2) * T }, keys: 0, ground: null };
+  }
+
   const TOPDOWN_SHAPES = { rooms: tdRooms, arena: tdArena, cross: topdown,
                            maze: tdMaze, quest: tdQuest };
 
@@ -1088,7 +1141,10 @@
     /* Nothing in the play area of a fixed shooter. The whole screen is the
        fight, and a tree standing in it looks like a thing you are meant to
        shoot at. */
-    if (o.mode === 'invaders' || o.mode === 'blocks') return [];
+    /* Nothing standing on the track. A course is read at speed and the
+       terrain is the whole of the information; scenery in the middle of it is
+       one more thing to mistake for ground. */
+    if (o.mode === 'invaders' || o.mode === 'blocks' || o.mode === 'rider') return [];
     const { w, h } = o, g = built.g, props = [];
     /* Solid means solid, not "not empty". Road, water, grass and a checkpoint
        are all tiles you walk through, and counting them as ground meant a
@@ -1181,6 +1237,8 @@
     // A fixed screen is the screen. Nothing about it scrolls, so nothing
     // about it may be bigger than what you can see.
     if (mode === 'invaders' || mode === 'blocks') [w, h] = [20, 18];
+    // A course is long and not very tall: it is a journey along a surface.
+    else if (mode === 'rider') [w, h] = [jog(pick(r, [96, 128, 160]), 12, 72), 18];
     else if (mode === 'racer' || mode === 'shmup') [w, h] = [jog(20, 2, 16), jog(pick(r, [70, 90, 120]), 12, 56)];
     else if (mode === 'topdown') {
       /* A chase has to fit the screen. Half the game is seeing where the
@@ -1201,6 +1259,8 @@
     if (mode === 'racer' || mode === 'shmup') {
       built = (mode === 'racer' ? roadway : starlane)(r, o);
       populate(r, o, built, mode);
+    } else if (mode === 'rider') {
+      built = ramps(r, o);
     } else if (mode === 'blocks') {
       built = blocks(r, o);
     } else if (mode === 'invaders') {
@@ -1261,6 +1321,11 @@
     const t = THEMES[theme];
     const player = { char: want.char || t.char };
     if (mode === 'shmup' || mode === 'invaders') player.attack = true;
+    // A bike has more of everything than a person on foot.
+    /* Quick, but not so quick that a course is over before you have read it:
+       at a hundred and thirty a bike crossed ninety tiles in three seconds,
+       which is four landings and no time to think between them. */
+    if (mode === 'rider') { player.speed = 96; player.accel = 260; player.jump = 205; }
     if (mode === 'invaders') player.speed = 96;
     if (mode === 'racer' || mode === 'shmup') player.speed = 96;
     for (const a of (want.abilities || [])) player[a] = true;

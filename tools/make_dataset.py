@@ -39,6 +39,13 @@ KINDS = [
                   'a wave of aliens coming down']),
     ('topdown',  ['a pac-man style maze chase', 'a maze chase with ghosts',
                   'a dot muncher in a maze', 'a maze where ghosts chase you']),
+    ('topdown',  ['a pokemon style game with turn based battles',
+                  'an overworld with creature battles', 'a game of duels on a map',
+                  'a monster battler']),
+    ('rider',    ['a motocross rider over hills', 'a dirt bike course',
+                  'a stunt bike run', 'a trials course over jumps']),
+    ('blocks',   ['a tetris style falling blocks game', 'a falling block puzzle',
+                  'a stacker', 'a line clearing puzzle']),
 ]
 PLACES = {
     'cave':    ['underground', 'in a cave', 'in a dark cavern', 'in a deep mine'],
@@ -100,7 +107,14 @@ OPENERS = ['Make ', 'Create ', 'Build ', 'Design ', 'Generate ', '']
 ARCADE = {'a space invaders game', 'a fixed shooter', 'a galaga style game',
           'a wave of aliens coming down', 'a pac-man style maze chase',
           'a maze chase with ghosts', 'a dot muncher in a maze',
-          'a maze where ghosts chase you'}
+          'a maze where ghosts chase you',
+          'a tetris style falling blocks game', 'a falling block puzzle',
+          'a stacker', 'a line clearing puzzle',
+          'a pokemon style game with turn based battles',
+          'an overworld with creature battles', 'a game of duels on a map',
+          'a monster battler',
+          'a motocross rider over hills', 'a dirt bike course',
+          'a stunt bike run', 'a trials course over jumps'}
 
 
 def collect_of(spec):

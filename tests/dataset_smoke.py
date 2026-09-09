@@ -55,7 +55,7 @@ try:
 
     # genres are labelled and kept apart
     modes = {s.get('mode') for s in specs}
-    if not modes <= {'platform', 'topdown', 'racer', 'shmup', 'invaders'}:
+    if not modes <= {'platform', 'topdown', 'racer', 'shmup', 'invaders', 'blocks', 'rider'}:
         issues.append(f'unexpected modes: {modes}')
     gdir = tmp / 'genre'
     written = {p.stem for p in gdir.glob('*.jsonl')} if gdir.exists() else set()

@@ -199,7 +199,12 @@
        put the next one. It takes the tilemap, the renderer, the palette, the
        HUD, the script layer and the packaging exactly as they are - what it
        supplies is its own idea of what a frame is. */
-    const MODES = ['platform', 'topdown', 'racer', 'shmup', 'invaders', 'blocks'];
+    /* `rider` is side-on and always moving: a bike over hills, where the
+       question is not whether you can reach the ledge but what angle you are
+       at when you meet the ground again. Same gravity and same collision as a
+       platformer - what it adds is a throttle you cannot let go of and a
+       pitch that has to be level when you land. */
+    const MODES = ['platform', 'topdown', 'racer', 'shmup', 'invaders', 'blocks', 'rider'];
     const mode = MODES.includes(spec.mode) ? spec.mode : 'platform';
     // Racer and shmup scroll the world past you; you never walk, you steer.
     const scrolling = mode === 'racer' || mode === 'shmup';
@@ -275,6 +280,8 @@
         sprite: (n === 2 ? P.sprite2 : P.sprite) ?? auto,
         x: start.x + dx, y: start.y, w: 6, h: 12, vx: 0, vy: 0, grounded: false,
         face: 1, aimX: 1, aimY: 0, coyote: 0, buffer: 0, walk: 0,
+        // Which way the bike is pointing, in radians. Only a rider uses it.
+        pitch: 0, crash: 0,
         wall: 0, dash: 0, dashLeft: P.dash ? 1 : 0, doubleLeft: P.doubleJump ? 1 : 0,
         shotCool: 0, shotHeld: false, bWasDown: false, aWasDown: false,
         // A script may command a body the same way it commands an actor.
@@ -692,7 +699,13 @@
       }
 
       // horizontal
-      const dir = scripted || ((input.right ? 1 : 0) - (input.left ? 1 : 0));
+      /* A rider's throttle is always on. It has to be here rather than in the
+         mode's own branch, because the friction that runs immediately below
+         takes it all back off again otherwise - a bike with no key held moved
+         ten pixels in two seconds. */
+      const dir = mode === 'rider'
+        ? (player.crash > 0 ? 0 : 1)
+        : (scripted || ((input.right ? 1 : 0) - (input.left ? 1 : 0)));
       const groundInfo = player.grounded ? tileInfo(lvl.at(Math.floor((player.x + player.w / 2) / TILE),
                                                            Math.floor((player.y + player.h + 1) / TILE))) : null;
       iceFloor = !!(groundInfo && groundInfo.ice);
@@ -755,6 +768,28 @@
           if (inWater && (input.a || input.up)) player.vy = -50;
           // sliding down a wall is slower than falling
           if (P.wallJump && player.wall && player.vy > 30 && !player.grounded) player.vy = 30;
+        }
+      } else if (mode === 'rider') {
+        /* A bike over hills. The throttle is always on, so the question is
+           never whether you will reach the next ledge - it is what angle you
+           are at when the ground comes back. Up and down tilt you in the air;
+           land nose-first or tail-first and you go over the handlebars. */
+        if (player.crash > 0) {
+          player.crash -= dt;
+          player.vy = Math.min(P.maxFall, player.vy + P.gravity * dt);
+        } else {
+          player.face = 1;
+          if (player.grounded) {
+            // On the ground the bike follows the ground, and A pops a wheelie
+            // off it.
+            player.pitch += (0 - player.pitch) * Math.min(1, dt * 9);
+            if (input.a && !player.aWasDown) { player.vy = -P.jump * 0.92; say('jump'); }
+          } else {
+            const tilt = (input.up ? -1 : 0) + (input.down ? 1 : 0);
+            player.pitch = Math.max(-1.5, Math.min(1.5, player.pitch + tilt * 2.6 * dt));
+          }
+          player.aWasDown = input.a;
+          player.vy = Math.min(P.maxFall, player.vy + P.gravity * dt);
         }
       } else if (mode === 'invaders') {
         /* You hold the bottom of the screen and nothing else. One axis, no
@@ -829,8 +864,22 @@
         return;
       }
 
+      const wasGrounded = player.grounded;
       player.grounded = false;
+      const keptVx = player.vx;
       const hx = moveAxis(player, lvl, player.vx * dt, 0, wasFalling, ctx2);
+      /* A rider rides up a slope. The collision here has no notion of one - a
+         tile is a wall however low it is - so a course that rolls a tile at a
+         time stopped the bike dead at the first rise, four tiles in. If what
+         is in the way is one tile high and there is room over it, ride over
+         it rather than into it. */
+      if (mode === 'rider' && hx.wall && player.crash <= 0) {
+        const backX = player.x, backY = player.y;
+        player.y -= TILE;
+        player.vx = keptVx;
+        const again = moveAxis(player, lvl, keptVx * dt, 0, wasFalling, ctx2);
+        if (again.wall) { player.x = backX; player.y = backY; player.vx = 0; }
+      }
       player.wall = (!player.grounded && hx.wall) ? hx.wall : 0;
       const hy = moveAxis(player, lvl, 0, player.vy * dt, wasFalling, ctx2);
       // Probe for ground rather than trusting the collision that just happened:
@@ -846,6 +895,19 @@
         }
       }
       if (player.grounded) { player.doubleLeft = P.doubleJump ? 1 : 0; player.dashLeft = P.dash ? 1 : 0; }
+      /* The landing. A rider who meets the ground at an angle goes down, and
+         that is the whole of the game: everything before the landing is
+         deciding what angle you will be at. It costs speed and a moment, not
+         a life - a game that killed you for a bad landing would be a game
+         nobody finishes. */
+      if (mode === 'rider' && player.grounded && !wasGrounded && player.crash <= 0) {
+        if (Math.abs(player.pitch) > 0.55) {
+          player.crash = 1.1; player.vx *= 0.2; shake = 5;
+          message = 'DOWN'; messageAt = elapsed; say('hurt'); fire('hurt');
+        } else {
+          say('land');
+        }
+      }
       player.walk += Math.abs(player.vx) * dt * 0.35;
       if (player.hurt > 0) player.hurt = Math.max(0, player.hurt - dt);
 
@@ -1658,6 +1720,16 @@
            up the screen should not be lying on their side. The art is drawn
            facing right, so right is no turn and the rest follow clockwise. */
         const turn = (vehicle && mode === 'topdown') ? art.turnFor(b.sprite, b.aimX, b.aimY) : 0;
+        /* A bike leans. Seeing the angle you are at is the whole information
+           this game gives you before a landing, so it is not a flourish - a
+           rider who cannot see their pitch is guessing. */
+        const leaning = mode === 'rider' && Math.abs(b.pitch) > 0.02;
+        if (leaning) {
+          ctx.save();
+          ctx.translate(psx, psy - b.h / 2);
+          ctx.rotate(b.pitch);
+          ctx.translate(-psx, -(psy - b.h / 2));
+        }
         const pArt = useArt && typeof b.sprite === 'number'
           && art.draw(ctx, b.sprite, psx, psy + pStep,
                       { colour: b.tint, outline: '#0a0714', turn,
@@ -1665,6 +1737,7 @@
         if (pArt) { /* drawn from the atlas */ }
         else if (chars && chars[b.char]) window.NeoScene.drawChar(ctx, chars[b.char], psx, psy, 1, b.walk, b.face);
         else { ctx.fillStyle = b.tint; ctx.fillRect(psx - 3, psy - 12, 6, 12); }
+        if (leaning) ctx.restore();
         // A marker over player two, so nobody has to ask which one they are.
         if (coop && b.n === 2) { ctx.fillStyle = b.tint; ctx.fillRect(psx - 1, psy - b.h - 5, 2, 2); }
       }

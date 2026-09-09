@@ -159,6 +159,11 @@
       $('g-help').textContent = 'Left and right to move · Z to turn · Down to drop';
       return;
     }
+    if (spec.mode === 'rider') {
+      $('g-help').textContent = 'The throttle is always on · Z to jump · '
+        + 'up and down to level the bike before you land';
+      return;
+    }
     /* A run of rooms keeps its rules on the room, not on the game, so a
        generated quest was told to walk and jump and never told there were
        fights in it. */
@@ -414,7 +419,7 @@
   };
   const MODE_SAID = { topdown: 'top-down', platform: 'platformer',
                       racer: 'racing', shmup: 'a shooter', invaders: 'a fixed shooter',
-                      blocks: 'falling blocks' };
+                      blocks: 'falling blocks', rider: 'a rider' };
 
   function describeUnderstanding(u) {
     const bits = [];
