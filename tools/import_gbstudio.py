@@ -102,6 +102,26 @@ def build_spec(scene, name, rng):
     return furnish(grid, w, h, mode, name)
 
 
+def routines_used_by(script_text, by_name):
+    """Only the routines a script actually calls, and the ones those call.
+
+    Prepending every routine to every script made 400 examples that were 98%
+    identical: the same four hundred lines of definitions, then a dozen lines
+    of the game. A model learning from that learns the preamble.
+    """
+    import re
+    want, seen, out = set(re.findall(r'^\s*do\s+(\w+)', script_text, re.M)), set(), []
+    while want:
+        name = want.pop()
+        if name in seen or name not in by_name:
+            continue
+        seen.add(name)
+        body = by_name[name]
+        out.append(body)
+        want |= set(re.findall(r'^\s*do\s+(\w+)', body, re.M)) - seen
+    return out
+
+
 def emit_routines(ctx, defs):
     """Every routine reachable from the scripts, not only the ones called
     directly. Translating a routine body turns up more routines, so this runs
@@ -117,7 +137,7 @@ def emit_routines(ctx, defs):
         ctx.self_tag = ''
         lines = [l for l in gbs_script.translate(defs.get(name) or [], ctx) if l.strip()]
         body = '\n'.join('  ' + l for l in lines) if lines else '  print "todo"'
-        out.append(f'define {name}\n{body}\nend')
+        out.append((name, f'define {name}\n{body}\nend'))
         pending |= (ctx.used_routines - emitted)
     return out
 
@@ -330,15 +350,17 @@ def main():
     if args.scripts and scripts:
         sp = ROOT / args.scripts
         sp.parent.mkdir(parents=True, exist_ok=True)
-        preamble = ('\n\n'.join(routines) + '\n\n') if routines else ''
+        by_name = dict(routines)
         with sp.open('w', encoding='utf-8') as fh:
             for r in scripts:
                 if not r['describe']:
                     continue
+                needed = routines_used_by(r['script'], by_name)
+                body = ('\n\n'.join(needed) + '\n\n' if needed else '') + r['script']
                 fh.write(json.dumps({'messages': [
                     {'role': 'system', 'content': 'You write NeoJutsu game scripts. Reply with script and nothing else.'},
                     {'role': 'user', 'content': r['describe']},
-                    {'role': 'assistant', 'content': preamble + r['script']},
+                    {'role': 'assistant', 'content': body},
                 ]}, ensure_ascii=False) + '\n')
 
     from playwright.sync_api import sync_playwright

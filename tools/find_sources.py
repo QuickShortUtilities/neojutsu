@@ -12,7 +12,7 @@ fetch_sources.py wants, so a new find is a copy and paste.
 No token needed; unauthenticated search is rate limited to a handful of
 requests a minute, which is why it pauses between them.
 """
-import argparse, json, subprocess, sys, time
+import argparse, json, os, subprocess, sys, time
 
 API = 'https://api.github.com'
 OK_LICENCES = {'MIT', 'Apache-2.0', 'BSD-3-Clause', 'BSD-2-Clause', 'CC0-1.0',
@@ -34,16 +34,48 @@ RECREATION = ('zelda', 'mario', 'pokemon', 'pokémon', 'metroid', 'kirby', 'soni
               'link\'s awakening', 'awakening')
 
 
+class RateLimited(Exception):
+    pass
+
+
+def token():
+    return os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN') or ''
+
+
 def get(url):
-    r = subprocess.run(['curl', '-sS', '--fail', '--max-time', '40',
-                        '-H', 'Accept: application/vnd.github+json', url],
-                       capture_output=True, timeout=60)
-    if r.returncode != 0:
+    """Returns parsed JSON, or raises if GitHub is throttling us.
+
+    Unauthenticated calls are capped at sixty an hour, and a throttled reply
+    looks nothing like a missing file - so telling them apart matters. The
+    first version did not, and reported every repository as having no project
+    in it the moment the budget ran out, which is a confident lie.
+    """
+    cmd = ['curl', '-sS', '--max-time', '40', '-w', '\n%{http_code}',
+           '-H', 'Accept: application/vnd.github+json']
+    if token():
+        cmd += ['-H', f'Authorization: Bearer {token()}']
+    r = subprocess.run(cmd + [url], capture_output=True, timeout=60)
+    body, _, code = r.stdout.decode('utf-8', 'replace').rpartition('\n')
+    code = code.strip()
+    if code in ('403', '429'):
+        raise RateLimited(url)
+    if code != '200':
         return None
     try:
-        return json.loads(r.stdout)
+        return json.loads(body)
     except Exception:
         return None
+
+
+def budget():
+    try:
+        d = get(f'{API}/rate_limit')
+    except RateLimited:
+        return 0, 0
+    if not d:
+        return None, None
+    core = d['resources']['core']
+    return core['remaining'], core['limit']
 
 
 def looks_recreated(repo):
@@ -76,8 +108,20 @@ def main():
     ap.add_argument('--json', default='')
     args = ap.parse_args()
 
+    left, cap = budget()
+    if left is not None:
+        where = 'with a token' if token() else 'unauthenticated'
+        print(f'GitHub budget: {left}/{cap} calls ({where})', file=sys.stderr)
+        if left is not None and left < 10:
+            print('Too few calls left to check anything honestly. Either wait for the\n'
+                  'hour to roll over, or set GITHUB_TOKEN to raise the cap to 5000:\n'
+                  '  export GITHUB_TOKEN=ghp_...   (a token with no scopes is enough)',
+                  file=sys.stderr)
+            return 2
+
     seen, found = set(), []
     for q in args.queries:
+      try:
         url = f'{API}/search/repositories?q={q.replace(" ", "+")}&sort=stars&per_page={args.per_query}'
         d = get(url)
         time.sleep(args.pause)
@@ -93,7 +137,11 @@ def main():
             if lic not in OK_LICENCES:
                 continue
             print(f'  checking {name} …', end=' ', flush=True, file=sys.stderr)
-            info = inspect(name)
+            try:
+                info = inspect(name)
+            except RateLimited:
+                print('rate limited', file=sys.stderr)
+                raise
             time.sleep(args.pause)
             if not info:
                 print('no project file', file=sys.stderr)
@@ -112,6 +160,10 @@ def main():
             found.append(entry)
             print(f"ok · {lic} · {info['scenes']} scenes · "
                   f"{'original' if entry['original'] else 'recreation'}", file=sys.stderr)
+      except RateLimited:
+        print(f'\nRan out of GitHub calls part way through. {len(found)} found so far;\n'
+              'set GITHUB_TOKEN to keep going without waiting an hour.', file=sys.stderr)
+        break
 
     found.sort(key=lambda e: (-e['original'], -e['stars']))
     print(f'\n{len(found)} usable project(s)\n')
