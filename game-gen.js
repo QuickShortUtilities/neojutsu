@@ -91,7 +91,13 @@
     /* A maze you are chased round, eating as you go, is a different game from
        a dungeon with a flag in it - so it is asked first, before "maze" on its
        own settles for the dungeon. */
-    if (/tetris|falling blocks?|block puzzle|stacker|drop the blocks|line clear/.test(raw)) {
+    /* Turn-based fights on a map. A different thing entirely from walking
+       into an enemy and losing a life, and until now there was no way to ask
+       for one. */
+    if (/pokemon|pok\u00e9mon|turn.?based|creature battl|monster battl|rpg battl|duel/.test(raw)) {
+      want.mode = 'topdown'; want.fights = true;
+    }
+    else if (/tetris|falling blocks?|block puzzle|stacker|drop the blocks|line clear/.test(raw)) {
       want.mode = 'blocks';
     }
     else if (/space invaders|invaders|galaga|galaxian|fixed shooter|wave of aliens/.test(raw)) {
@@ -728,7 +734,47 @@
              keys: 0, lines: 6 + difficulty * 4 };
   }
 
-  const TOPDOWN_SHAPES = { rooms: tdRooms, arena: tdArena, cross: topdown, maze: tdMaze };
+  /* An overworld with rivals in it. The walking half of an adventure game:
+     open country, a few walls to give it shape, and a handful of things that
+     stop the map and start a fight when you meet them. */
+  function tdQuest(r, o) {
+    const { w, h, difficulty } = o;
+    const g = Array.from({ length: h }, () => Array(w).fill('0'));
+    for (let x = 0; x < w; x++) { g[0][x] = '1'; g[h - 1][x] = '1'; }
+    for (let y = 0; y < h; y++) { g[y][0] = '1'; g[y][w - 1] = '1'; }
+    // Copses and outcrops, so it is country rather than a field.
+    for (let i = 0; i < 8 + difficulty * 4; i++) {
+      const bw = 1 + Math.floor(r() * 4), bh = 1 + Math.floor(r() * 3);
+      const bx = 2 + Math.floor(r() * Math.max(1, w - bw - 4));
+      const by = 2 + Math.floor(r() * Math.max(1, h - bh - 4));
+      if (bx < 6 && by < 6) continue;                  // leave the start clear
+      const ch = r() < .35 ? '2' : '1';
+      for (let y = by; y < by + bh; y++) for (let x = bx; x < bx + bw; x++) g[y][x] = ch;
+    }
+    const open = [];
+    for (let y = 1; y < h - 2; y++) for (let x = 1; x < w - 1; x++) {
+      if (g[y][x] === '0' && g[y + 1][x] === '0') open.push([x, y]);
+    }
+    if (open.length < 30) return tdArena(r, o);
+    const start = open[0];
+    const far = open.filter(([x, y]) => Math.hypot(x - start[0], y - start[1]) > 6);
+    const ents = [];
+    const rivals = 3 + difficulty;
+    for (const [x, y] of spread(far.length >= rivals ? far : open, rivals)) {
+      ents.push({ type: 'rival', x: x * T, y: y * T, dir: r() < .5 ? -1 : 1 });
+    }
+    // Something to pick up on the way, because an overworld with nothing in
+    // it but fights is a corridor between fights.
+    for (const [x, y] of spread(open.slice(3), 5)) {
+      if (ents.some(e => Math.abs(e.x - x * T) < T && Math.abs(e.y - y * T) < T)) continue;
+      ents.push({ type: 'coin', x: x * T + 1, y: y * T + 1 });
+    }
+    return { g, ents, start: { x: start[0] * T, y: start[1] * T },
+             keys: 0, beat: rivals, grace: 1.4 };
+  }
+
+  const TOPDOWN_SHAPES = { rooms: tdRooms, arena: tdArena, cross: topdown,
+                           maze: tdMaze, quest: tdQuest };
 
   /* Which overhead layout the words asked for. A tank battle wants open
      ground and cover; a dungeon wants rooms and a locked door; anything else
@@ -757,6 +803,7 @@
        the tank: a tank in a dungeon is a tank in a dungeon, but a request for
        locked rooms answered with an open field is the wrong game. */
     if (want.chase) return 'maze';
+    if (want.fights) return 'quest';
     if (want.mech === 'doors') return 'rooms';
     if (want.abilities && want.abilities.includes('aimLock')) return 'arena';
     if (want.boss) return 'arena';
@@ -1203,6 +1250,7 @@
     const clearAll = !!built.clearAll;
     const clearFoes = !!built.clearFoes;
     const lineTarget = built.lines || 0;
+    const beatTarget = built.beat || 0;
     const pickups = built.ents.filter(e => e.type === 'coin' || e.type === 'gem').length;
     if (want.collect === undefined && pickups && r() < .75) need = Math.max(1, Math.round(pickups * pick(r, [.5, .7, 1])));
 
@@ -1243,6 +1291,7 @@
       rules: clearAll ? { collect: 0, keys, clearAll: true }
            : clearFoes ? { collect: 0, keys, clearFoes: true }
            : lineTarget ? { collect: 0, keys, lines: lineTarget }
+           : beatTarget ? { collect: 0, keys, beat: beatTarget }
            : { collect: need, keys },
       story: story(r, o, need),
       script: script(r, o, need),

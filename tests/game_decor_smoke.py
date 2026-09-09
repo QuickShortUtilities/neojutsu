@@ -141,8 +141,13 @@ with sync_playwright() as p:
     report['generated'] = page.evaluate("""() => {
       const G = window.NeoGameGen, out = {};
       const qs = ['a dark cave with mushrooms', 'a ruined castle with a key', 'a volcano run'];
-      out.runs = qs.map(q => {
-        const g = G.generateValid(q);
+      /* Seeded, so this is a test rather than a dice roll: decor is scattered
+         at a probability per surface, and an unseeded run came back with one
+         prop about once in ten and failed. The playability of a generated
+         game is checked elsewhere; what is checked here is the scattering. */
+      out.runs = qs.map((q, i) => {
+        const g = { spec: G.generate(q, 'decor' + i).spec,
+                    validation: window.NeoGame.validate(G.generate(q, 'decor' + i).spec) };
         const props = g.spec.props || [];
         const lvl = g.spec.level;
         const off = props.filter(pr => pr.x < 0 || pr.y < 0 || pr.x > lvl.w * 8 || pr.y > lvl.h * 8);

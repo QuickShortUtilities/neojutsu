@@ -116,6 +116,10 @@
        standing player in a second and a half, which makes a maze a coin flip
        rather than a chase. */
     ghost:  { w: 8, h: 10, enemy: true, speed: 30, chases: true, sight: 9999, hp: 1 },
+    /* Something you fight rather than something you avoid. Touching it does
+       not take a life; it takes over the screen, and what happens next is
+       turns and a menu rather than jumping and running. */
+    rival:  { w: 8, h: 10, enemy: true, speed: 16, chases: true, sight: 64, hp: 1, fight: true },
     /* A formation moves as one thing, not as a crowd of things that happen to
        be next to each other: they step together, turn together at the wall,
        and drop a row when they turn. Taking one out speeds up the rest. */
@@ -235,6 +239,11 @@
     let doorsOpen, respawn, fired, effects, messageAt, shake = 0;
     // How long the things chasing you have left to be afraid of you.
     let scared = 0;
+    /* A fight in progress: two creatures, their health, whose turn it is and
+       what is being said about it. Null the rest of the time. */
+    let fight = null;
+    // How many have been seen off, for a game whose target is a tally of wins.
+    let beaten = 0;
     /* The falling-block game's whole state. Declared up here with the rest of
        it because reset() runs before the code further down has been reached,
        and a `let` is not available before its own line. */
@@ -337,6 +346,7 @@
       if (scriptEnv) { scriptEnv.vars = {}; scriptFault = ''; scriptLog = []; }
       loadStage(0);
       piece = null; dropAt = 0; moveAt = 0; lines = 0; bag = [];
+      fight = null; beaten = 0;
       if (mode === 'blocks') measureWell();
       if (program) fire('start');
     }
@@ -608,6 +618,15 @@
           loadStage(pendingStage >= 0 ? pendingStage : stageIndex + 1);
           pendingStage = -1; state = 'play'; cutT = 0;
         }
+        return;
+      }
+      /* A fight holds the world still. The clock runs, because a fight takes
+         time, but nothing walks and nothing falls. */
+      if (state === 'fight') {
+        elapsed += dt;
+        fightStep(dt, input);
+        for (const b of bubbles) b.t += dt;
+        if (shake > 0) shake = Math.max(0, shake - dt * 12);
         return;
       }
       if (state !== 'play') return;
@@ -1057,6 +1076,109 @@
       }
     }
 
+    /* ---------- a fight ----------
+       The other half of an adventure game: you walk an overworld, you run
+       into something, and the screen stops being a map and becomes a pair of
+       creatures taking turns at each other. It is a state like the card
+       between stages - the world holds still and the keys mean something
+       else - with three moves, two bars of health, and a short pause between
+       each blow so the reading of it keeps up with the arithmetic. */
+    const MOVES = [
+      { name: 'STRIKE', hit: 0.92, low: 4, high: 7 },
+      { name: 'HEAVY',  hit: 0.58, low: 9, high: 15 },
+      { name: 'GUARD',  hit: 1,    low: 0, high: 0, heal: 4 },
+    ];
+    const FIGHT_BEAT = 0.85;
+
+    function startFight(foe) {
+      const level = 1 + Math.floor((score - scoreAtStage) / 3);
+      fight = {
+        foe,
+        mine:   { hp: 24 + level * 2, max: 24 + level * 2, name: (P.char || 'hero').toUpperCase() },
+        theirs: { hp: 16 + level * 3, max: 16 + level * 3, name: (foe.tag || 'RIVAL').toUpperCase() },
+        pick: 0, turn: 'you', wait: 0, line: 'A RIVAL BLOCKS THE WAY',
+        held: true,          // the key that started it must be let go first
+      };
+      state = 'fight';
+      // Whatever the overworld was saying, it is not saying it now.
+      bubbles.length = 0;
+      say('checkpoint');
+    }
+
+    const roll = (m) => Math.round(m.low + rand() * (m.high - m.low));
+
+    function fightStep(dt, keysIn) {
+      if (!fight) { state = 'play'; return; }
+      if (fight.wait > 0) {
+        fight.wait -= dt;
+        if (fight.wait > 0) return;
+        // The pause is over; whatever was queued happens now.
+        if (fight.turn === 'them') {
+          const m = MOVES[Math.floor(rand() * MOVES.length)];
+          if (m.heal) {
+            fight.theirs.hp = Math.min(fight.theirs.max, fight.theirs.hp + m.heal);
+            fight.line = `${fight.theirs.name} GUARDS`;
+          } else if (rand() < m.hit) {
+            fight.mine.hp -= roll(m);
+            fight.line = `${fight.theirs.name} USES ${m.name}`;
+            shake = 3;
+          } else {
+            fight.line = `${fight.theirs.name} MISSES`;
+          }
+          fight.turn = 'you';
+          fight.wait = FIGHT_BEAT;
+          say('hurt');
+          return;
+        }
+        fight.turn = 'you';
+        return;
+      }
+
+      // Win, lose, or carry on.
+      if (fight.theirs.hp <= 0) {
+        fight.foe.alive = false;
+        score += 2; beaten++;
+        effects.push({ kind: 'pop', x: fight.foe.x, y: fight.foe.y, t: 0 });
+        fight = null; state = 'play'; say('gem'); fire('kill');
+        const want = stageRules().beat || 0;
+        if (want && beaten >= want) { state = 'won'; won = true; message = 'CLEAR'; say('win'); }
+        return;
+      }
+      if (fight.mine.hp <= 0) {
+        fight = null; state = 'play';
+        for (const b of players) { b.hurt = 0; }
+        die(players[0]);
+        return;
+      }
+
+      if (fight.turn !== 'you') return;
+      // Choosing. Up and down move through the moves; the action key commits.
+      const down = keysIn.down, up = keysIn.up;
+      if ((down || up) && !fight.held) {
+        fight.pick = (fight.pick + (down ? 1 : MOVES.length - 1)) % MOVES.length;
+        fight.held = true; say('step');
+      } else if (keysIn.a || keysIn.b) {
+        if (!fight.held) {
+          const m = MOVES[fight.pick];
+          if (m.heal) {
+            fight.mine.hp = Math.min(fight.mine.max, fight.mine.hp + m.heal);
+            fight.line = 'YOU GUARD';
+          } else if (rand() < m.hit) {
+            fight.theirs.hp -= roll(m);
+            fight.line = `YOU USE ${m.name}`;
+            say('shoot');
+          } else {
+            fight.line = 'YOU MISS';
+          }
+          fight.turn = 'them';
+          fight.wait = FIGHT_BEAT;
+          fight.held = true;
+        }
+      } else if (!down && !up && !keysIn.a && !keysIn.b) {
+        fight.held = false;
+      }
+    }
+
     function marchStep(dt) {
       const rank = entities.filter(e => e.alive && !e.hidden && e.def.march);
       if (!rank.length) return;
@@ -1217,6 +1339,10 @@
             fire('collect');
           } else if (d.goal) {
             finish(e.to);
+          } else if (d.fight && b.hurt <= 0) {
+            // Not a life lost - a fight started.
+            startFight(e);
+            return;
           } else if (d.enemy && scared > 0 && !d.still) {
             // Caught while it was running: it goes, and it is worth taking.
             e.alive = false; score += 3;
@@ -1528,7 +1654,8 @@
 
       /* Speech bubbles. Drawn after the cast so nothing stands in front of a
          line of dialogue, and clamped into the frame so a character speaking
-         at the edge of the screen is still readable. */
+         at the edge of the screen is still readable. Not during a fight: the
+         fight has a box of its own and two of them do not fit. */
       // A mark over someone's head, rising as it fades.
       if (useArt) for (const em of emotes) {
         const rise = Math.min(6, em.t * 26);
@@ -1585,6 +1712,59 @@
         ctx.fillStyle = '#14111f';
         for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], bx + 4, by + 4 + i * 7);
         ctx.globalAlpha = 1;
+      }
+
+      /* A fight, drawn over the map it interrupted. The map stays dimly there
+         behind it, because you have not gone anywhere - the fight is
+         happening on the spot where you met. */
+      if (state === 'fight' && fight) {
+        const bar = (x, y, w, hp, max, tint) => {
+          ctx.fillStyle = '#0a0714'; ctx.fillRect(x - 1, y - 1, w + 2, 5);
+          ctx.fillStyle = '#3a3550'; ctx.fillRect(x, y, w, 3);
+          ctx.fillStyle = tint;
+          ctx.fillRect(x, y, Math.max(0, Math.round(w * Math.max(0, hp) / max)), 3);
+        };
+        ctx.fillStyle = 'rgba(5,4,10,0.82)';
+        ctx.fillRect(0, 0, view.w, view.h);
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+
+        // Theirs, up and to the right; yours, down and to the left. The shape
+        // every one of these has had since the Game Boy.
+        const art = window.NeoSprites;
+        const drawOne = (who, x, y, idx, tint) => {
+          if (art && art.loaded && idx != null) {
+            art.draw(ctx, idx, x, y, { colour: tint, outline: '#0a0714' });
+          } else {
+            ctx.fillStyle = tint; ctx.fillRect(x - 5, y - 12, 10, 12);
+          }
+        };
+        const foeArt = (typeof fight.foe.sprite === 'number') ? fight.foe.sprite
+                     : (art ? art.forEntity('rival', spec.cat || '', 3) : null);
+        drawOne(fight.theirs, view.w - 40, 54, foeArt, '#ff5a3c');
+        drawOne(fight.mine, 40, 104, art ? art.forEntity('player', spec.cat || '', 1) : null, P.tint || '#2ef2ff');
+
+        ctx.fillStyle = '#ece8f5';
+        ctx.fillText(fight.theirs.name.slice(0, 10), 8, 14);
+        bar(8, 26, 60, fight.theirs.hp, fight.theirs.max, '#ff5a3c');
+        ctx.fillText(fight.mine.name.slice(0, 10), view.w - 76, 62);
+        bar(view.w - 76, 74, 60, fight.mine.hp, fight.mine.max, '#3fbf4a');
+
+        // The box at the bottom: what just happened, then what you may do.
+        const boxY = view.h - 46;
+        ctx.fillStyle = '#0a0714'; ctx.fillRect(4, boxY - 1, view.w - 8, 43);
+        ctx.fillStyle = '#ece8f5'; ctx.fillRect(5, boxY, view.w - 10, 41);
+        ctx.fillStyle = '#14111f';
+        ctx.fillText(String(fight.line || '').slice(0, 19), 9, boxY + 4);
+        if (fight.turn === 'you' && fight.wait <= 0) {
+          MOVES.forEach((m, i) => {
+            const y = boxY + 15 + i * 9;
+            ctx.fillStyle = i === fight.pick ? '#c0007a' : '#14111f';
+            ctx.fillText((i === fight.pick ? '> ' : '  ') + m.name, 9, y);
+          });
+        }
+        ctx.textAlign = 'left';
       }
 
       /* The card between stages. Drawn over the frame rather than instead of
@@ -1672,6 +1852,9 @@
       // Rows taken out, for a game whose score is not a pile of coins.
       get lines() { return lines; },
       get piece() { return piece; },
+      // The fight, for anything that needs to know one is happening.
+      get fight() { return fight; },
+      get beaten() { return beaten; },
       get player() { return player; },
       get players() { return players; },
       get bubbles() { return bubbles; },
@@ -1905,7 +2088,11 @@
       bad('rules.clearFoes but there is nothing to clear');
     }
     if (r.lines !== undefined && !(r.lines > 0)) bad('rules.lines must be a positive count');
-    if (!hasEnd && !scriptWins && !r.clearAll && !r.clearFoes && !r.lines) {
+    if (r.beat !== undefined && !(r.beat > 0)) bad('rules.beat must be a positive count');
+    if (r.beat && !ents.some(e => e && ENTITY[e.type] && ENTITY[e.type].fight)) {
+      bad('rules.beat but there is nobody to fight');
+    }
+    if (!hasEnd && !scriptWins && !r.clearAll && !r.clearFoes && !r.lines && !r.beat) {
       warnings.push('no goal and no script that wins - the game cannot be completed');
     }
 

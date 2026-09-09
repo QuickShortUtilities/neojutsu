@@ -22,7 +22,7 @@
   // Every tile and piece the engine knows, in the order they are most used.
   const PIECES = [0, 1, 2, 3, 7, 15, 4, 14, 6, 5, 8, 9, 10, 11, 12, 13, 18, 16, 17];
   const PLACEABLE = ['coin', 'gem', 'heart', 'key', 'goal',
-                     'walker', 'flyer', 'chaser', 'jumper', 'turret', 'hunter', 'ghost', 'invader', 'spike', 'mover'];
+                     'walker', 'flyer', 'chaser', 'jumper', 'turret', 'hunter', 'ghost', 'invader', 'rival', 'spike', 'mover'];
 
   let game = null, spec = null, brush = { kind: 'tile', id: 1 }, painting = false;
   // Decor colour. Scenery is tinted at draw time rather than baked, so the
