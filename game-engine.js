@@ -244,6 +244,15 @@
     let fight = null;
     // How many have been seen off, for a game whose target is a tally of wins.
     let beaten = 0;
+    const SHAPES = [
+      { cells: [[0, 1], [1, 1], [2, 1], [3, 1]], size: 4, tile: 2 },   // bar
+      { cells: [[0, 0], [0, 1], [1, 1], [2, 1]], size: 3, tile: 1 },   // J
+      { cells: [[2, 0], [0, 1], [1, 1], [2, 1]], size: 3, tile: 1 },   // L
+      { cells: [[1, 0], [2, 0], [0, 1], [1, 1]], size: 3, tile: 7 },   // S
+      { cells: [[0, 0], [1, 0], [1, 1], [2, 1]], size: 3, tile: 7 },   // Z
+      { cells: [[1, 0], [0, 1], [1, 1], [2, 1]], size: 3, tile: 15 },  // T
+      { cells: [[0, 0], [1, 0], [0, 1], [1, 1]], size: 2, tile: 2 },   // square
+    ];
     /* The falling-block game's whole state. Declared up here with the rest of
        it because reset() runs before the code further down has been reached,
        and a `let` is not available before its own line. */
@@ -950,15 +959,6 @@
        The shapes are written as the cells they occupy at rotation zero, and
        turned about their own middle - which keeps a bar a bar when it stands
        up, rather than sliding it a tile sideways every time. */
-    const SHAPES = [
-      { cells: [[0, 1], [1, 1], [2, 1], [3, 1]], size: 4, tile: 2 },   // bar
-      { cells: [[0, 0], [0, 1], [1, 1], [2, 1]], size: 3, tile: 1 },   // J
-      { cells: [[2, 0], [0, 1], [1, 1], [2, 1]], size: 3, tile: 1 },   // L
-      { cells: [[1, 0], [2, 0], [0, 1], [1, 1]], size: 3, tile: 7 },   // S
-      { cells: [[0, 0], [1, 0], [1, 1], [2, 1]], size: 3, tile: 7 },   // Z
-      { cells: [[1, 0], [0, 1], [1, 1], [2, 1]], size: 3, tile: 15 },  // T
-      { cells: [[0, 0], [1, 0], [0, 1], [1, 1]], size: 2, tile: 2 },   // square
-    ];
 
     // Where a shape's cells land at a given turn, about its own middle.
     function shapeAt(sh, turn) {
@@ -1509,6 +1509,22 @@
           const info = tileInfo(lvl.at(tx, ty));
           if (!info.fill && !info.top) continue;
           const sx = tx * TILE - ox, sy = ty * TILE - oy;
+          /* In a well, a landed piece is drawn the other way up: its bright
+             colour fills the tile and the dark one edges it. Every tile in
+             this engine is dark inside with a lit top, because that is how a
+             floor reads against a sky - and in a well, against a dark ground,
+             it made a pile of blocks disappear into the background with only
+             a two-pixel line to show for itself. */
+          const inWell = mode === 'blocks' && info.solid === true
+                       && tx > wellL - 1 && tx < wellR + 1 && ty < lvl.h - 1;
+          if (inWell) {
+            ctx.fillStyle = info.top || '#9a9aab';
+            ctx.fillRect(sx, sy, TILE, TILE);
+            ctx.fillStyle = info.fill || '#241a0e';
+            ctx.fillRect(sx, sy + TILE - 2, TILE, 2);
+            ctx.fillRect(sx + TILE - 2, sy, 2, TILE);
+            continue;
+          }
           if (info.fill) { ctx.fillStyle = info.fill; ctx.fillRect(sx, sy, TILE, TILE); }
           if (info.decor && info.top) { ctx.fillStyle = info.top; ctx.fillRect(sx + 2, sy + 1, TILE - 4, TILE - 2); }
           const open = !tileInfo(lvl.at(tx, ty - 1)).fill;
@@ -1618,10 +1634,11 @@
         for (const [cx, cy] of cellsOf(piece)) {
           if (cy < 0) continue;
           const sx = cx * TILE - ox, sy = cy * TILE - oy;
-          ctx.fillStyle = info.fill || '#26262f';
-          ctx.fillRect(sx, sy, TILE, TILE);
           ctx.fillStyle = info.top || '#9a9aab';
-          ctx.fillRect(sx, sy, TILE, 2);
+          ctx.fillRect(sx, sy, TILE, TILE);
+          ctx.fillStyle = info.fill || '#26262f';
+          ctx.fillRect(sx, sy + TILE - 2, TILE, 2);
+          ctx.fillRect(sx + TILE - 2, sy, 2, TILE);
         }
       }
 
@@ -1972,6 +1989,12 @@
       },
     };
     draw();
+    /* A piece in the well before anything has been pressed, so a game that
+       has been picked but not started looks like one waiting rather than an
+       empty box. Down here because it needs everything above it to exist -
+       reset() runs while half of this file is still a temporal dead zone. */
+    if (mode === 'blocks' && !piece) { measureWell(); piece = nextPiece(); draw(); }
+
     return api;
   }
 

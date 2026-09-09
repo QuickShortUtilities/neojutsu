@@ -18,6 +18,12 @@
     night: ['#05040f', '#1b2a5c'],
     cave:  ['#0d0a16', '#241a30'],
   };
+  /* The colours a game arrived with, when they are not one of the four above.
+     Without somewhere to keep them, build() replaced every generated and
+     every authored sky with whichever preset the dropdown happened to be
+     showing - so a falling-block game meant to sit on a flat dark ground was
+     handed a dusk gradient and its well disappeared into it. */
+  let ownSky = null;
 
   // Every tile and piece the engine knows, in the order they are most used.
   const PIECES = [0, 1, 2, 3, 7, 15, 4, 14, 6, 5, 8, 9, 10, 11, 12, 13, 18, 16, 17];
@@ -106,7 +112,7 @@
     spec.coop = c.coop;
     if (spec.script === undefined) spec.script = '';
     spec.rules = { ...(spec.rules || {}), collect: c.goal || 0 };
-    [spec.sky0, spec.sky1] = SKIES[c.sky] || SKIES.day;
+    [spec.sky0, spec.sky1] = (c.sky === 'own' && ownSky) ? ownSky : (SKIES[c.sky] || SKIES.day);
     sizeCanvas();
     game = window.NeoGame.create(low, spec, {
       onFrame: () => { present(); readout(); pumpScriptLog(); },
@@ -146,6 +152,24 @@
     /* Say what the keys actually do in this game. A top-down shooter whose
        help line only mentions moving leaves the gun undiscovered. */
     const p = spec.player || {};
+    /* The keys, for the game in front of you. A falling-block game and a
+       battle screen have nothing to do with jumping, and saying so is the
+       difference between a player who can play and one who cannot. */
+    if (spec.mode === 'blocks') {
+      $('g-help').textContent = 'Left and right to move · Z to turn · Down to drop';
+      return;
+    }
+    /* A run of rooms keeps its rules on the room, not on the game, so a
+       generated quest was told to walk and jump and never told there were
+       fights in it. */
+    const stages = Array.isArray(spec.levels) && spec.levels.length ? spec.levels : null;
+    const here = stages ? (stages[game.stage] || stages[0]) : spec;
+    const r = here.rules || spec.rules || {};
+    if (r.beat) {
+      $('g-help').textContent = 'Arrows or WASD to move · walk into a rival · '
+        + 'up and down to choose, Z to strike';
+      return;
+    }
     const bits = [spec.mode === 'invaders' ? 'Left and right to move'
                                             : 'Arrows or WASD to move'];
     if (spec.mode === 'platform') bits.push('Z / Space to jump');
@@ -354,6 +378,13 @@
   // Make the panel show what the game actually is.
   function syncControlsFrom(spec) {
     const p = spec.player || {};
+    // Which sky this game came with: one of the presets, or its own.
+    if (spec.sky0 && spec.sky1) {
+      const named = Object.keys(SKIES)
+        .find(k => SKIES[k][0] === spec.sky0 && SKIES[k][1] === spec.sky1);
+      ownSky = named ? null : [spec.sky0, spec.sky1];
+      $('g-sky').value = named || 'own';
+    }
     if (p.char) $('g-char').value = p.char;
     const lives = String(spec.lives ?? 3);
     if (![...$('g-lives').options].some(o => o.value === lives)) {
@@ -382,12 +413,16 @@
     attack: 'a gun', aimLock: 'a turret',
   };
   const MODE_SAID = { topdown: 'top-down', platform: 'platformer',
-                      racer: 'racing', shmup: 'a shooter', invaders: 'a fixed shooter' };
+                      racer: 'racing', shmup: 'a shooter', invaders: 'a fixed shooter',
+                      blocks: 'falling blocks' };
 
   function describeUnderstanding(u) {
     const bits = [];
     if (u.theme) bits.push(`<b>${u.theme}</b>`);
     if (u.mode) bits.push(`<b>${MODE_SAID[u.mode] || u.mode}</b>`);
+    // The two overhead games that are their own genre rather than a dungeon.
+    if (u.fights) bits.push('<b>turn-based battles</b>');
+    if (u.chase) bits.push('<b>a maze chase</b>');
     if (u.mech) bits.push(`<b>${u.mech}</b>`);
     if (u.abilities && u.abilities.length) bits.push(u.abilities.map(a => `<b>${SAID[a] || a}</b>`).join(' + '));
     if (u.difficulty !== undefined) bits.push(`<b>${['easy','normal','hard'][u.difficulty]}</b>`);
@@ -1541,7 +1576,11 @@ present();
       // spec, so the panel has to be told what this game is first. Without it,
       // picking a game with a gun handed you the same game with the gun taken
       // off, and the Abilities window said so while the game did not.
-      if (t) { syncControlsFrom(t); build(t); save(); }
+      if (t) {
+        syncControlsFrom(t); build(t); save();
+        // and the label has to say which one you picked
+        if ($('g-pick-name')) $('g-pick-name').textContent = t.name || 'Platformer';
+      }
     });
     for (const id of ['g-chip', 'g-dither', 'g-zoom']) $(id).addEventListener('input', () => {
       $('g-zoom-v').textContent = $('g-zoom').value;

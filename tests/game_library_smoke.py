@@ -45,13 +45,23 @@ CHECK = """(key)=>{
      the pixels the player owns against the ones around it. Contrast is the
      larger of the two directions, because a dark character on a light
      background reads perfectly well. */
+  /* What the player has to be able to pick out. Usually that is the body
+     they are steering; in a falling-block game there is no body and the thing
+     they are steering is the piece, so that is what gets measured. */
+  const steered = t.mode === 'blocks';
   const shot = (hide) => {
     const s2 = JSON.parse(JSON.stringify(t));
     const cv = document.createElement('canvas'); cv.width = 192; cv.height = 160;
     const gg = window.NeoGame.create(cv, s2, { hud: false });
     gg.freeCam = true;
-    gg.panTo(Math.max(0, gg.player.x - 96), Math.max(0, gg.player.y - 80));
-    if (hide) gg.player.y = -9999;
+    if (steered) {
+      gg.tick(1/60);                      // let a piece exist
+      gg.panTo(0, 0);
+      if (hide && gg.piece) gg.piece.y = -9999;
+    } else {
+      gg.panTo(Math.max(0, gg.player.x - 96), Math.max(0, gg.player.y - 80));
+      if (hide) gg.player.y = -9999;
+    }
     gg.draw();
     return cv.getContext('2d').getImageData(0, 0, 192, 160).data;
   };
@@ -99,6 +109,10 @@ CHECK = """(key)=>{
       if (r.clearAll) return (s.entities||[]).some(e=>e.type==='dot'||e.type==='coin'||e.type==='gem');
       if (r.clearFoes) return (s.entities||[]).some(e=>e.type==='invader'||e.type==='walker'
                                                     ||e.type==='chaser'||e.type==='hunter');
+      // A block game is finished by clearing rows and a quest by beating
+      // rivals; neither has anything in it to walk into.
+      if (r.lines) return t.mode === 'blocks';
+      if (r.beat) return (s.entities||[]).some(e=>e.type==='rival');
       return (s.entities||[]).some(e=>e.type==='goal') || /i/.test(String((s.level||{}).tiles||''));
     }),
     stageCount: stages.length, badStages,
@@ -127,7 +141,8 @@ with sync_playwright() as p:
                    'need':r['need'],'coins':r['coins']}
         if not r['startsAlive']: issues.append(f'{k}: does not start in play')
         if not r['fairOpening']: issues.append(f'{k}: loses or gains a life in the first three seconds')
-        if not r['playerPixels']: issues.append(f'{k}: the player draws nothing')
+        if not r['playerPixels']:
+            issues.append(f'{k}: nothing is drawn for the thing you steer')
         elif r['playerContrast'] < 45:
             issues.append(f"{k}: the player is hard to see (contrast {r['playerContrast']})")
         if not r['settled']: issues.append(f'{k}: the player falls out of the world at the start')

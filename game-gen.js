@@ -731,7 +731,11 @@
     }
     // Nobody stands here; it is a formality the spec asks for.
     return { g, ents: [], start: { x: Math.floor(w / 2) * T, y: T },
-             keys: 0, lines: 6 + difficulty * 4 };
+             keys: 0, lines: 6 + difficulty * 4,
+             /* Flat and dark behind it. A sky gradient belongs to a place you
+                are travelling through; here there is no place, and on four
+                shades it banded the whole screen and swallowed the well. */
+             sky: ['#0b0a14', '#151327'] };
   }
 
   /* An overworld with rivals in it. The walking half of an adventure game:
@@ -1281,7 +1285,9 @@
       // Two bodies share the lives; a scroller holds one in the frame and is
       // not the place for it.
       ...(want.coop && !['racer', 'shmup'].includes(mode) ? { coop: true } : {}),
-      sky0: t.sky[0], sky1: t.sky[1],
+      // A builder may ask for its own background, where the theme's would be
+      // wrong for the kind of game it is.
+      sky0: (built.sky || t.sky)[0], sky1: (built.sky || t.sky)[1],
       player,
       start: built.start,
       lives: want.lives ?? [4, 3, 2][difficulty],
