@@ -32,6 +32,41 @@ def open_cells(grid, w, h):
     return [(x, y) for y in range(1, h - 1) for x in range(1, w - 1) if not grid[y][x]]
 
 
+def walkable_from(grid, w, h, start):
+    """Every cell you can actually get to on foot, from where you start.
+
+    An imported level is somebody else's map, and somebody else's map has
+    sealed rooms in it - an interior with no door, a courtyard behind a wall.
+    Putting the exit in the last open cell on the list put it in one of those
+    22% of the time, which is a level that cannot be finished. The body is
+    twelve pixels tall against eight-pixel tiles, so it always occupies two
+    rows and a one-tile gap is not a gap it fits through.
+    """
+    fits = lambda x, y: (0 <= x < w and 0 <= y < h - 1
+                         and not grid[y][x] and not grid[y + 1][x])
+    seen, queue = set(), []
+    if fits(*start):
+        queue = [start]
+    else:
+        for y in range(h - 1):
+            for x in range(w):
+                if fits(x, y):
+                    queue = [(x, y)]
+                    break
+            if queue:
+                break
+    seen.update(queue)
+    while queue:
+        x, y = queue.pop()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            n = (x + dx, y + dy)
+            if n in seen or not fits(*n):
+                continue
+            seen.add(n)
+            queue.append(n)
+    return seen
+
+
 def spread(items, n):
     """n items taken evenly across the list, so pickups are not all in a heap."""
     if not items or n <= 0:
@@ -99,6 +134,12 @@ def furnish(grid, w, h, mode, name, lives=3):
             return None, 'nowhere to walk'
         sx, sy = cells[0]
         start = {'x': sx * T, 'y': sy * T}
+        # Only the part of the map you can walk to from there. Everything the
+        # level is furnished with goes in it, or the game cannot be finished.
+        reach = walkable_from(grid, w, h, (sx, sy))
+        if len(reach) < 20:
+            return None, 'almost nowhere to walk from the start'
+        cells = sorted(reach)
         for x, y in spread(cells[4:], 5 + len(cells) % 10):
             ents.append({'type': 'coin', 'x': x * T + 1, 'y': y * T + 1})
         ents += foes_for(cells, w, h, mode, name)
