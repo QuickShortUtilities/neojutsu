@@ -849,7 +849,16 @@
     const D = DECOR[o.theme];
     if (!D) return [];
     const { w, h } = o, g = built.g, props = [];
-    const solid = (x, y) => y >= 0 && y < h && x >= 0 && x < w && g[y][x] !== '0';
+    /* Solid means solid, not "not empty". Road, water, grass and a checkpoint
+       are all tiles you walk through, and counting them as ground meant a
+       racing level was one continuous surface with no edge anywhere in it -
+       which is why not one of them ever got a single thing beside the track. */
+    const TILES = (window.NeoGame && window.NeoGame.TILES) || {};
+    const solid = (x, y) => {
+      if (y < 0 || y >= h || x < 0 || x >= w) return false;
+      const t = TILES[parseInt(g[y][x], 36) || 0];
+      return !!(t && t.solid === true);
+    };
 
     // Nothing may be dropped where the player starts or where a piece sits;
     // scenery that hides a coin is worse than no scenery.
@@ -870,6 +879,21 @@
       }
     }
 
+    /* A road has no ledges. Its verge is a solid column from the top of the
+       level to the bottom, so nothing in it ever has clear air above, and
+       every racing level came out with not one thing beside the track. Seen
+       from above, scenery stands at the edge of the road rather than on top
+       of something - so take the inside edge of the verge instead. */
+    if (o.mode === 'racer' || o.mode === 'shmup') {
+      for (let y = 3; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          if (!solid(x, y)) continue;
+          if (solid(x - 1, y) && solid(x + 1, y)) continue;   // buried in the verge
+          spots.push([x, y]);
+        }
+      }
+    }
+
     // Distant scenery stands on the same surfaces as the rest, and is simply
     // drawn behind the level. Scattering it at a random height instead left
     // wall fragments hanging in the sky, which reads as debris, not depth.
@@ -885,7 +909,10 @@
       if (props.length >= 48) break;
       if (r() > density) continue;
       if (taken.has(`${x},${y - 1}`)) continue;
-      props.push({ i: pick(r, D.on), x: x * T + T / 2, y: y * T, t: D.tint });
+      // On a ledge a sprite stands on top of the tile; on a verge it stands in
+      // it, because the tile is the ground rather than the thing under it.
+      const onVerge = (o.mode === 'racer' || o.mode === 'shmup') && solid(x, y - 1);
+      props.push({ i: pick(r, D.on), x: x * T + T / 2, y: (y + (onVerge ? 1 : 0)) * T, t: D.tint });
       claim(x, y - 1);
     }
     return props;
