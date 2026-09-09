@@ -179,11 +179,23 @@ python3 tools/train_lora.py --data data/games.jsonl \
 
 That is roughly 4,600 examples: 3,000 generated levels, 810 imported ones and
 824 scripts. The generated 3,000 come out as all eight genres and all five
-endings - a little over 300 of each kind, the rest overhead - in 628 different
-level sizes, from 2,983 different descriptions, at a 97.8% accept rate. What
-is left over is worth reading: all 66 rejections are a bot failing to get
-anywhere in a level, which is the honest kind. The generated half teaches the
-shape; the imported half is the only part with anyone's taste in it.
+endings - a little over 300 of each kind, the rest overhead - in 623 different
+level sizes, from 2,983 different descriptions, at a 97.6% accept rate. What
+is left over is worth reading: all but three of the 74 rejections are a bot
+failing to get anywhere in a level, which is the honest kind. The generated
+half teaches the shape; the imported half is the only part with anyone's
+taste in it.
+
+Genre is not the whole of the variety, and the summary says so. `by_shape`
+counts the builder each game actually came out of - nineteen of them across
+the eight modes, six ways to lay out a platformer and five a dungeon, two
+each for a road and a climb. It reports what ran rather than what the words
+asked for, which matters more than it sounds: a road that splits was
+reaching the corpus a third as often as it was chosen, because its first
+island sat under a second from the start line and the pre-flight check
+retired anything that killed a car which had not moved yet. Nothing in the
+tilemap says which builder made it, so without this the corpus could quietly
+have been one shape per mode again and looked exactly the same.
 
 They are not all one size. A single room is around a thousand tokens and a run
 of eight rooms is closer to eight thousand, so `--maxlen` defaults to 8192 and
