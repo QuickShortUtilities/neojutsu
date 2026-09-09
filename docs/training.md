@@ -80,6 +80,23 @@ some of it is worth nothing, so:
 - **Other people's levels, redrawn.** Fine for you at home, a licensing
   problem the day it ships. Original layouts and CC0 sources stay clean.
 
+## What the generated half covers
+
+Prompts are built from a vocabulary, so what the vocabulary cannot say is not
+in the corpus however many games you generate. It asks for four genres, eight
+places, seven mechanics, five abilities including a tank's turret, a boss, a
+clock, two players, a run of several rooms, a hero, a number of lives, five
+level shapes and a pickup count - and it is worth checking that list against
+what the generator can build whenever the generator learns something new. A
+feature nothing asks for is a feature the model never sees: the tank existed
+for a day with no prompt in the corpus mentioning one.
+
+Watch for prompts that quietly change the genre behind their own back. "driving
+armour" reads as a racing game because of *driv*, and "three rooms" reads as an
+overhead one because of *room* - both ask for something the generator will not
+agree to, which is worse than not asking, and both show up in `rejects.jsonl`
+as "asked for X, got Y".
+
 ## The flywheel
 
 The rare part of this setup is not the data, it is the grader. Generating a
@@ -120,9 +137,13 @@ python3 tools/train_lora.py --data data/games.jsonl \
         --out runs/neojutsu-v1
 ```
 
-That is roughly 5,200 examples: 3,000 generated levels, 788 imported ones and
-1,439 scripts. The generated half teaches the shape; the imported half is the
+That is roughly 4,600 examples: 3,000 generated levels, 810 imported ones and
+824 scripts. The generated half teaches the shape; the imported half is the
 only part with anyone's taste in it.
+
+The script count went *down* when the corpus got better: 616 of the 1,439 were
+exact repeats, because a published game uses the same script for the same door
+in twelve rooms. One copy of each is worth more than twelve of one.
 
 Judge it:
 
