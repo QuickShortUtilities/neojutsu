@@ -512,9 +512,12 @@
     if (mode === 'racer') return 'racing';
     if (mode === 'shmup') return 'shooter';
     if ((want.abilities || []).includes('aimLock')) return 'shooter';
-    if (theme === 'factory' || theme === 'sky') return 'scifi';
+    /* Overhead is settled by the layout before the palette gets a say. A
+       dungeon of rooms is a dungeon whatever colour the sky happens to be. */
     if (mode === 'topdown') return shape === 'rooms' ? 'dungeon'
-                                 : (theme === 'ruins' || theme === 'temple') ? 'adventure' : 'rpg';
+                                 : (theme === 'ruins' || theme === 'temple') ? 'adventure'
+                                 : theme === 'factory' ? 'scifi' : 'rpg';
+    if (theme === 'factory' || theme === 'sky') return 'scifi';
     if ((want.abilities || []).includes('attack')) return 'shooter';
     if (theme === 'ruins' || theme === 'temple') return 'adventure';
     return 'platformer';
@@ -618,11 +621,19 @@
     const lib = window.NeoRecipes;
     const parts = [`on start\n  message "${pick(r, ['GO', 'GOOD LUCK', 'BEGIN', 'MOVE'])}"\nend`];
     const chosen = [];
-    const take = id => { const rec = lib && lib.byId(id); if (rec && !chosen.includes(id)) { chosen.push(id); parts.push(rec.code); } };
+    /* A recipe that does not suit this game is worse than no recipe: low
+       gravity in an overhead game says nothing, and "FIND THE KEY" in a level
+       with no key sends the player looking for something that is not there. */
+    const take = id => {
+      const rec = lib && lib.byId(id);
+      if (!rec || chosen.includes(id)) return;
+      if (lib.fitsMode && !lib.fitsMode(rec, o.mode)) return;
+      chosen.push(id); parts.push(rec.code);
+    };
 
     if (o.timed) take('timer');
     if (o.boss) take('bossgate');
-    if (o.mech === 'doors') take('jailbreak');
+    if (o.keys > 0) take('jailbreak');
     if (o.theme === 'volcano' && r() < .5) take('rising');
     if (o.difficulty === 2 && r() < .35) take('sudden');
     if (o.shape === 'tower' && r() < .5) take('nudge');
@@ -630,7 +641,14 @@
     // then one or two for flavour, so no two generated games read alike
     const flavour = ['speedup', 'moon', 'waves', 'halfway', 'panic', 'combo', 'guide', 'blink'];
     const extra = 1 + Math.floor(r() * 2);
-    for (let i = 0; i < extra; i++) take(pick(r, flavour));
+    /* Ask again when a pick does not fit. Counting attempts rather than
+       recipes left overhead games with nothing but "GO" whenever the dice
+       landed on two side-on ideas in a row. */
+    for (let got = 0, guard = 0; got < extra && guard < 24; guard++) {
+      const before = chosen.length;
+      take(pick(r, flavour));
+      if (chosen.length > before) got++;
+    }
 
     return lib ? lib.merge(parts) : parts.join('\n');
   }
@@ -801,6 +819,9 @@
     }
     makeStartSafe(built, { w, h });
     const keys = built.ents.filter(e => e.type === 'key').length;
+    // The script and the story are written for the level that was actually
+    // built, not for the one the words asked for.
+    o.keys = keys; o.mode = mode;
     // If a number of pickups was asked for, make sure that many exist rather
     // than quietly settling for however many the level happened to get.
     let need = 0;
@@ -897,9 +918,6 @@
     return { spec, understood: first.understood };
   }
 
-  // Valid is not the same as playable. A game that passes every structural check
-  // and then kills you before you have touched a key is still a bad game, so the
-  // candidate is played for a moment before it is accepted.
   /* Can you actually get there? A level can be legal, look right and kill
      nobody, and still be a room with the exit walled off - which is how "it
      generated fine" and "it is not a game" end up both being true. So walk
@@ -958,6 +976,9 @@
     return null;
   }
 
+  // Valid is not the same as playable. A game that passes every structural check
+  // and then kills you before you have touched a key is still a bad game, so the
+  // candidate is played for a moment before it is accepted.
   function survives(spec) {
     try {
       const cv = document.createElement('canvas');

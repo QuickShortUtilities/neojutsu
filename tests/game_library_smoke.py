@@ -12,6 +12,11 @@ report={}; issues=[]
 
 CHECK = """(key)=>{
   const t = window.NeoGameTemplates[key];
+  /* A game may be a run of rooms rather than one room. The level, the cast
+     and the rules then belong to the stage, not to the game, so read them
+     from the first stage and check every other stage boots too. */
+  const stages = (Array.isArray(t.levels) && t.levels.length) ? t.levels : [t];
+  const st = stages[0];
   const cv=document.createElement('canvas'); cv.width=160; cv.height=144;
   const g = window.NeoGame.create(cv, JSON.parse(JSON.stringify(t)), {hud:false});
   const lvl = g.level;
@@ -28,8 +33,8 @@ CHECK = """(key)=>{
   g.input.right = true;
   for (let i=0;i<240;i++) g.tick(1/60);
   g.input.right = false;
-  const coins = (t.entities||[]).filter(e=>e.type==='coin'||e.type==='gem').length;
-  const need = (t.rules&&t.rules.collect)||0;
+  const coins = (st.entities||[]).filter(e=>e.type==='coin'||e.type==='gem').length;
+  const need = ((st.rules||t.rules)&&(st.rules||t.rules).collect)||0;
   const script = t.script ? window.NeoScript.compile(t.script) : {errors:[]};
   let tiles = new Set();
   for (let y=0;y<lvl.h;y++) for (let x=0;x<lvl.w;x++) tiles.add(lvl.at(x,y));
@@ -50,6 +55,19 @@ CHECK = """(key)=>{
     gg.draw();
     return cv.getContext('2d').getImageData(0, 0, 192, 160).data;
   };
+  /* Every later room, booted on its own. A run whose third room drops you
+     into a wall is broken, and nobody finds out until they get there. */
+  const badStages = [];
+  for (let i = 1; i < stages.length; i++) {
+    const gs = window.NeoGame.create(document.createElement('canvas'),
+                                     JSON.parse(JSON.stringify(t)), {hud:false});
+    gs.goToStage(i); gs.tick(3.2);
+    if (gs.state !== 'play') badStages.push(i + ': ' + gs.state);
+    else if (gs.lives < (t.lives ?? 3)) badStages.push(i + ': hit at once');
+    else if (gs.player.y > gs.level.h*8 + 40) badStages.push(i + ': falls out');
+    else if (gs.scriptFault) badStages.push(i + ': ' + gs.scriptFault);
+  }
+
   const on = shot(false), off = shot(true);
   let owned = 0, mn = 255, mx = 0, box = [999, 999, -1, -1];
   for (let i = 0, px = 0; i < on.length; i += 4, px++) {
@@ -71,10 +89,12 @@ CHECK = """(key)=>{
   const bg = bgN ? bgSum / bgN : null;
   const contrast = bg === null ? 0 : Math.round(Math.max(mx - bg, bg - mn));
   return {
-    mode: t.mode, size:[lvl.w,lvl.h], entities:(t.entities||[]).length,
+    mode: t.mode, size:[lvl.w,lvl.h], entities:(st.entities||[]).length,
     coins, need,
     // Scrolling games finish by arriving at the exit strip, not at a flag.
-    hasGoal: (t.entities||[]).some(e=>e.type==='goal') || /i/.test(String(t.level.tiles||'')),
+    hasGoal: stages.every(s => (s.entities||[]).some(e=>e.type==='goal')
+                            || /i/.test(String((s.level||{}).tiles||''))),
+    stageCount: stages.length, badStages,
     distinctTiles: tiles.size, startsAlive, settled,
     scriptErrors: script.errors, fault: g.scriptFault, fairOpening,
     playerPixels: owned, playerContrast: contrast,
@@ -95,6 +115,7 @@ with sync_playwright() as p:
     for k in keys:
         r=page.evaluate(CHECK, k)
         report[k]={'mode':r['mode'],'size':r['size'],'pieces':r['entities'],
+                   'stages':r['stageCount'],
                    'tiles':r['distinctTiles'],'kb':round(r['bytes']/1024,1),
                    'need':r['need'],'coins':r['coins']}
         if not r['startsAlive']: issues.append(f'{k}: does not start in play')
@@ -108,6 +129,7 @@ with sync_playwright() as p:
         if r['scriptErrors']: issues.append(f"{k}: script errors {r['scriptErrors'][:2]}")
         if r['fault']: issues.append(f"{k}: script faulted at runtime: {r['fault']}")
         if r['distinctTiles'] < 2: issues.append(f'{k}: level is empty')
+        if r['badStages']: issues.append(f"{k}: later rooms are broken - {r['badStages']}")
         if r['bytes'] > 60000: issues.append(f"{k}: {r['bytes']} bytes is too big to share comfortably")
 
     if err: issues.append(f'page errors: {err[:3]}')

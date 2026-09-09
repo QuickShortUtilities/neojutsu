@@ -23,8 +23,12 @@ with sync_playwright() as p:
       for (const [k, t] of Object.entries(window.NeoGameTemplates)) {
         const cv = document.createElement('canvas'); cv.width = 160; cv.height = 144;
         const g = window.NeoGame.create(cv, JSON.parse(JSON.stringify(t)), { hud: false });
-        out[k] = { mode: t.mode, cat: t.cat, sprite: g.players[0].sprite,
-                   vehicle: S.VEHICLES.has(g.players[0].sprite) };
+        const sp = g.players[0].sprite;
+        out[k] = { mode: t.mode, cat: t.cat, sprite: sp,
+                   vehicle: S.VEHICLES.has(sp),
+                   // Overhead, a vehicle has to be one drawn head-on: those are
+                   // the ones the engine can turn to face where they are going.
+                   headOn: (S.TOPDOWN_VEHICLES || []).includes(sp) };
       }
       return out;
     }""")
@@ -33,8 +37,12 @@ with sync_playwright() as p:
             issues.append(f'{k}: a racing game whose player is not a vehicle')
         if a['mode'] == 'shmup' and not a['vehicle']:
             issues.append(f'{k}: a shooter in space whose player is not a craft')
-        if a['mode'] in ('platform', 'topdown') and a['vehicle']:
-            issues.append(f'{k}: a {a["mode"]} game whose player is a vehicle')
+        if a['mode'] == 'platform' and a['vehicle']:
+            issues.append(f'{k}: a platform game whose player is a vehicle')
+        # A tank is a vehicle seen from above, which is fine - but only if it is
+        # drawn head-on. Side-view art turned a quarter looks like a crash.
+        if a['mode'] == 'topdown' and a['vehicle'] and not a['headOn']:
+            issues.append(f'{k}: an overhead game driving a side-on vehicle ({a["sprite"]})')
 
     # ---- beats fire on their cue, once each ----
     report['beats'] = page.evaluate("""() => {

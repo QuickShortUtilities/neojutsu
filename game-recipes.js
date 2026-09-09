@@ -42,7 +42,7 @@ on kill
   shake 3
 end` },
 
-    { id: 'rising', name: 'Rising lava', kanji: '溶', tags: ['hazard', 'chase'],
+    { id: 'rising', name: 'Rising lava', kanji: '溶', tags: ['hazard', 'chase'], modes: ['platform'],
       blurb: 'The floor turns to lava, one row at a time.',
       code: `on start
   set row 17
@@ -73,7 +73,7 @@ end` },
   end
 end` },
 
-    { id: 'moon', name: 'Low gravity', kanji: '月', tags: ['feel'],
+    { id: 'moon', name: 'Low gravity', kanji: '月', tags: ['feel'], modes: ['platform'],
       blurb: 'Floaty jumps, like somewhere smaller than here.',
       code: `on start
   gravity 260
@@ -166,7 +166,7 @@ on collect
   end
 end` },
 
-    { id: 'nudge', name: 'Push at the top', kanji: '風', tags: ['hazard'],
+    { id: 'nudge', name: 'Push at the top', kanji: '風', tags: ['hazard'], modes: ['platform'],
       blurb: 'Wind pushes you while you are high up.',
       code: `on tick
   every 0.5
@@ -176,7 +176,7 @@ end` },
   end
 end` },
 
-    { id: 'blink', name: 'Vanishing ground', kanji: '瞬', tags: ['hazard'],
+    { id: 'blink', name: 'Vanishing ground', kanji: '瞬', tags: ['hazard'], modes: ['platform'],
       blurb: 'A block appears and disappears under you.',
       code: `on start
   set solid 1
@@ -195,6 +195,10 @@ end` },
   ];
 
   const byId = id => R.find(r => r.id === id);
+  /* Some recipes only make sense one way up. Low gravity has nothing to say
+     to an overhead game, and ground that vanishes under you needs a body that
+     can fall. A recipe with no `modes` suits every mode. */
+  const fitsMode = (rec, mode) => !rec || !rec.modes || rec.modes.includes(mode);
   const forTags = tags => R.filter(r => r.tags.some(t => tags.includes(t)));
 
   // Joining scripts means merging their events, so two recipes that both use
@@ -213,5 +217,5 @@ end` },
       .join('\n\n');
   }
 
-  window.NeoRecipes = { list: R, byId, forTags, merge };
+  window.NeoRecipes = { list: R, byId, forTags, merge, fitsMode };
 })();

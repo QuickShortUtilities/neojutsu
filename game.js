@@ -1443,7 +1443,9 @@ present();
 
     const saved = restore();
     fillTracks();
-    build(saved || window.NeoGameTemplates[tsel.value]);
+    const opening = saved || window.NeoGameTemplates[tsel.value];
+    if (opening) syncControlsFrom(opening);
+    build(opening);
     buildPalette(); wireInput(); wireBuild();
     buildStory(); drawHero();
     buildTints();
@@ -1482,7 +1484,11 @@ present();
     });
     $('g-template').addEventListener('change', () => {
       const t = window.NeoGameTemplates[$('g-template').value];
-      if (t) { build(t); save(); }
+      // Same order as generating: build() lays the panel's controls over the
+      // spec, so the panel has to be told what this game is first. Without it,
+      // picking a game with a gun handed you the same game with the gun taken
+      // off, and the Abilities window said so while the game did not.
+      if (t) { syncControlsFrom(t); build(t); save(); }
     });
     for (const id of ['g-chip', 'g-dither', 'g-zoom']) $(id).addEventListener('input', () => {
       $('g-zoom-v').textContent = $('g-zoom').value;
