@@ -72,3 +72,14 @@
 .gen-read { font-size: 10px; line-height: 1.7; color: var(--muted); margin: 6px 0 0; min-height: 14px; }
 .gen-read b { color: var(--cyan); font-weight: 400; }
 .gen-read .warn { color: var(--yellow); }
+
+/* the script editor, under the game */
+.codebar .panel-title { align-items: baseline; }
+.code-hint { font-family: var(--sans); font-size: 10px; color: var(--muted); letter-spacing: 0; text-transform: none; }
+.code-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 900px) { .code-grid { grid-template-columns: 1fr; } }
+.code-main #g-script { min-height: 190px; }
+.code-ref { border-left: 1px solid var(--line); padding-left: 16px; }
+.ref-h { font-family: var(--pixel); font-size: 8px; color: var(--magenta); margin: 0 0 5px; letter-spacing: 1px; }
+.ref-l { font-family: var(--mono); font-size: 10px; line-height: 1.8; color: var(--muted); margin: 0 0 14px; }
+.ref-l b { color: var(--cyan); font-weight: 400; }

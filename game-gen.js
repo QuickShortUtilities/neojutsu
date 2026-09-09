@@ -69,9 +69,11 @@
 
     if (/top.?down|overhead|dungeon|maze|room|zelda/.test(t)) want.mode = 'topdown';
     if (/platform|jump|side.?scroll|mario|climb|ledge/.test(t)) want.mode = want.mode || 'platform';
-    // Some mechanics only make sense side-on, so asking for one implies the mode.
+    // Some mechanics and every shape only make sense side-on, so asking for one
+    // implies the mode rather than leaving it to chance.
     if (!want.mode && ['springs', 'belts', 'breakables', 'moving', 'ice'].includes(want.mech))
       want.mode = 'platform';
+    if (want.shape) want.mode = 'platform';
 
     if (/\b(hard|difficult|brutal|tough|punishing)\b/.test(t)) want.difficulty = 2;
     else if (/\b(easy|gentle|simple|relaxed|calm)\b/.test(t)) want.difficulty = 0;
@@ -85,9 +87,141 @@
     if (n) want.collect = Math.min(30, parseInt(n[1], 10));
     const lives = t.match(/\b(\d)\s*(lives|life|hearts?)\b/);
     if (lives) want.lives = Math.max(1, Math.min(9, parseInt(lives[1], 10)));
+    if (/\bisland|floating|archipelago\b/.test(t)) want.shape = 'islands';
+    else if (/\bcavern|tunnel|underground|cave\b/.test(t)) want.shape = 'cavern';
+    else if (/\btower|climb|vertical|ascend\b/.test(t)) want.shape = 'tower';
+    else if (/\bcorridor|hallway|factory|assembly\b/.test(t)) want.shape = 'corridor';
+    else if (/\bstair|steps|pyramid|ziggurat\b/.test(t)) want.shape = 'stairs';
     for (const c of CHARS) if (t.includes(c)) { want.char = c; break; }
     if (/\bboss|arena|horde|swarm|survive\b/.test(t)) want.boss = true;
     return want;
+  }
+
+  // ---------- level shapes ----------
+  // Colour alone made every generated level feel the same, so the architecture
+  // changes too: islands float, caverns have a ceiling, towers go up.
+  const blank = (w, h, fill) => Array.from({ length: h }, () => Array(w).fill(fill || '0'));
+  const put = (g, x, y, ch) => { if (g[y] && g[y][x] !== undefined) g[y][x] = ch; };
+  const fillRect = (g, x0, y0, x1, y1, ch) => {
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) put(g, x, y, ch);
+  };
+
+  function coinsOn(ents, spots, r, n) {
+    for (let i = 0; i < n && spots.length; i++) {
+      const [x, y] = spots.splice(Math.floor(r() * spots.length), 1)[0];
+      ents.push({ type: 'coin', x: x * T + 1, y: y * T + 1 });
+    }
+  }
+
+  // Floating chunks with real gaps between them.
+  function islands(r, o) {
+    const { w, h } = o, g = blank(w, h), ents = [], spots = [];
+    let x = 0, firstTop = h - 6;
+    while (x < w) {
+      const span = 4 + Math.floor(r() * 5);
+      const top = Math.max(4, Math.min(h - 4, (h - 6) + Math.floor((r() - .5) * 6)));
+      if (x === 0) firstTop = top;
+      fillRect(g, x, top, Math.min(x + span, w), Math.min(top + 2 + Math.floor(r() * 2), h), '1');
+      for (let i = 1; i < span - 1; i += 2) spots.push([x + i, top - 1]);
+      if (r() < .45) {
+        const ly = top - 3 - Math.floor(r() * 2);
+        fillRect(g, x + 1, ly, Math.min(x + span - 1, w), ly + 1, '3');
+        spots.push([x + 2, ly - 1]);
+      }
+      x += span + 2 + Math.floor(r() * 3);
+    }
+    return { g, ents, spots, start: { x: T, y: (firstTop - 2) * T }, ground: null };
+  }
+
+  // Enclosed: floor, ceiling and teeth.
+  function cavern(r, o) {
+    const { w, h, theme } = o, g = blank(w, h, '2'), ents = [], spots = [];
+    let floorY = h - 4;
+    for (let x = 0; x < w; x++) {
+      if (r() < .18) floorY = Math.max(h - 7, Math.min(h - 3, floorY + (r() < .5 ? -1 : 1)));
+      const ceil = 2 + Math.floor(r() * 2);
+      fillRect(g, x, ceil, x + 1, floorY, '0');
+      if (r() < .12) put(g, x, ceil, '4');
+      if (r() < .1) put(g, x, floorY - 1, theme === 'volcano' ? 'e' : '4');
+      else if (r() < .3) spots.push([x, floorY - 2]);
+    }
+    for (let i = 0; i < 4; i++) {
+      const lx = 4 + Math.floor(r() * (w - 10)), ly = h - 7 - Math.floor(r() * 3);
+      fillRect(g, lx, ly, lx + 3 + Math.floor(r() * 2), ly + 1, '3');
+      spots.push([lx + 1, ly - 1]);
+    }
+    return { g, ents, spots, start: { x: 2 * T, y: (h - 7) * T }, ground: h - 4 };
+  }
+
+  // Up rather than along: alternating ledges with a floor at the bottom.
+  function tower(r, o) {
+    const { w, h } = o, g = blank(w, h), ents = [], spots = [];
+    fillRect(g, 0, h - 2, w, h, '1');
+    fillRect(g, 0, 0, 1, h, '2'); fillRect(g, w - 1, 0, w, h, '2');
+    let y = h - 5, side = 0;
+    while (y > 3) {
+      const span = Math.max(4, Math.floor(w * .45));
+      const x0 = side ? 1 : w - 1 - span;
+      fillRect(g, x0, y, x0 + span, y + 1, r() < .25 ? '8' : '3');
+      spots.push([x0 + 1 + Math.floor(r() * (span - 2)), y - 1]);
+      if (r() < .2) put(g, x0 + span - 1, y - 1, 'b');
+      side ^= 1; y -= 3;
+    }
+    return { g, ents, spots, start: { x: 2 * T, y: (h - 4) * T }, ground: h - 2 };
+  }
+
+  // A low, busy corridor of belts and crates.
+  function corridor(r, o) {
+    const { w, h, mech } = o, g = blank(w, h), ents = [], spots = [];
+    const floorY = h - 4, ceilY = 3;
+    fillRect(g, 0, floorY, w, h, '1');
+    fillRect(g, 0, 0, w, ceilY, '2');
+    let x = 2;
+    while (x < w - 3) {
+      const span = 3 + Math.floor(r() * 5);
+      const pick = r();
+      if (pick < .35) fillRect(g, x, floorY, Math.min(x + span, w), floorY + 1, r() < .5 ? '9' : 'a');
+      else if (pick < .5) { fillRect(g, x, floorY - 1, Math.min(x + span, w - 1), floorY, 'f'); spots.push([x, floorY - 3]); }
+      else if (pick < .62) { for (let i = 0; i < span; i++) put(g, x + i, floorY, '4'); }
+      else spots.push([x + 1, floorY - 2]);
+      if (r() < .4) {
+        const ly = floorY - 4 - Math.floor(r() * 2);
+        fillRect(g, x, ly, Math.min(x + span, w - 1), ly + 1, '3');
+        spots.push([x + 1, ly - 1]);
+      }
+      x += span + 1 + Math.floor(r() * 2);
+    }
+    return { g, ents, spots, start: { x: T, y: (floorY - 2) * T }, ground: floorY };
+  }
+
+  // A climb in steps, which reads as built rather than grown.
+  function stairs(r, o) {
+    const { w, h } = o, g = blank(w, h), ents = [], spots = [];
+    let y = h - 3, x = 0;
+    fillRect(g, 0, y, 4, h, '1');
+    x = 4;
+    while (x < w - 2) {
+      const run = 2 + Math.floor(r() * 3);
+      const rise = r() < .7 ? 1 : 2;
+      y = Math.max(4, y - rise);
+      fillRect(g, x, y, Math.min(x + run, w), h, r() < .2 ? '7' : '1');
+      spots.push([x, y - 1]);
+      if (r() < .2) put(g, x + run - 1, y - 1, '4');
+      x += run + (r() < .3 ? 1 + Math.floor(r() * 2) : 0);
+    }
+    return { g, ents, spots, start: { x: T, y: (h - 5) * T }, ground: null };
+  }
+
+  const SHAPES = { islands, cavern, tower, corridor, stairs };
+
+  function chooseShape(want, theme, mech, size, r) {
+    if (want.shape) return want.shape;
+    if (size === 'tall') return 'tower';
+    if (theme === 'sky') return 'islands';
+    if (theme === 'cave' || theme === 'volcano') return 'cavern';
+    if (theme === 'factory' || mech === 'belts') return 'corridor';
+    if (theme === 'ruins' || theme === 'temple') return 'stairs';
+    return r() < .45 ? pick(r, ['islands', 'cavern', 'stairs']) : 'flat';
   }
 
   // ---------- building ----------
@@ -184,6 +318,43 @@
     return { g, ents, start: { x: 3 * T, y: 3 * T }, keys };
   }
 
+  // Shapes lay out the ground and mark where a pickup would sit; this puts the
+  // pieces on them, so every shape gets enemies, a goal and a way to finish.
+  function populate(r, o, built) {
+    const { w, h, difficulty, mech } = o;
+    const ents = built.ents, spots = built.spots || [];
+    coinsOn(ents, spots, r, 5 + Math.floor(r() * 4));
+    if (r() < .5 && spots.length) {
+      const [gx, gy] = spots.splice(Math.floor(r() * spots.length), 1)[0];
+      ents.push({ type: 'gem', x: gx * T, y: gy * T });
+    }
+    const solidUnder = (tx, ty) => {
+      for (let y = ty; y < h; y++) if (built.g[y] && built.g[y][tx] !== '0') return y;
+      return null;
+    };
+    const foes = ['walker', 'flyer', 'chaser', 'jumper', 'turret'];
+    const count = (o.boss ? 4 : 1) + difficulty + Math.floor(r() * 2);
+    for (let i = 0; i < count; i++) {
+      const tx = 4 + Math.floor(r() * (w - 8));
+      const fy = solidUnder(tx, 3);
+      if (fy === null) continue;
+      ents.push({ type: pick(r, foes.slice(0, 3 + difficulty)), x: tx * T, y: (fy - 2) * T, dir: r() < .5 ? 1 : -1 });
+    }
+    if (difficulty < 2 || r() < .4) {
+      const tx = 3 + Math.floor(r() * (w - 6));
+      const fy = solidUnder(tx, 3);
+      if (fy !== null) ents.push({ type: 'heart', x: tx * T, y: (fy - 2) * T });
+    }
+    if (mech === 'moving') {
+      const tx = Math.floor(w * .5), fy = solidUnder(tx, 3);
+      if (fy !== null) ents.push({ type: 'mover', x: tx * T, y: (fy - 5) * T });
+    }
+    // the flag goes on the last solid thing, so it is always reachable-looking
+    let gx = w - 3, gy = null;
+    for (let tx = w - 3; tx >= 2 && gy === null; tx--) { gy = solidUnder(tx, 3); gx = tx; }
+    ents.push({ type: 'goal', x: gx * T, y: ((gy ?? h - 4) - 2) * T });
+  }
+
   function script(r, o, need) {
     const parts = [`on start\n  message "${pick(r, ['GO', 'GOOD LUCK', 'BEGIN', 'MOVE'])}"\nend`];
     if (o.timed) {
@@ -212,7 +383,17 @@
     else [w, h] = { small: [28, 16], normal: [40, 18], wide: [56, 18], tall: [22, 34] }[size];
 
     const o = { w, h, mech, theme, difficulty, timed: !!want.timed, boss: !!want.boss };
-    const built = mode === 'topdown' ? topdown(r, o) : platform(r, o);
+    let built;
+    if (mode === 'topdown') built = topdown(r, o);
+    else {
+      const shape = chooseShape(want, theme, mech, size, r);
+      o.shape = shape;
+      if (shape === 'flat') built = platform(r, o);
+      else {
+        built = SHAPES[shape](r, o);
+        populate(r, o, built);
+      }
+    }
     const keys = built.ents.filter(e => e.type === 'key').length;
     // If a number of pickups was asked for, make sure that many exist rather
     // than quietly settling for however many the level happened to get.
