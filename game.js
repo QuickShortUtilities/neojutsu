@@ -27,7 +27,11 @@
 
   // Every tile and piece the engine knows, in the order they are most used.
   const PIECES = [0, 1, 2, 3, 7, 15, 4, 14, 6, 5, 8, 9, 10, 11, 12, 13, 18, 16, 17];
-  const PLACEABLE = ['coin', 'gem', 'heart', 'key', 'goal',
+  /* Dots and pellets earn their place here: a maze game is built out of them
+     the way a platformer is built out of coins, and leaving them out of the
+     palette meant the one genre you could not draw by hand was the one the
+     generator had just learned to make. */
+  const PLACEABLE = ['coin', 'gem', 'heart', 'key', 'goal', 'dot', 'pellet',
                      'walker', 'flyer', 'chaser', 'jumper', 'turret', 'hunter', 'ghost', 'invader', 'rival', 'spike', 'mover'];
 
   let game = null, spec = null, brush = { kind: 'tile', id: 1 }, painting = false;
@@ -166,6 +170,11 @@
     if (spec.mode === 'rider') {
       $('g-help').textContent = 'The throttle is always on · Z to jump · '
         + 'up and down to level the bike before you land';
+      return;
+    }
+    if (spec.mode === 'scramble') {
+      $('g-help').textContent = 'The cave comes to you · arrows or WASD to fly · '
+        + 'X to shoot · do not touch the rock';
       return;
     }
     /* A run of rooms keeps its rules on the room, not on the game, so a
@@ -395,6 +404,7 @@
       topdown:  ['g-dash', 'g-attack', 'g-aimlock', 'g-coop'],
       racer:    ['g-dash'],
       shmup:    ['g-attack'],
+      scramble: ['g-attack'],
       invaders: ['g-attack'],
       rider:    [],
       blocks:   [],
@@ -404,11 +414,17 @@
       const row = $(id) && $(id).closest('label');
       if (row) row.hidden = !allowed.includes(id);
     }
-    const win = document.querySelector('.fx-window[data-window="abilities"]');
-    const opener = document.querySelector('[data-open="abilities"]');
-    // Nothing to show at all: say so rather than opening an empty window.
-    if (opener) opener.hidden = allowed.length === 0;
-    if (win && allowed.length === 0 && window.NeoWindows) window.NeoWindows.close('abilities');
+    /* A stacking game draws no body at all - there is nothing for the hero
+       sprite, the tint or the character to be about - and its entities are
+       never stepped, so a coin placed in the well is a coin that can never
+       be picked up. Neither panel is offered rather than offered and ignored. */
+    const bodied = spec.mode !== 'blocks';
+    window.NeoWindows?.offer?.('abilities', allowed.length > 0);
+    window.NeoWindows?.offer?.('hero', bodied);
+    if ($('g-entities')) $('g-entities').hidden = !bodied;
+    // Facing is a property of a placed entity; with none to place it says nothing.
+    const facing = $('g-dir') && $('g-dir').closest('label');
+    if (facing) facing.hidden = !bodied;
 
     // Which sky this game came with: one of the presets, or its own.
     if (spec.sky0 && spec.sky1) {
@@ -447,12 +463,21 @@
        pickup-count options, but not before everything else this function
        does. Returning outright once skipped the abilities above. */
     if (ending) { window.NeoSelect?.refreshAll?.(); return; }
+    /* What the end of the level is called. All four of these end on an exit
+       tile, but only two of them end on a flag: a bike course ends at a
+       finish line and a scrolling shooter ends by getting there alive, and
+       calling either one a flag describes a thing that is not on the screen. */
+    const ARRIVAL = { racer: 'Reach the finish', rider: 'Reach the finish',
+                      shmup: 'Survive the run', scramble: 'Reach the finish' };
+    const arrival = ARRIVAL[spec.mode] || 'Just the flag';
+    const zero = [...sel.options].find(o => o.value === '0');
+    if (zero) zero.textContent = arrival;
     // From the room, not the game: a run keeps its rules on each room, so a
     // three-stage quest that asks for a pickup read as "just the flag".
     const need = String(rules.collect || 0);
     if (![...$('g-goal').options].some(o => o.value === need)) {
       const o = document.createElement('option'); o.value = need;
-      o.textContent = need === '0' ? 'Just the flag' : `Collect ${need}`;
+      o.textContent = need === '0' ? arrival : `Collect ${need}`;
       $('g-goal').append(o);
     }
     $('g-goal').value = need;
@@ -660,6 +685,24 @@
         g.input.right = want > me + 2;
         g.input.b = Math.abs(want - me) < 6;
       }
+      g.tick(dt);
+      return;
+    }
+
+    if (g.mode === 'scramble') {
+      /* Down the middle of the corridor, read a little ahead of the nose
+         rather than under it - by the time rock is beside you it is too late
+         to be anywhere else. The trigger is simply held: in a cave everything
+         worth shooting is in front of you. */
+      const col = Math.min(g.level.w - 1, Math.floor((p.x + p.w + 10) / T));
+      const here = Math.floor((p.y + p.h / 2) / T);
+      let up = here, down = here;
+      while (up > 0 && !solid(col, up - 1) && here - up < 12) up--;
+      while (down < g.level.h - 1 && !solid(col, down + 1) && down - here < 12) down++;
+      const want = ((up + down) / 2) * T + T / 2;
+      g.input.up = want < p.y + p.h / 2 - 3;
+      g.input.down = want > p.y + p.h / 2 + 3;
+      g.input.b = true;
       g.tick(dt);
       return;
     }

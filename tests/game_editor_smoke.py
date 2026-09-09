@@ -128,7 +128,11 @@ with sync_playwright() as p:
                    : r.lines ? (r.lines + ' lines')
                    : r.beat ? ('Beat ' + r.beat)
                    : r.collect ? ('Collect ' + r.collect)
-                   : 'Just the flag';
+                   // Only two of these end at a flag. A bike course ends at a
+                   // finish line and a scrolling shooter ends by arriving alive.
+                   : ({ racer: 'Reach the finish', rider: 'Reach the finish',
+                        scramble: 'Reach the finish',
+                        shmup: 'Survive the run' }[t.mode] || 'Just the flag');
         out[k] = want;
       }
       return out;

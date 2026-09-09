@@ -89,7 +89,7 @@
     el.querySelector('.fx-close').addEventListener('click', () => api.close(id));
     el.addEventListener('pointerdown', () => focus(el));
 
-    made.set(id, { el, label, kanji, open: !!saved.open });
+    made.set(id, { el, label, kanji, open: !!saved.open, offered: true, wanted: false });
     return made.get(id);
   }
 
@@ -108,6 +108,22 @@
     },
     toggle(id) { const w = made.get(id); if (w) (w.open ? api.close : api.open)(id); },
     isOpen(id) { const w = made.get(id); return !!(w && w.open); },
+    /* Whether this game has any use for a panel at all. A falling-block game
+       has no hero to dress and no abilities to grant, and a window of
+       controls that do nothing is worse than a missing one: it reads as a
+       promise. Hiding is not the same as closing - a panel put away because
+       the current game cannot use it comes back by itself when a game that
+       can is loaded, so switching modes does not quietly lose the layout
+       somebody set up. */
+    offer(id, can) {
+      const w = made.get(id); if (!w) return;
+      const ok = can !== false;
+      if (w.offered === ok) return;
+      w.offered = ok;
+      if (!ok && w.open) { w.el.hidden = true; w.open = false; w.wanted = true; }
+      else if (ok && w.wanted) { w.wanted = false; api.open(id); }
+      sync();
+    },
     ids() { return [...made.keys()]; },
   };
 
@@ -115,6 +131,8 @@
   function sync() {
     if (!bar) return;
     for (const b of bar.querySelectorAll('[data-open]')) {
+      const w = made.get(b.dataset.open);
+      b.hidden = !!(w && w.offered === false);
       b.classList.toggle('on', api.isOpen(b.dataset.open));
       b.setAttribute('aria-pressed', api.isOpen(b.dataset.open) ? 'true' : 'false');
     }

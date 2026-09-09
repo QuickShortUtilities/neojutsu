@@ -80,7 +80,7 @@
      at when you meet the ground again. Same gravity and same collision as a
      platformer - what it adds is a throttle you cannot let go of and a
      pitch that has to be level when you land. */
-  const MODES = ['platform', 'topdown', 'racer', 'shmup', 'invaders', 'blocks', 'rider'];
+  const MODES = ['platform', 'topdown', 'racer', 'shmup', 'invaders', 'blocks', 'rider', 'scramble'];
 
   const tileInfo = id => TILES[id] || TILES[0];
   // A door is solid until it is opened, which is the only tile whose solidity
@@ -208,7 +208,13 @@
        and this is a level travelling towards a body. */
     const mode = MODES.includes(spec.mode) ? spec.mode : 'platform';
     // Racer and shmup scroll the world past you; you never walk, you steer.
-    const scrolling = mode === 'racer' || mode === 'shmup';
+    /* `scramble` steers the same way and travels the other way: a cave that
+       comes at you from the right rather than a road that comes down at you.
+       Everything about being carried along is shared - only the axis and the
+       direction the gun points are not, so those are named rather than
+       written twice. */
+    const scrolling = mode === 'racer' || mode === 'shmup' || mode === 'scramble';
+    const alongX = mode === 'scramble';
     // Two on one screen. Netlink is a later problem; this is the sofa.
     const coop = !!(spec.coop || spec.players === 2);
     const scrollCfg = Object.assign({ speed: 46, accel: 2.6, max: 130 }, spec.scroll || {});
@@ -318,8 +324,11 @@
       view.x = 0; view.y = 0;
       scroll = scrollCfg.speed;
       if (scrolling) {
-        view.y = Math.max(0, lvl.h * TILE - view.h);
-        view.x = Math.max(0, Math.min(view.x, lvl.w * TILE - view.w));
+        // The near edge of the axis you travel along: the bottom of a tall
+        // level, or the left of a wide one.
+        view.y = alongX ? Math.max(0, Math.round((lvl.h * TILE - view.h) / 2))
+                        : Math.max(0, lvl.h * TILE - view.h);
+        view.x = alongX ? 0 : Math.max(0, Math.min(view.x, lvl.w * TILE - view.w));
       }
       doorsOpen = false; effects = []; shake = 0; scared = 0;
       message = ''; messageAt = 0;
@@ -652,7 +661,7 @@
       // The world scrolls once, not once per body.
       if (scrolling) {
         scroll = Math.min(scrollCfg.max, scroll + scrollCfg.accel * dt);
-        view.y -= scroll * dt;
+        if (alongX) view.x += scroll * dt; else view.y -= scroll * dt;
       }
       if (mode === 'blocks') {
         blocksStep(dt, input);
@@ -663,7 +672,17 @@
       }
       if (mode === 'invaders') marchStep(dt);
       for (const b of players) stepBody(b, b.input, dt, ctx2);
-      if (scrolling && view.y <= 0) { view.y = 0; finish(); }
+      if (scrolling && (alongX ? view.x >= lvl.w * TILE - view.w : view.y <= 0)) {
+        if (alongX) view.x = lvl.w * TILE - view.w; else view.y = 0;
+        /* Arriving short is the end of the run, not a message on a loop. A
+           scrolling game has no way back for what it flew past, so a course
+           that asked for five and got three sat at its own last frame
+           printing "2 TO GO" for ever, which is not a loss, it is a hang. */
+        if (!finish() && state === 'play') {
+          const short = (stageRules().collect || 0) - (score - scoreAtStage);
+          lives = 0; state = 'over'; message = `MISSED ${short}`; say('lose');
+        }
+      }
       updateEntities(dt, ctx2);
       runTriggers();
       runStory();
@@ -736,7 +755,7 @@
         player.vx = dir * P.speed * 1.15;
         player.vy = dirY * P.speed * (mode === 'racer' ? 1.15 : 0.85);
         // carried along by the scroll, so standing still still means moving
-        player.y -= scroll * dt;
+        if (alongX) player.x += scroll * dt; else player.y -= scroll * dt;
       } else if (mode === 'platform') {
         player.coyote = player.grounded ? 0.09 : Math.max(0, player.coyote - dt);
         const jumpHeld = input.a || input.up;
@@ -847,16 +866,34 @@
         player.x = Math.max(view.x + 1, Math.min(player.x, view.x + view.w - player.w - 1));
         player.y = Math.max(view.y + 1, Math.min(player.y, view.y + view.h - player.h - 1));
         for (const t of tilesUnder(lvl, player)) {
-          if (t.info.hazard || (mode === 'racer' && t.info.solid === true)) { die(player); break; }
+          /* Flying into the cave is how you lose a cave shooter - the wall
+             is the whole of the difficulty, and a wall that merely stops you
+             while the screen keeps moving would shove you through it anyway. */
+          if (t.info.hazard || ((mode === 'racer' || alongX) && t.info.solid === true)) { die(player); break; }
           if (mode === 'shmup' && t.info.solid === true) {
             // walls stop you rather than kill you
             player.x -= player.vx * dt; player.y -= player.vy * dt;
             break;
           }
         }
-        if (P.attack && mode === 'shmup' && input.a && player.shotCool <= 0) {
-          const shot = makeEntity({ type: 'shot', x: player.x + 1, y: player.y - 4 });
-          shot.vx = 0; shot.vy = -ENTITY.shot.speed * 1.4;
+        /* Either button. Everywhere else in this engine X shoots, and a
+           vertical shooter alone read A - so the panel said "X to shoot",
+           which was true of every game in the studio except the two it was
+           printed under. Nothing else is bound in a scroller, so both fire
+           rather than one of them being quietly wrong. */
+        if (P.attack && (mode === 'shmup' || alongX) && (input.b || input.a) && player.shotCool <= 0) {
+          // Forward, which in a cave is along the corridor and in a climb is up.
+          const shot = alongX
+            ? makeEntity({ type: 'shot', x: player.x + player.w + 1, y: player.y + 2 })
+            : makeEntity({ type: 'shot', x: player.x + 1, y: player.y - 4 });
+          /* Through the screen, not through the level. The world is already
+             travelling at up to 130px a second; a shot at a flat 154 crawls
+             two inches ahead of the ship and stops, which reads as a gun
+             that does not work. Adding the scroll keeps what the player
+             sees - the speed it leaves the ship at - the same all run. */
+          const fwd = ENTITY.shot.speed * 1.4 + scroll;
+          if (alongX) { shot.vx = fwd; shot.vy = 0; }
+          else { shot.vx = 0; shot.vy = -fwd; }
           entities.push(shot); player.shotCool = 0.22; say('shoot');
         }
         player.shotCool = Math.max(0, player.shotCool - dt);
@@ -980,7 +1017,7 @@
     function finish(to) {
       const need = stageRules().collect || 0;
       const got = score - scoreAtStage;
-      if (got < need) { message = `${need - got} TO GO`; messageAt = elapsed; return; }
+      if (got < need) { message = `${need - got} TO GO`; messageAt = elapsed; return false; }
       // An exit may name where it goes, which is what makes a hub a hub
       // rather than a corridor.
       if (to !== undefined && to !== null && to !== '' && leaveFor(findStage(to))) return;
@@ -991,6 +1028,7 @@
       } else {
         state = 'won'; won = true; message = 'CLEAR'; say('win');
       }
+      return true;
     }
 
     // With two on screen an enemy has to choose. It chooses the nearer one,
@@ -1063,7 +1101,21 @@
       // Centred in the well, not in the level.
       const p = { i, turn: 0,
                   x: wellL + Math.floor((wellR - wellL + 1 - SHAPES[i].size) / 2), y: 0 };
-      if (!roomFor(p)) { state = 'over'; message = 'STACKED OUT'; say('hurt'); return null; }
+      /* Topping out is this game's death, so it costs a life like any other.
+         A stacking game set to three lives that ended on the first mistake
+         was not offering three lives, it was ignoring the setting - and the
+         HUD drew the pips regardless, so the screen said so too. */
+      if (!roomFor(p)) {
+        lives--;
+        effects.push({ kind: 'break', x: 0, y: 0, t: 0 });
+        if (lives <= 0) { state = 'over'; message = 'STACKED OUT'; say('lose'); return null; }
+        /* A life left means another go at the same well, swept clear. The
+           alternative is handing back a board that is already lost and
+           calling it a second chance. */
+        for (let y = 0; y < lvl.h; y++)
+          for (let x = wellL; x <= wellR; x++) lvl.tiles[y * lvl.w + x] = 0;
+        say('hurt');
+      }
       return p;
     }
 
@@ -1596,6 +1648,14 @@
             // a little texture on the exposed face, so a wide floor is not a slab
             ctx.fillStyle = 'rgba(255,255,255,.10)';
             ctx.fillRect(sx + ((tx * 3) % TILE), sy + 3, 2, 1);
+          }
+          /* A roof shows the face you can see, which is its underside. The
+             rule above lights the top of a block because side-on that is the
+             lit face and the one you land on - but in a cave the roof is the
+             hazard, and under that rule it came out a flat dark mass with no
+             edge on the side you have to fly along. */
+          if (alongX && info.top && !info.decor && !tileInfo(lvl.at(tx, ty + 1)).fill) {
+            ctx.fillStyle = info.top; ctx.fillRect(sx, sy + TILE - 2, TILE, 2);
           }
           /* Side-on, a block is lit along the top because that is the face you
              can see. From overhead there is no top: a wall shows its edge on
