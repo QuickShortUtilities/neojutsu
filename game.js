@@ -387,6 +387,29 @@
   // Make the panel show what the game actually is.
   function syncControlsFrom(spec) {
     const p = spec.player || {};
+    /* Only the abilities this kind of game has. A falling-block game has
+       nobody to give a double jump to, and offering one is not a harmless
+       extra control - it is a promise the game cannot keep. */
+    const WHO_CAN = {
+      platform: ['g-double', 'g-wall', 'g-dash', 'g-attack', 'g-coop'],
+      topdown:  ['g-dash', 'g-attack', 'g-aimlock', 'g-coop'],
+      racer:    ['g-dash'],
+      shmup:    ['g-attack'],
+      invaders: ['g-attack'],
+      rider:    [],
+      blocks:   [],
+    };
+    const allowed = WHO_CAN[spec.mode] || WHO_CAN.platform;
+    for (const id of ['g-double', 'g-wall', 'g-dash', 'g-attack', 'g-aimlock', 'g-coop']) {
+      const row = $(id) && $(id).closest('label');
+      if (row) row.hidden = !allowed.includes(id);
+    }
+    const win = document.querySelector('.fx-window[data-window="abilities"]');
+    const opener = document.querySelector('[data-open="abilities"]');
+    // Nothing to show at all: say so rather than opening an empty window.
+    if (opener) opener.hidden = allowed.length === 0;
+    if (win && allowed.length === 0 && window.NeoWindows) window.NeoWindows.close('abilities');
+
     // Which sky this game came with: one of the presets, or its own.
     if (spec.sky0 && spec.sky1) {
       const named = Object.keys(SKIES)
@@ -420,6 +443,9 @@
     } else if (own) {
       own.remove();
     }
+    /* The ending is not chosen here, only reported - so stop before the
+       pickup-count options, but not before everything else this function
+       does. Returning outright once skipped the abilities above. */
     if (ending) { window.NeoSelect?.refreshAll?.(); return; }
     // From the room, not the game: a run keeps its rules on each room, so a
     // three-stage quest that asks for a pickup read as "just the flag".
