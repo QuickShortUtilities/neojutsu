@@ -1449,8 +1449,16 @@
       snapshot() {
         const here = {
           level: { w: lvl.w, h: lvl.h, tiles: Array.from(lvl.tiles) },
+          /* Everything the spec put on a piece comes back out again. A tag is
+             how a script addresses it, `to` is where a door leads and `sprite`
+             is what it was told to look like - all three were dropped here, so
+             a game with a named guard in it lost the guard's name the first
+             time anybody moved a tile. */
           entities: entities.map(e => ({ type: e.type, x: Math.round(e.home.x), y: Math.round(e.home.y),
-                                         dir: e.vx < 0 ? -1 : 1 })),
+                                         dir: e.vx < 0 ? -1 : 1,
+                                         ...(e.tag ? { tag: e.tag } : {}),
+                                         ...(e.to !== undefined ? { to: e.to } : {}),
+                                         ...(typeof e.sprite === 'number' ? { sprite: e.sprite } : {}) })),
           props: props.map(pr => ({ i: pr.i, x: pr.x, y: pr.y, ...(pr.t ? { t: pr.t } : {}), ...(pr.b ? { b: 1 } : {}) })),
         };
         const out = { ...spec, ...here, story: stageStory };

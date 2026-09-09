@@ -81,6 +81,39 @@ with sync_playwright() as p:
     if v['brokenErrors'] < 4: issues.append(f"validator too lenient: only {v['brokenErrors']} errors on a broken spec")
     if v['nullOk']: issues.append('validator accepted null')
 
+    # --- an edit must not quietly lose what the spec put on a piece ---
+    # A tag is how a script addresses something, `to` is where a door leads,
+    # `sprite` is what it was told to look like. All three used to vanish the
+    # first time anybody moved a tile, which takes a game apart silently.
+    report['keeps'] = page.evaluate("""()=>{
+      const t=JSON.parse(JSON.stringify(window.NeoGameTemplates.platformer));
+      t.entities=[{type:'walker', x:80, y:88, tag:'guard', sprite:324},
+                  {type:'goal', x:120, y:88, to:2}];
+      const cv=document.createElement('canvas'); cv.width=160; cv.height=144;
+      const g=window.NeoGame.create(cv,t,{hud:false});
+      g.setTile(3,3,1);
+      const back=g.snapshot().entities;
+      const w=back.find(e=>e.type==='walker')||{}, go=back.find(e=>e.type==='goal')||{};
+      return { tag:w.tag, sprite:w.sprite, to:go.to };
+    }""")
+    k = report['keeps']
+    if k.get('tag') != 'guard': issues.append(f"an edit lost an actor's name ({k.get('tag')})")
+    if k.get('sprite') != 324: issues.append(f"an edit lost an actor's sprite ({k.get('sprite')})")
+    if k.get('to') != 2: issues.append(f"an edit lost where a door leads ({k.get('to')})")
+
+    # --- and the editor can give a piece a name in the first place ---
+    page.evaluate("NeoWindows.open('build')"); page.wait_for_timeout(250)
+    page.fill('#g-tag', 'guard')
+    page.evaluate("()=>{const b=[...document.querySelectorAll('#g-entities .tilebtn')];"
+                  " b[Math.min(1,b.length-1)].click();}")
+    cbox = page.locator('#g-canvas').bounding_box()
+    page.mouse.click(cbox['x']+cbox['width']*0.45, cbox['y']+cbox['height']*0.5)
+    page.wait_for_timeout(350)
+    named = page.evaluate("()=>document.getElementById('g-tags').textContent")
+    report['named'] = named
+    if 'guard' not in named:
+        issues.append(f'naming a piece in the editor did not take: {named!r}')
+
     if err: issues.append(f'errors: {err[:3]}')
     b.close()
 print(json.dumps({'report':report,'issues':issues}, indent=2))

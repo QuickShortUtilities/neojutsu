@@ -114,7 +114,7 @@
     });
     if ($('g-script')) { $('g-script').value = spec.script || ''; showScriptState({ errors: [] }); }
     buildStory(); drawHero();
-    present(); readout(); meta();
+    present(); readout(); meta(); showTags();
   }
 
   function readout() {
@@ -124,6 +124,19 @@
       : s === 'over' ? 'GAME OVER'
       : `${game.score}/${spec.rules.collect || '—'}  ♥${game.lives}`;
   }
+  /* What is named in this level, so somebody writing a script knows what
+     they can say. Without this the actor half of the language is a list of
+     words in the reference with nothing in the game to point them at. */
+  function showTags() {
+    const el = $('g-tags');
+    if (!el || !game) return;
+    const seen = new Map();
+    for (const e of game.entities) if (e.tag) seen.set(e.tag, (seen.get(e.tag) || 0) + 1);
+    el.textContent = seen.size
+      ? 'Named: ' + [...seen].map(([t, n]) => n > 1 ? `"${t}" ×${n}` : `"${t}"`).join(' · ')
+      : 'Nothing is named yet.';
+  }
+
   function meta() {
     if (!game) return;
     const l = game.level;
@@ -238,8 +251,14 @@
         game.addProp({ i: brush.id, x: p.tx * T + T / 2, y: p.ty * T + T, t: decorTint, b: $('g-decor-back').checked });
     }
     else if (erase) game.removeEntityAt(p.x, p.y);
-    else if (!game.removeEntityAt(p.x, p.y)) game.addEntity({ type: brush.id, x: p.tx * T, y: p.ty * T, dir: cfg().dir });
-    present(); meta(); save();
+    else if (!game.removeEntityAt(p.x, p.y)) {
+      // A name is what a script has to say to reach this piece. Placing
+      // several with the same one is allowed: "guard" can be three of them.
+      const tag = ($('g-tag').value || '').trim().slice(0, 20);
+      game.addEntity({ type: brush.id, x: p.tx * T, y: p.ty * T, dir: cfg().dir,
+                       ...(tag ? { tag } : {}) });
+    }
+    present(); meta(); showTags(); save();
   }
   function wireBuild() {
     display.addEventListener('pointerdown', e => {
@@ -748,7 +767,7 @@
       label.innerHTML = `<span>${lane.name}</span><i>${lane.beats.length || '·'}${cued ? ` (${cued} cued)` : ''}</i>`;
       label.title = i === here ? 'The stage you are editing' : `Go to ${lane.name}`;
       if (i !== here) label.addEventListener('click', () => {
-        game.goToStage(i); present(); readout(); meta(); buildStory();
+        game.goToStage(i); present(); readout(); meta(); showTags(); buildStory();
       });
 
       const track = document.createElement('div');
