@@ -101,6 +101,77 @@ try:
             if not (out / want_file).exists():
                 issues.append(f'{key}: {want_file} was not written')
         report[key] = {'rooms': rows, 'sprites': [p.stem for p in sheets]}
+    # ---- and the browser writes the same project the command line does ----
+    # Both can export; two answers to the same question is one answer too
+    # many, and they had already drifted on doors before anyone looked.
+    import http.server, threading, functools, socketserver, zipfile, io
+    from playwright.sync_api import sync_playwright
+
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(ROOT))
+    httpd = socketserver.TCPServer(('127.0.0.1', 0), handler)
+    port = httpd.server_address[1]
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+    with sync_playwright() as pw:
+        br = pw.chromium.launch()
+        ctx = br.new_context(accept_downloads=True)
+        page = ctx.new_page()
+        perr = []
+        page.on('pageerror', lambda e: perr.append(str(e)))
+        page.goto(f'http://127.0.0.1:{port}/game.html')
+        page.wait_for_function('!!(window.NeoGBS && window.NeoSprites && window.NeoSprites.loaded)',
+                               timeout=30000)
+        # the same tile table on both sides
+        theirs = page.evaluate('()=>window.NeoGBS.TILE_LOOK')
+        mine = {str(k): list(v) for k, v in E.TILE_LOOK.items()}
+        if {k: list(v) for k, v in theirs.items()} != mine:
+            issues.append('the browser and the command line disagree about the tile table')
+        report['tile_table_shared'] = {k: list(v) for k, v in theirs.items()} == mine
+
+        page.evaluate("""()=>{ const s=document.getElementById('g-template');
+          s.value='quest'; s.dispatchEvent(new Event('change',{bubbles:true})); }""")
+        page.wait_for_timeout(1200)
+        with page.expect_download(timeout=30000) as dl:
+            page.click('#g-gbs')
+        data = open(dl.value.path(), 'rb').read()
+        try:
+            z = zipfile.ZipFile(io.BytesIO(data))
+        except zipfile.BadZipFile as e:
+            issues.append(f'the browser wrote a zip that will not open: {e}')
+            z = None
+        if z is not None:
+            if z.testzip() is not None:
+                issues.append('the browser wrote a corrupt zip')
+            web = tmp / 'web'
+            z.extractall(web)
+            if [k for k, _ in G.find_projects(web)] != ['split']:
+                issues.append('our importer does not recognise the browser project')
+            wscenes = {}
+            for f in sorted(web.rglob('scenes/**/scene.gbsres')):
+                sc = json.loads(f.read_text(encoding='utf-8-sig'))
+                wscenes[sc['name']] = (sc, f.parent)
+            for st in E.stages_of(templates['quest']):
+                nm = st.get('name')
+                if nm not in wscenes:
+                    issues.append(f'browser export is missing room "{nm}"')
+                    continue
+                sc, folder = wscenes[nm]
+                grid, w, h = E.read_tiles(st['level'])
+                want = [E.TILE_LOOK.get(grid[y][x], (3, 0))[1] for y in range(h) for x in range(w)]
+                if G.decode_collisions(sc['collisions'], w * h) != want:
+                    issues.append(f'browser export: {nm} collision does not match the level')
+                ents = st.get('entities') or []
+                drawable = [e for e in ents if E.sprite_for(e.get('type')) is not None]
+                actors = [json.loads(pth.read_text())
+                          for pth in sorted((folder / 'actors').glob('*.gbsres'))]
+                if sorted((a['x'], a['y']) for a in actors) != \
+                   sorted((int(e['x']) // E.T, int(e['y']) // E.T) for e in drawable):
+                    issues.append(f'browser export: the cast moved in "{nm}"')
+            report['browser'] = {'bytes': len(data), 'entries': len(z.namelist())}
+        if perr:
+            issues.append(f'page errors during export: {perr[:2]}')
+        br.close()
+    httpd.shutdown()
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

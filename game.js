@@ -1239,6 +1239,29 @@ end`;
   // The package is one HTML file with the engine, the level and the track's
   // pattern inlined. Because everything here is seed-based rather than
   // rendered, the whole game - music included - is text.
+  /* The other way out: a GB Studio project, which their compiler turns into
+     a real ROM. Packaging makes something anyone can open; this makes
+     something a Game Boy can run. */
+  async function exportGBStudio() {
+    const btn = $('g-gbs');
+    btn.disabled = true; const was = btn.textContent; btn.textContent = 'Writing…';
+    try {
+      if (!window.NeoGBS) throw new Error('the exporter did not load');
+      const title = cfg().title || 'neojutsu-game';
+      const made = await window.NeoGBS.project(game.snapshot(), title);
+      if (!made) throw new Error('there is no level to export');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(made.blob);
+      a.download = `${title.replace(/[^\w.-]+/g, '-')}-gbstudio.zip`;
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      cloudStatus(`${a.download} · ${made.rooms} room${made.rooms === 1 ? '' : 's'}, ` +
+                  `${made.sprites} sprite${made.sprites === 1 ? '' : 's'} · ` +
+                  `unzip it, open the folder in GB Studio, press Build`);
+    } catch (e) {
+      cloudStatus(`Could not export: ${e.message}`);
+    } finally { btn.disabled = false; btn.textContent = was; }
+  }
+
   async function packageGame() {
     const c = cfg();
     const btn = $('g-package');
@@ -1566,6 +1589,7 @@ present();
     });
     $('g-open-share').addEventListener('click', packageGame);
     $('g-package').addEventListener('click', packageGame);
+    $('g-gbs').addEventListener('click', exportGBStudio);
     $('g-cloud-save').addEventListener('click', () => cloudSave(false));
     $('g-cloud-new').addEventListener('click', () => cloudSave(true));
     $('g-cloud-share').addEventListener('click', cloudShare);

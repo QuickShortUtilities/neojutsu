@@ -33,31 +33,28 @@ T = 8
 # The four greens, darkest first, as GB Studio indexes them.
 DMG = [(15, 56, 15), (48, 98, 48), (139, 172, 15), (155, 188, 15)]
 
+def _tile_look():
+    """The tile table, read out of game-gbs.js.
+
+    The browser writes these projects too, and two copies of a lookup is two
+    answers to the same question - they had already drifted on doors and on
+    the back wall before anyone noticed. So there is one table, it lives with
+    the browser exporter, and this reads it.
+    """
+    import re
+    src = (ROOT / 'game-gbs.js').read_text(encoding='utf-8')
+    i = src.index('const TILE_LOOK = {')
+    body = src[i + len('const TILE_LOOK = '):src.index('};', i) + 1]
+    body = re.sub(r'//[^\n]*', '', body)
+    body = re.sub(r'0x([0-9a-fA-F]+)', lambda m: str(int(m.group(1), 16)), body)
+    body = re.sub(r'(\d+)\s*:', r'"\1":', body)
+    body = re.sub(r',\s*}', '}', body)
+    return {int(k): tuple(v) for k, v in json.loads(body).items()}
+
+
 # Which of the four shades a tile of ours is drawn in, and whether it stops you.
 # GB Studio collision bits: 1 top, 2 bottom, 4 left, 8 right, 16 ladder.
-TILE_LOOK = {
-    0:  (3, 0x00),   # sky
-    1:  (0, 0x0f),   # ground
-    2:  (0, 0x0f),   # stone
-    3:  (1, 0x01),   # ledge, stood on from above
-    4:  (1, 0x00),   # spikes - hazards are not collision on their hardware
-    5:  (2, 0x10),   # ladder
-    6:  (2, 0x00),   # water
-    7:  (1, 0x0f),   # brick
-    8:  (2, 0x0f),   # ice
-    9:  (1, 0x0f),   # belt
-    10: (1, 0x0f),   # belt
-    11: (1, 0x0f),   # spring
-    12: (0, 0x0f),   # door
-    13: (2, 0x00),   # checkpoint
-    14: (1, 0x00),   # lava
-    15: (1, 0x0f),   # crate
-    16: (2, 0x00),   # grass
-    17: (1, 0x00),   # backwall
-    18: (2, 0x00),   # exit
-    19: (2, 0x00),   # road
-    20: (3, 0x00),   # line
-}
+TILE_LOOK = _tile_look()
 
 
 def encode_rle(cells):

@@ -285,13 +285,15 @@
           <div class="code-ref">
             <p class="ref-h">Events</p>
             <p class="ref-l">on <b>start tick collect hurt kill land win lose</b> … end</p>
-            <p class="ref-h">Ask about</p>
+            <p class="ref-h">Ask about <small>| yourself</small></p>
             <p class="ref-l"><b>score keys lives time x y vx vy enemies coins deaths grounded facing random</b></p>
+            <p class="ref-h">Ask about <small>| something else — put the bracket against the word</small></p>
+            <p class="ref-l"><b>x</b>("guard") · <b>y</b>("guard") · <b>dir</b>("guard") · <b>at</b>("guard", 10, 5) · <b>near</b>("guard", 40)</p>
             <p class="ref-h">Do</p>
             <p class="ref-l"><b>message talk win lose open give heal hurt spawn tile warp push gravity speed shake print</b></p>
             <p class="ref-h">Actors <small>| anything you tagged</small></p>
             <p class="ref-l"><b>move</b> "guard" 10 5 · <b>stop show hide remove</b> "guard" · <b>face</b> "guard" -1
-              · <b>setsprite</b> "guard" 324 · <b>shoot</b> "guard" 0</p>
+              · <b>setsprite</b> "guard" 324 · <b>shoot</b> "guard" 0 · <b>speed</b> "guard" 40</p>
             <p class="ref-h">Time</p>
             <p class="ref-l"><b>wait</b> 2 — everything after it happens two seconds later, so a script can be a sequence</p>
             <p class="ref-h">Shape</p>
@@ -369,6 +371,8 @@
         <p class="hint" id="g-cloud-status">Sign in to keep your games and share them by link.</p>
         <button class="mini wide-mini" id="g-package" type="button">出 Package as one file</button>
         <p class="hint">Everything is seed-based, so the whole game and its music travel as text in a single HTML file.</p>
+        <button class="mini wide-mini" id="g-gbs" type="button" title="A GB Studio project: open the folder there and Build to get a .gb">型 Export for Game Boy</button>
+        <p class="hint">A GB Studio project, zipped. Open it there and press Build for a real <code>.gb</code> ROM. Rooms, walls and the cast travel; decor and scripts do not.</p>
       </div>
       <div id="g-cloud" hidden>
         <div class="cloud-actions">
@@ -393,6 +397,7 @@
   <script src="game-templates.js"></script>
   <script src="game-recipes.js"></script>
   <script src="game-gen.js"></script>
+  <script src="game-gbs.js"></script>
   <script src="game-windows.js"></script>
   <script src="game.js"></script>
 </body>
