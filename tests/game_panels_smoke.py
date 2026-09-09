@@ -72,6 +72,14 @@ with sync_playwright() as pw:
           entities: shown($('g-entities')),
           facing: shown($('g-dir') && $('g-dir').closest('label')),
           goal: ($('g-goal').selectedOptions[0] || {}).textContent || '',
+          // Which scripts the panel is willing to paste into this game.
+          recipes: [...document.querySelectorAll('#g-recipes [data-recipe]')]
+                     .filter(b => !b.hidden).map(b => b.dataset.recipe),
+          win: (() => {
+            const st = (spec.levels && spec.levels.length) ? spec.levels[0] : spec;
+            const r = st.rules || spec.rules || {};
+            return (r.clearAll || r.clearFoes || r.lines || r.beat) ? 'clear' : 'goal';
+          })(),
         });
       }
       return out;
@@ -105,6 +113,26 @@ with sync_playwright() as pw:
         # No flag stands at the end of a bike course or a scrolling shooter.
         if mode in ('rider', 'racer', 'shmup') and 'flag' in row['goal'].lower():
             issues.append(f"{row['id']} ({mode}) says {row['goal']!r}, but has no flag")
+
+    # A recipe is a script the panel will paste in. The generator has always
+    # filtered them by mode and ending; the panel used to offer all of them.
+    fits = page.evaluate("""(rows) => {
+      const lib = window.NeoRecipes, out = {};
+      for (const row of rows) {
+        const bad = [];
+        for (const id of row.recipes) {
+          const rec = lib.byId(id);
+          if (!lib.fitsMode(rec, row.mode)) bad.push([id, 'mode']);
+          else if (!lib.fitsWin(rec, row.win)) bad.push([id, 'ending']);
+        }
+        if (bad.length) out[row.id] = bad;
+      }
+      return out;
+    }""", [{'id': r['id'], 'mode': r['mode'], 'win': r['win'], 'recipes': r['recipes']}
+          for r in seen])
+    report['recipes'] = fits
+    for key, bad in fits.items():
+        issues.append(f'{key}: offers scripts it cannot run: {bad}')
 
     missing = sorted(set(CAN) - set(report['modes']))
     if missing:

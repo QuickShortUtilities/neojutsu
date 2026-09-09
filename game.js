@@ -418,6 +418,7 @@
        sprite, the tint or the character to be about - and its entities are
        never stepped, so a coin placed in the well is a coin that can never
        be picked up. Neither panel is offered rather than offered and ignored. */
+    syncRecipes(spec);
     const bodied = spec.mode !== 'blocks';
     window.NeoWindows?.offer?.('abilities', allowed.length > 0);
     window.NeoWindows?.offer?.('hero', bodied);
@@ -1167,7 +1168,28 @@
       b.type = 'button'; b.className = 'recipe'; b.title = r.blurb;
       b.innerHTML = `<span class="rk">${r.kanji}</span>${r.name}`;
       b.addEventListener('click', () => { addScript(r.code); cloudStatus?.(''); });
+      b.dataset.recipe = r.id;
       host.append(b);
+    }
+    syncRecipes(spec || {});
+  }
+
+  /* Only the ones this game can carry out. The generator has filtered these
+     by mode and by ending since the day recipes existed; the panel never did,
+     so a falling-block game was offered rising lava and a key that opens
+     doors it does not have. Clicking one pasted a script that could not fire,
+     which is a worse answer than no script. */
+  function syncRecipes(from) {
+    const host = $('g-recipes'), lib = window.NeoRecipes;
+    if (!host || !lib) return;
+    const mode = from.mode || 'platform';
+    const stages = Array.isArray(from.levels) && from.levels.length ? from.levels : null;
+    const rules = ((stages ? stages[0] : from).rules) || from.rules || {};
+    const win = (rules.clearAll || rules.clearFoes || rules.lines || rules.beat)
+      ? 'clear' : 'goal';
+    for (const b of host.querySelectorAll('[data-recipe]')) {
+      const rec = lib.byId(b.dataset.recipe);
+      b.hidden = !(lib.fitsMode(rec, mode) && lib.fitsWin(rec, win));
     }
   }
 

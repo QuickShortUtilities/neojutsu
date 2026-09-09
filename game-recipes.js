@@ -27,7 +27,11 @@ on tick
   end
 end` },
 
+    /* Needs both halves of what it says: things to kill, and a door for
+       clearing them to open. A well has neither, and a course has no door,
+       so it announced "CLEAR THEM ALL" and opened nothing a frame later. */
     { id: 'bossgate', name: 'Clear the room', kanji: '闘', tags: ['boss', 'fight'],
+      modes: ['platform', 'topdown'],
       blurb: 'The way out stays shut until every enemy is gone.',
       code: `on start
   message "CLEAR THEM ALL"
@@ -63,7 +67,9 @@ on tick
   end
 end` },
 
+    // Everywhere there is something to make quicker. In a well there is not.
     { id: 'speedup', name: 'Faster as you go', kanji: '速', tags: ['pace'],
+      modes: ['platform', 'topdown', 'racer', 'shmup', 'scramble', 'rider', 'invaders'],
       blurb: 'Every pickup makes you quicker.',
       code: `on collect
   set pace 80 + score * 6
@@ -160,7 +166,9 @@ on collect
   end
 end` },
 
+    // Keys and doors exist in the two modes that have rooms.
     { id: 'jailbreak', name: 'Key opens the way', kanji: '鍵', tags: ['doors'],
+      modes: ['platform', 'topdown'],
       blurb: 'Doors stay shut until a key is found.',
       code: `on start
   message "FIND THE KEY"
