@@ -59,3 +59,16 @@
 }
 .fold p.hint b { color: var(--text); font-weight: 400; }
 #g-canvas.panning { cursor: grabbing; }
+
+/* the generator */
+.gen-box { margin-bottom: 20px; }
+#g-prompt {
+  width: 100%; resize: vertical; min-height: 62px;
+  background: #07060c; color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+  font-family: var(--sans); font-size: 12px; line-height: 1.6; padding: 10px; margin-bottom: 8px;
+}
+#g-prompt:focus { outline: none; border-color: var(--cyan); }
+#g-prompt::placeholder { color: #4b4368; }
+.gen-read { font-size: 10px; line-height: 1.7; color: var(--muted); margin: 6px 0 0; min-height: 14px; }
+.gen-read b { color: var(--cyan); font-weight: 400; }
+.gen-read .warn { color: var(--yellow); }

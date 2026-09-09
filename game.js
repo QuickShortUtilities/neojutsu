@@ -269,6 +269,82 @@
     for (const b of document.querySelectorAll('.tilebtn')) b.classList.toggle('current', b.dataset.piece === want);
   }
 
+  // ---------- generating ----------
+  // Text in, playable game out. The backend is rules today and could be a model
+  // tomorrow; nothing else here would change, because the contract is only ever
+  // that a spec comes back and the validator accepts it.
+  const SURPRISES = [
+    'a hard ice cave with slippery ledges and a double jump',
+    'a short factory level with conveyor belts and a robot who can shoot',
+    'a tall tower to climb at sunset, 10 coins',
+    'an easy underwater temple with a locked door and a key',
+    'a volcano arena with a boss fight and 3 lives',
+    'a top-down dungeon maze with chasers and a key',
+    'a long sky level on floating islands with a dash',
+    'a timed run through ruins against the clock',
+    'a cave with breakable bricks and bouncy springs',
+  ];
+
+  // Make the panel show what the game actually is.
+  function syncControlsFrom(spec) {
+    const p = spec.player || {};
+    if (p.char) $('g-char').value = p.char;
+    const lives = String(spec.lives ?? 3);
+    if (![...$('g-lives').options].some(o => o.value === lives)) {
+      const o = document.createElement('option'); o.value = lives; o.textContent = lives; $('g-lives').append(o);
+    }
+    $('g-lives').value = lives;
+    const need = String((spec.rules && spec.rules.collect) || 0);
+    if (![...$('g-goal').options].some(o => o.value === need)) {
+      const o = document.createElement('option'); o.value = need;
+      o.textContent = need === '0' ? 'Just reach the flag' : `Collect ${need}`;
+      $('g-goal').append(o);
+    }
+    $('g-goal').value = need;
+    for (const [id, key] of [['g-double','doubleJump'],['g-wall','wallJump'],['g-dash','dash'],['g-attack','attack']])
+      $(id).checked = !!p[key];
+    window.NeoSelect?.refreshAll?.();
+  }
+
+  function describeUnderstanding(u) {
+    const bits = [];
+    if (u.theme) bits.push(`<b>${u.theme}</b>`);
+    if (u.mode) bits.push(`<b>${u.mode === 'topdown' ? 'top-down' : 'platformer'}</b>`);
+    if (u.mech) bits.push(`<b>${u.mech}</b>`);
+    if (u.abilities && u.abilities.length) bits.push(u.abilities.map(a => `<b>${a}</b>`).join(' + '));
+    if (u.difficulty !== undefined) bits.push(`<b>${['easy','normal','hard'][u.difficulty]}</b>`);
+    if (u.size) bits.push(`<b>${u.size}</b>`);
+    if (u.collect !== undefined) bits.push(`<b>${u.collect} to collect</b>`);
+    if (u.timed) bits.push('<b>timed</b>');
+    if (u.boss) bits.push('<b>boss</b>');
+    if (u.char) bits.push(`<b>${u.char}</b>`);
+    return bits;
+  }
+
+  function runGenerate(prompt) {
+    const out = window.NeoGameGen.generateValid(prompt);
+    const el = $('g-understood');
+    if (!out || !out.validation.ok) {
+      el.innerHTML = `<span class="warn">Could not build that one — ${(out && out.validation.errors[0]) || 'unknown problem'}. Try different words.</span>`;
+      return;
+    }
+    const bits = describeUnderstanding(out.understood);
+    el.innerHTML = bits.length
+      ? `Read as ${bits.join(' · ')}. The rest was chosen for you.`
+      : 'Nothing recognised in that, so all of it was chosen for you.';
+    cloudId = null;
+    // build() applies the studio's own controls over the spec, so the controls
+    // have to be told what was generated first - otherwise the dropdowns
+    // silently overwrite the hero, the lives and the pickup target.
+    syncControlsFrom(out.spec);
+    build(out.spec);
+    $('g-title').value = out.spec.name;
+    $('g-edit').checked = false;
+    display.classList.remove('building');
+    save();
+    play();
+  }
+
   // ---------- undo ----------
   // The level and its pieces are small, so history is whole snapshots rather
   // than a diff - simpler, and impossible to get subtly wrong.
@@ -708,6 +784,14 @@ present();
         save();
       });
     $('g-title').addEventListener('input', save);
+    $('g-generate').addEventListener('click', () => runGenerate($('g-prompt').value));
+    $('g-surprise').addEventListener('click', () => {
+      const p = SURPRISES[Math.floor(Math.random() * SURPRISES.length)];
+      $('g-prompt').value = p; runGenerate(p);
+    });
+    $('g-prompt').addEventListener('keydown', e => {
+      if ((e.metaKey || e.ctrlKey) && e.code === 'Enter') { e.preventDefault(); runGenerate($('g-prompt').value); }
+    });
     $('g-undo').addEventListener('click', undo);
     $('g-redo').addEventListener('click', redo);
     $('g-clear').addEventListener('click', () => {

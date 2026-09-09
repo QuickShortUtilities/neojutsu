@@ -49,6 +49,17 @@
 
     <!-- ===== left: the game ===== -->
     <aside class="panel gen">
+      <h2 class="panel-title"><span class="k">創</span> Describe it</h2>
+      <div class="gen-box">
+        <textarea id="g-prompt" rows="3" spellcheck="false"
+          placeholder="a hard ice cave with slippery ledges, a double jump and 8 coins"></textarea>
+        <div class="cloud-actions">
+          <button class="mini" id="g-generate" type="button">Generate</button>
+          <button class="mini" id="g-surprise" type="button">Surprise me</button>
+        </div>
+        <p class="gen-read" id="g-understood"></p>
+      </div>
+
       <h2 class="panel-title"><span class="k">戯</span> Game</h2>
       <label class="field"><span>Start from</span><select id="g-template"></select></label>
       <label class="field"><span>Hero</span><select id="g-char"></select></label>
@@ -235,6 +246,7 @@
   <script src="game-script.js"></script>
   <script src="game-engine.js"></script>
   <script src="game-templates.js"></script>
+  <script src="game-gen.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
