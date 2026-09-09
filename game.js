@@ -523,6 +523,36 @@
     $('g-decor-count').textContent = `${list.length} sprite${list.length === 1 ? '' : 's'}`;
   }
 
+  // Dressing a level you built by hand, with the same rules the generator
+  // uses. It adds to what is there rather than replacing it, and goes
+  // through mark() so one press is one undo.
+  function dressLevel() {
+    if (!game || !window.NeoGameGen) return;
+    mark();
+    const sp = game.snapshot(), lvl = game.level;
+    const rows = [];
+    for (let y = 0; y < lvl.h; y++) {
+      const row = [];
+      for (let x = 0; x < lvl.w; x++) row.push(lvl.at(x, y).toString(36));
+      rows.push(row);
+    }
+    const theme = $('g-decor-theme').value;
+    const had = (sp.props || []).length;
+    const r = window.NeoGameGen.rng(`${theme}:${sp.seed || 'neojutsu'}:${had}`);
+    const fresh = window.NeoGameGen.dress(r, { w: lvl.w, h: lvl.h, theme, difficulty: 1 },
+                                          { g: rows, ents: sp.entities, start: sp.start });
+    sp.props = (sp.props || []).concat(fresh);
+    build(sp); save(); meta();
+    cloudStatus(fresh.length ? `Added ${fresh.length} pieces of ${theme} decor.`
+                            : 'No ledges to stand anything on.');
+  }
+  function clearDecor() {
+    if (!game) return;
+    mark();
+    const sp = game.snapshot(); sp.props = [];
+    build(sp); save(); meta();
+  }
+
   function openDecor() {
     if (!window.NeoSprites || !window.NeoSprites.loaded) return;
     decorOpen = true; $('g-decor').hidden = false;
@@ -1033,6 +1063,14 @@ present();
     $('g-pick-open').addEventListener('click', () => pickerOpen ? closePicker() : openPicker());
     $('g-picker-close').addEventListener('click', closePicker);
     $('g-decor-open').addEventListener('click', () => decorOpen ? closeDecor() : openDecor());
+    const themeSel = $('g-decor-theme');
+    for (const key of Object.keys(window.NeoGameGen.DECOR)) {
+      const o = document.createElement('option');
+      o.value = key; o.textContent = key[0].toUpperCase() + key.slice(1);
+      themeSel.append(o);
+    }
+    $('g-decor-fill').addEventListener('click', dressLevel);
+    $('g-decor-clear').addEventListener('click', clearDecor);
     $('g-decor-close').addEventListener('click', closeDecor);
     $('g-picker-grid').addEventListener('scroll', syncPickerScroll);
     $('g-picker-more').addEventListener('click', () => {

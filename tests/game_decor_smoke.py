@@ -122,6 +122,20 @@ with sync_playwright() as p:
         if v[k]: issues.append(f'validate accepted {k}')
     if not v['goodOk']: issues.append('validate rejected good decor')
 
+    # "Dress it" on a level you built by hand, and "Bare" to take it back off
+    page.evaluate("document.getElementById('g-decor-clear').click()"); page.wait_for_timeout(250)
+    page.evaluate("document.getElementById('g-decor-theme').value='cave'")
+    page.evaluate("document.getElementById('g-decor-fill').click()"); page.wait_for_timeout(350)
+    dressed = page.evaluate("(JSON.parse(localStorage.getItem('neojutsu.game.v1')||'{}').spec||{}).props||[]")
+    page.evaluate("document.getElementById('g-decor-fill').click()"); page.wait_for_timeout(350)
+    twice = page.evaluate("(JSON.parse(localStorage.getItem('neojutsu.game.v1')||'{}').spec||{}).props||[]")
+    page.evaluate("document.getElementById('g-decor-clear').click()"); page.wait_for_timeout(300)
+    bare = page.evaluate("(JSON.parse(localStorage.getItem('neojutsu.game.v1')||'{}').spec||{}).props||[]")
+    report['dress_button'] = {'once': len(dressed), 'twice': len(twice), 'bare': len(bare)}
+    if len(dressed) < 3: issues.append(f'Dress it added {len(dressed)} props')
+    if len(twice) <= len(dressed): issues.append('Dress it a second time added nothing')
+    if bare: issues.append(f'Bare left {len(bare)} props behind')
+
     # a generated level should arrive dressed, and dressed the same way twice
     report['generated'] = page.evaluate("""() => {
       const G = window.NeoGameGen, out = {};

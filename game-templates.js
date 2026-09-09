@@ -120,7 +120,8 @@
     "rules": {
       "collect": 12
     },
-    "cat": "platformer"
+    "cat": "platformer",
+    "props": [{"i":99,"x":60,"y":120,"t":"#cfe6ff"}, {"i":53,"x":252,"y":120,"t":"#cfe6ff"}, {"i":53,"x":292,"y":120,"t":"#cfe6ff"}]
   },
   "dungeon": {
     "name": "Dungeon crawl",
@@ -226,7 +227,8 @@
     "rules": {
       "collect": 10
     },
-    "cat": "dungeon"
+    "cat": "dungeon",
+    "props": [{"i":107,"x":28,"y":83,"t":"#383448","b":1}, {"i":107,"x":28,"y":179,"t":"#383448","b":1}, {"i":106,"x":60,"y":179,"t":"#383448","b":1}, {"i":106,"x":116,"y":155,"t":"#383448","b":1}, {"i":107,"x":156,"y":179,"t":"#383448","b":1}, {"i":106,"x":220,"y":83,"t":"#383448","b":1}, {"i":103,"x":36,"y":80,"t":"#6f6890"}, {"i":105,"x":60,"y":176,"t":"#6f6890"}, {"i":620,"x":76,"y":176,"t":"#6f6890"}, {"i":105,"x":84,"y":80,"t":"#6f6890"}, {"i":103,"x":108,"y":176,"t":"#6f6890"}, {"i":103,"x":132,"y":56,"t":"#6f6890"}, {"i":103,"x":188,"y":136,"t":"#6f6890"}, {"i":105,"x":188,"y":176,"t":"#6f6890"}, {"i":620,"x":204,"y":80,"t":"#6f6890"}]
   },
   "ice": {
     "name": "Ice cavern",
@@ -321,7 +323,8 @@
       "collect": 10
     },
     "script": "on start\n message \"SLIPPERY\"\nend\non hurt\n message \"CAREFUL\"\nend",
-    "cat": "platformer"
+    "cat": "platformer",
+    "props": [{"i":57,"x":28,"y":123,"t":"#506c78","b":1}, {"i":58,"x":92,"y":123,"t":"#506c78","b":1}, {"i":58,"x":204,"y":83,"t":"#506c78","b":1}, {"i":57,"x":212,"y":83,"t":"#506c78","b":1}, {"i":58,"x":244,"y":123,"t":"#506c78","b":1}, {"i":50,"x":28,"y":120,"t":"#9fd8f0"}, {"i":98,"x":124,"y":120,"t":"#9fd8f0"}, {"i":51,"x":204,"y":120,"t":"#9fd8f0"}, {"i":50,"x":252,"y":136,"t":"#9fd8f0"}, {"i":98,"x":316,"y":120,"t":"#9fd8f0"}]
   },
   "tower": {
     "name": "Tower climb",
@@ -410,7 +413,8 @@
       "collect": 0
     },
     "script": "on start\n message \"CLIMB\"\nend\non collect\n if score >= 6\n  message \"NEARLY\"\n end\nend",
-    "cat": "platformer"
+    "cat": "platformer",
+    "props": [{"i":107,"x":36,"y":163,"t":"#454035","b":1}, {"i":110,"x":52,"y":67,"t":"#454035","b":1}, {"i":110,"x":100,"y":187,"t":"#454035","b":1}, {"i":106,"x":100,"y":283,"t":"#454035","b":1}, {"i":106,"x":132,"y":91,"t":"#454035","b":1}, {"i":107,"x":132,"y":307,"t":"#454035","b":1}, {"i":110,"x":140,"y":187,"t":"#454035","b":1}, {"i":148,"x":20,"y":208,"t":"#8a7f6a"}, {"i":196,"x":36,"y":304,"t":"#8a7f6a"}, {"i":622,"x":60,"y":160,"t":"#8a7f6a"}, {"i":148,"x":92,"y":304,"t":"#8a7f6a"}, {"i":148,"x":132,"y":136,"t":"#8a7f6a"}, {"i":148,"x":132,"y":232,"t":"#8a7f6a"}, {"i":147,"x":132,"y":280,"t":"#8a7f6a"}]
   },
   "factory": {
     "name": "Belt factory",
@@ -521,7 +525,8 @@
       "collect": 12
     },
     "script": "on start\n message \"SHOOT WITH X\"\nend\non kill\n give 1\nend",
-    "cat": "shooter"
+    "cat": "shooter",
+    "props": [{"i":108,"x":92,"y":123,"t":"#3d3d45","b":1}, {"i":106,"x":188,"y":123,"t":"#3d3d45","b":1}, {"i":109,"x":308,"y":123,"t":"#3d3d45","b":1}, {"i":8,"x":12,"y":120,"t":"#7a7a8a"}, {"i":829,"x":44,"y":120,"t":"#7a7a8a"}, {"i":8,"x":124,"y":120,"t":"#7a7a8a"}, {"i":10,"x":204,"y":120,"t":"#7a7a8a"}]
   },
   "boss": {
     "name": "Boss arena",
@@ -572,7 +577,8 @@
       "collect": 0
     },
     "script": "on start\n message \"CLEAR THEM ALL\"\nend\non tick\n if enemies == 0\n  open\n  message \"THE WAY IS OPEN\"\n end\nend\non kill\n shake 4\nend",
-    "cat": "shooter"
+    "cat": "shooter",
+    "props": [{"i":106,"x":44,"y":75,"t":"#60251d","b":1}, {"i":106,"x":156,"y":75,"t":"#60251d","b":1}, {"i":106,"x":172,"y":75,"t":"#60251d","b":1}, {"i":107,"x":172,"y":107,"t":"#60251d","b":1}, {"i":106,"x":188,"y":107,"t":"#60251d","b":1}, {"i":622,"x":36,"y":104,"t":"#c04a3a"}, {"i":622,"x":108,"y":120,"t":"#c04a3a"}, {"i":622,"x":132,"y":104,"t":"#c04a3a"}, {"i":622,"x":148,"y":104,"t":"#c04a3a"}]
   },
   "maze": {
     "name": "Key maze",
@@ -658,7 +664,8 @@
       "keys": 1
     },
     "script": "on start\n message \"FIND THE KEY\"\nend\non collect\n if keys >= 1\n  message \"DOOR OPEN\"\n end\nend",
-    "cat": "dungeon"
+    "cat": "dungeon",
+    "props": [{"i":106,"x":44,"y":163,"t":"#383448","b":1}, {"i":106,"x":52,"y":139,"t":"#383448","b":1}, {"i":106,"x":76,"y":83,"t":"#383448","b":1}, {"i":106,"x":84,"y":163,"t":"#383448","b":1}, {"i":106,"x":92,"y":83,"t":"#383448","b":1}, {"i":107,"x":212,"y":83,"t":"#383448","b":1}, {"i":105,"x":36,"y":80,"t":"#6f6890"}, {"i":620,"x":52,"y":136,"t":"#6f6890"}, {"i":105,"x":116,"y":56,"t":"#6f6890"}, {"i":620,"x":140,"y":80,"t":"#6f6890"}, {"i":622,"x":164,"y":80,"t":"#6f6890"}, {"i":103,"x":196,"y":160,"t":"#6f6890"}]
   },
   "sky": {
     "name": "Sky islands",
@@ -754,7 +761,8 @@
       "collect": 10
     },
     "script": "on start\n message \"DOUBLE JUMP\"\nend",
-    "cat": "platformer"
+    "cat": "platformer",
+    "props": [{"i":99,"x":44,"y":112,"t":"#cfe6ff"}]
   },
   "dive": {
     "name": "Deep dive",
@@ -829,7 +837,8 @@
       "collect": 0
     },
     "script": "on start\n message \"GO DOWN\"\nend\non hurt\n shake 3\nend",
-    "cat": "adventure"
+    "cat": "adventure",
+    "props": [{"i":106,"x":28,"y":147,"t":"#383448","b":1}, {"i":107,"x":28,"y":339,"t":"#383448","b":1}, {"i":107,"x":76,"y":211,"t":"#383448","b":1}, {"i":106,"x":92,"y":115,"t":"#383448","b":1}, {"i":106,"x":108,"y":51,"t":"#383448","b":1}, {"i":108,"x":108,"y":275,"t":"#383448","b":1}, {"i":107,"x":108,"y":339,"t":"#383448","b":1}, {"i":106,"x":116,"y":115,"t":"#383448","b":1}, {"i":106,"x":132,"y":275,"t":"#383448","b":1}, {"i":108,"x":132,"y":339,"t":"#383448","b":1}, {"i":108,"x":140,"y":83,"t":"#383448","b":1}, {"i":108,"x":148,"y":179,"t":"#383448","b":1}, {"i":107,"x":156,"y":51,"t":"#383448","b":1}, {"i":108,"x":156,"y":83,"t":"#383448","b":1}, {"i":107,"x":156,"y":339,"t":"#383448","b":1}, {"i":103,"x":20,"y":304,"t":"#6f6890"}, {"i":105,"x":36,"y":336,"t":"#6f6890"}, {"i":103,"x":68,"y":80,"t":"#6f6890"}, {"i":105,"x":84,"y":176,"t":"#6f6890"}, {"i":622,"x":84,"y":208,"t":"#6f6890"}, {"i":622,"x":92,"y":144,"t":"#6f6890"}, {"i":622,"x":92,"y":304,"t":"#6f6890"}, {"i":620,"x":108,"y":272,"t":"#6f6890"}, {"i":105,"x":108,"y":336,"t":"#6f6890"}, {"i":103,"x":116,"y":176,"t":"#6f6890"}, {"i":105,"x":116,"y":304,"t":"#6f6890"}, {"i":105,"x":124,"y":48,"t":"#6f6890"}, {"i":622,"x":124,"y":208,"t":"#6f6890"}, {"i":105,"x":132,"y":80,"t":"#6f6890"}, {"i":105,"x":132,"y":112,"t":"#6f6890"}, {"i":103,"x":132,"y":304,"t":"#6f6890"}, {"i":103,"x":148,"y":112,"t":"#6f6890"}, {"i":105,"x":148,"y":336,"t":"#6f6890"}, {"i":622,"x":156,"y":80,"t":"#6f6890"}]
   },
   "rush": {
     "name": "Coin rush",
@@ -939,7 +948,8 @@
       "collect": 14
     },
     "script": "on start\n set left 45\n message \"45 SECONDS\"\nend\non tick\n every 1\n  set left left - 1\n  if left == 10\n   message \"10 LEFT\"\n  end\n  if left <= 0\n   lose\n  end\n end\nend\non collect\n if score >= 14\n  message \"RUN FOR IT\"\n end\nend",
-    "cat": "platformer"
+    "cat": "platformer",
+    "props": [{"i":148,"x":84,"y":107,"t":"#6a3c50","b":1}, {"i":148,"x":116,"y":107,"t":"#6a3c50","b":1}, {"i":148,"x":124,"y":107,"t":"#6a3c50","b":1}, {"i":148,"x":164,"y":107,"t":"#6a3c50","b":1}, {"i":147,"x":260,"y":75,"t":"#6a3c50","b":1}, {"i":148,"x":268,"y":75,"t":"#6a3c50","b":1}, {"i":148,"x":284,"y":107,"t":"#6a3c50","b":1}, {"i":99,"x":52,"y":104,"t":"#d4789f"}, {"i":99,"x":252,"y":104,"t":"#d4789f"}]
   },
   "trial": {
     "name": "Time trial",
@@ -1029,7 +1039,8 @@
     },
     "script": "on start\n  message \"GOOD LUCK\"\n  set left 45\n  message \"45 SECONDS\"\nend\n\non tick\n  every 1\n    set left left - 1\n    if left == 10\n      message \"10 LEFT\"\n    end\n    if left <= 0\n      lose\n    end\n  end\nend\n\non collect\n  if score == 5\n    heal 1\n    message \"HAVE A LIFE\"\n  end\n  set pace 80 + score * 6\n  speed pace\n  if score == 5\n    message \"PICKING UP SPEED\"\n  end\nend",
     "kanji": "\u8d70",
-    "cat": "platformer"
+    "cat": "platformer",
+    "props": [{"i":53,"x":276,"y":56,"t":"#cfe6ff"}, {"i":53,"x":308,"y":112,"t":"#cfe6ff"}, {"i":99,"x":340,"y":88,"t":"#cfe6ff"}]
   },
   "gauntlet": {
     "name": "Gauntlet",
@@ -1133,7 +1144,8 @@
     },
     "script": "on start\n  message \"BEGIN\"\n  set streak 0\nend\n\non hurt\n  shake 6\n  lose\n  set streak 0\nend\n\non collect\n  set streak streak + 1\n  if streak >= 4\n    give 2\n    message \"STREAK\"\n    set streak 0\n  end\nend",
     "kanji": "\u6483",
-    "cat": "shooter"
+    "cat": "shooter",
+    "props": [{"i":110,"x":164,"y":99,"t":"#454035","b":1}, {"i":106,"x":180,"y":91,"t":"#454035","b":1}, {"i":106,"x":196,"y":67,"t":"#454035","b":1}, {"i":106,"x":196,"y":91,"t":"#454035","b":1}, {"i":622,"x":132,"y":96,"t":"#8a7f6a"}, {"i":622,"x":172,"y":88,"t":"#8a7f6a"}, {"i":196,"x":196,"y":88,"t":"#8a7f6a"}]
   },
   "outpost": {
     "name": "Outpost",
@@ -1224,7 +1236,8 @@
     },
     "script": "on start\n  message \"BEGIN\"\nend\n\non collect\n  set pace 80 + score * 6\n  speed pace\n  if score == 5\n    message \"PICKING UP SPEED\"\n  end\nend",
     "kanji": "\u5b99",
-    "cat": "scifi"
+    "cat": "scifi",
+    "props": [{"i":106,"x":124,"y":115,"t":"#3d3d45","b":1}, {"i":109,"x":164,"y":75,"t":"#3d3d45","b":1}, {"i":106,"x":172,"y":75,"t":"#3d3d45","b":1}, {"i":109,"x":284,"y":115,"t":"#3d3d45","b":1}, {"i":829,"x":12,"y":112,"t":"#7a7a8a"}, {"i":10,"x":68,"y":112,"t":"#7a7a8a"}, {"i":829,"x":100,"y":112,"t":"#7a7a8a"}, {"i":10,"x":116,"y":112,"t":"#7a7a8a"}, {"i":8,"x":140,"y":112,"t":"#7a7a8a"}, {"i":10,"x":300,"y":112,"t":"#7a7a8a"}]
   },
   "relic": {
     "name": "Relic hunt",
@@ -1315,7 +1328,8 @@
     },
     "script": "on start\n  message \"GOOD LUCK\"\n  message \"FIND THE KEY\"\n  set solid 1\nend\n\non collect\n  if keys >= 1\n    open\n    message \"IT OPENS\"\n  end\n  if score >= 10\n    message \"RUN\"\n    shake 5\n    speed 120\n    spawn \"chaser\" 4 12\n  end\nend\n\non tick\n  every 2\n    if solid == 1\n      tile 20 14 0\n      set solid 0\n    else\n      tile 20 14 1\n      set solid 1\n    end\n  end\nend",
     "kanji": "\u5192",
-    "cat": "adventure"
+    "cat": "adventure",
+    "props": [{"i":108,"x":92,"y":163,"t":"#405462","b":1}, {"i":109,"x":108,"y":99,"t":"#405462","b":1}, {"i":108,"x":156,"y":163,"t":"#405462","b":1}, {"i":107,"x":188,"y":51,"t":"#405462","b":1}, {"i":12,"x":84,"y":160,"t":"#7fa8c4"}, {"i":57,"x":156,"y":160,"t":"#7fa8c4"}, {"i":567,"x":172,"y":160,"t":"#7fa8c4"}, {"i":61,"x":188,"y":48,"t":"#7fa8c4"}, {"i":61,"x":204,"y":160,"t":"#7fa8c4"}]
   },
   "warren": {
     "name": "The warren",
@@ -1410,7 +1424,8 @@
     },
     "script": "on start\n  message \"GO\"\n  message \"FIND THE KEY\"\nend\n\non collect\n  if keys >= 1\n    open\n    message \"IT OPENS\"\n  end\n  if score == 5\n    heal 1\n    message \"HAVE A LIFE\"\n  end\nend",
     "kanji": "\u7269",
-    "cat": "rpg"
+    "cat": "rpg",
+    "props": [{"i":108,"x":100,"y":163,"t":"#383448","b":1}, {"i":108,"x":116,"y":91,"t":"#383448","b":1}, {"i":106,"x":156,"y":163,"t":"#383448","b":1}, {"i":108,"x":164,"y":163,"t":"#383448","b":1}, {"i":107,"x":180,"y":163,"t":"#383448","b":1}, {"i":105,"x":20,"y":160,"t":"#6f6890"}, {"i":103,"x":44,"y":160,"t":"#6f6890"}, {"i":620,"x":92,"y":160,"t":"#6f6890"}]
   },
   "ascent": {
     "name": "Ascent",
@@ -1502,7 +1517,8 @@
     },
     "script": "on start\n  message \"MOVE\"\n  message \"FIND THE KEY\"\n  set wave 0\nend\n\non collect\n  if keys >= 1\n    open\n    message \"IT OPENS\"\n  end\n  if score >= 10\n    message \"RUN\"\n    shake 5\n    speed 120\n    spawn \"chaser\" 4 12\n  end\nend\n\non tick\n  every 0.5\n    if y < 6\n      push 40 0\n    end\n  end\n  every 6\n    set wave wave + 1\n    spawn \"walker\" 30 12\n    if wave >= 2\n      spawn \"flyer\" 24 8\n    end\n    message \"WAVE \" + wave\n  end\nend",
     "kanji": "\u767b",
-    "cat": "platformer"
+    "cat": "platformer",
+    "props": [{"i":107,"x":12,"y":211,"t":"#454035","b":1}, {"i":107,"x":36,"y":67,"t":"#454035","b":1}, {"i":110,"x":44,"y":211,"t":"#454035","b":1}, {"i":106,"x":52,"y":67,"t":"#454035","b":1}, {"i":107,"x":52,"y":115,"t":"#454035","b":1}, {"i":106,"x":52,"y":259,"t":"#454035","b":1}, {"i":107,"x":100,"y":91,"t":"#454035","b":1}, {"i":107,"x":108,"y":235,"t":"#454035","b":1}, {"i":110,"x":124,"y":187,"t":"#454035","b":1}, {"i":110,"x":140,"y":187,"t":"#454035","b":1}, {"i":106,"x":148,"y":259,"t":"#454035","b":1}, {"i":622,"x":28,"y":112,"t":"#8a7f6a"}, {"i":147,"x":28,"y":256,"t":"#8a7f6a"}, {"i":148,"x":36,"y":64,"t":"#8a7f6a"}, {"i":196,"x":68,"y":256,"t":"#8a7f6a"}, {"i":196,"x":76,"y":104,"t":"#8a7f6a"}, {"i":148,"x":84,"y":256,"t":"#8a7f6a"}, {"i":196,"x":116,"y":256,"t":"#8a7f6a"}, {"i":148,"x":124,"y":136,"t":"#8a7f6a"}, {"i":147,"x":156,"y":40,"t":"#8a7f6a"}, {"i":147,"x":156,"y":256,"t":"#8a7f6a"}, {"i":196,"x":164,"y":232,"t":"#8a7f6a"}]
   },
   "speedway": {
     "name": "Speedway",
@@ -1798,7 +1814,8 @@
     },
     "script": "on start\n  message \"GO\"\n  set wave 0\nend\n\non tick\n  every 6\n    set wave wave + 1\n    spawn \"walker\" 30 12\n    if wave >= 2\n      spawn \"flyer\" 24 8\n    end\n    message \"WAVE \" + wave\n  end\nend",
     "kanji": "\u6483",
-    "cat": "shooter"
+    "cat": "shooter",
+    "props": [{"i":106,"x":20,"y":427,"t":"#3d3d45","b":1}, {"i":108,"x":76,"y":547,"t":"#3d3d45","b":1}, {"i":829,"x":28,"y":424,"t":"#7a7a8a"}, {"i":829,"x":36,"y":240,"t":"#7a7a8a"}, {"i":9,"x":44,"y":424,"t":"#7a7a8a"}, {"i":9,"x":60,"y":456,"t":"#7a7a8a"}, {"i":829,"x":76,"y":544,"t":"#7a7a8a"}, {"i":10,"x":100,"y":272,"t":"#7a7a8a"}]
   },
   "voidrun": {
     "name": "Void run",
@@ -1917,7 +1934,8 @@
     },
     "script": "on start\n  message \"GOOD LUCK\"\n  gravity 260\n  message \"LOW GRAVITY\"\nend\n\non collect\n  if score >= 10\n    message \"RUN\"\n    shake 5\n    speed 120\n    spawn \"chaser\" 4 12\n  end\nend",
     "kanji": "\u5b99",
-    "cat": "shooter"
+    "cat": "shooter",
+    "props": [{"i":106,"x":60,"y":251,"t":"#3d3d45","b":1}, {"i":108,"x":84,"y":211,"t":"#3d3d45","b":1}, {"i":108,"x":108,"y":451,"t":"#3d3d45","b":1}, {"i":108,"x":132,"y":131,"t":"#3d3d45","b":1}, {"i":829,"x":76,"y":208,"t":"#7a7a8a"}, {"i":8,"x":84,"y":544,"t":"#7a7a8a"}, {"i":829,"x":116,"y":128,"t":"#7a7a8a"}, {"i":829,"x":124,"y":176,"t":"#7a7a8a"}]
   }
 };
 })();

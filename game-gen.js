@@ -518,11 +518,15 @@
     if (built.start) claim(Math.floor(built.start.x / T), Math.floor(built.start.y / T));
     for (const e of built.ents) claim(Math.floor(e.x / T), Math.floor(e.y / T));
 
-    // The top surface of each column, which is where scenery belongs.
+    /* Every ledge and floor, not just the first one going down. Stopping at
+       the first surface put all of a level's decor on its ceiling, because
+       in a room with a roof the topmost solid tile with clear air above it
+       is the roof. The scan also starts below the top two rows, so a sprite
+       never hangs half off the top of the level. */
     const spots = [];
     for (let x = 1; x < w - 1; x++) {
-      for (let y = 1; y < h; y++) {
-        if (solid(x, y) && !solid(x, y - 1) && !solid(x, y - 2)) { spots.push([x, y]); break; }
+      for (let y = 3; y < h; y++) {
+        if (solid(x, y) && !solid(x, y - 1) && !solid(x, y - 2)) spots.push([x, y]);
       }
     }
 
@@ -531,14 +535,14 @@
     // wall fragments hanging in the sky, which reads as debris, not depth.
     if (D.back.length) {
       for (const [x, y] of spots) {
-        if (r() > .14) continue;
+        if (r() > .10) continue;
         props.push({ i: pick(r, D.back), x: x * T + T / 2, y: y * T + 3, t: dim(D.tint), b: 1 });
       }
     }
 
-    const density = [.30, .24, .18][o.difficulty] ?? .24;
+    const density = [.22, .17, .13][o.difficulty] ?? .17;
     for (const [x, y] of spots) {
-      if (props.length >= 60) break;
+      if (props.length >= 48) break;
       if (r() > density) continue;
       if (taken.has(`${x},${y - 1}`)) continue;
       props.push({ i: pick(r, D.on), x: x * T + T / 2, y: y * T, t: D.tint });
@@ -647,5 +651,5 @@
     return last;
   }
 
-  window.NeoGameGen = { generate, generateValid, read, THEMES, MECHANICS, ABILITIES };
+  window.NeoGameGen = { generate, generateValid, read, dress, rng, DECOR, THEMES, MECHANICS, ABILITIES };
 })();
