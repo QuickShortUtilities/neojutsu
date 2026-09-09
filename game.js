@@ -82,7 +82,9 @@
 
   function sizeCanvas() {
     const c = cfg();
-    const [w, h] = window.NeoPalette.PALETTES[c.chip].size;
+    // One shape for every game, whichever palette is on: a handheld frame,
+    // never a phone crop or a widescreen one. The chip picks colours only.
+    const [w, h] = window.NeoPalette.GAME_FRAME;
     low.width = w; low.height = h;
     display.width = w * c.zoom; display.height = h * c.zoom;
     display.style.width = `${w * c.zoom}px`;
@@ -412,7 +414,7 @@
   function buildPickerGrid() {
     const grid = $('g-picker-grid'); grid.innerHTML = ''; tiles = [];
     const c = cfg();
-    const [bw, bh] = window.NeoPalette.PALETTES[c.chip].size;
+    const [bw, bh] = window.NeoPalette.GAME_FRAME;
     const th = Math.max(30, Math.round(TILE_W * bh / bw));
     let shown = 0;
     for (const [key, t] of Object.entries(window.NeoGameTemplates)) {
@@ -1214,10 +1216,10 @@ end`;
 <script>
 const D = /*__PAYLOAD__*/;
 document.getElementById('t').textContent = D.title;
-const P = window.NeoPalette.PALETTES[D.chip] || window.NeoPalette.PALETTES.gameboy;
-const low = document.createElement('canvas'); low.width = P.size[0]; low.height = P.size[1];
+const FRAME = window.NeoPalette.GAME_FRAME;
+const low = document.createElement('canvas'); low.width = FRAME[0]; low.height = FRAME[1];
 const lctx = low.getContext('2d', {willReadFrequently:true});
-const c = document.getElementById('c'); c.width = P.size[0]*D.zoom; c.height = P.size[1]*D.zoom;
+const c = document.getElementById('c'); c.width = FRAME[0]*D.zoom; c.height = FRAME[1]*D.zoom;
 const dctx = c.getContext('2d'); dctx.imageSmoothingEnabled = false;
 const present = () => { window.NeoPalette.snap(lctx, low.width, low.height, {chip:D.chip, dither:D.dither, dithAmt:.6});
   dctx.drawImage(low,0,0,c.width,c.height); };

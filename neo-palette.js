@@ -15,6 +15,13 @@
     mono:    { label: '1-bit · Macintosh', size: [512, 342], colors: ['#000000','#ffffff'] },
   };
 
+  /* Games are always this shape. A palette changes the colours and nothing
+     else: a generated game lands in a handheld frame whichever chip is
+     picked, never a phone crop or a widescreen one. The Video Studio still
+     takes its size from the chip, because a video is not a handheld.
+     160x144 is the Game Boy and the Game Gear both. */
+  const GAME_FRAME = [160, 144];
+
   const BAYER = {
     bayer4: { n: 4, m: [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5] },
     bayer2: { n: 2, m: [0,2, 3,1] },
@@ -62,5 +69,5 @@
     ctx.putImageData(frame, 0, 0);
   }
 
-  window.NeoPalette = { PALETTES, BAYER, paletteRGB, snap };
+  window.NeoPalette = { PALETTES, BAYER, GAME_FRAME, paletteRGB, snap };
 })();

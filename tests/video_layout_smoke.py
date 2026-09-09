@@ -98,6 +98,28 @@ with sync_playwright() as p2:
             .map(b=>b.querySelector('.neo-select-value')?.textContent||'?');
           return {rows, tiny, spill};
         }""")
+    # ---- a game is always a handheld shape ----
+    # The palette picks colours; it must not pick the frame. A generated game
+    # lands in 160x144 whichever chip is on - never a phone crop, never
+    # widescreen - so anything made here fits anything it is sent to.
+    pg.goto(ROOT.as_uri()+'/game.html'); pg.wait_for_timeout(400)
+    pg.evaluate("localStorage.clear()"); pg.reload(); pg.wait_for_timeout(1500)
+    frames={}
+    for chip in ['gameboy','nes','genesis','c64','mono']:
+        pg.evaluate("""(chip)=>{ const s=document.getElementById('g-chip'); if(!s) return;
+          s.value=chip; s.dispatchEvent(new Event('input',{bubbles:true})); }""", chip)
+        pg.wait_for_timeout(250)
+        frames[chip]=pg.evaluate("""()=>{
+          const z=+document.getElementById('g-zoom').value||1;
+          const c=document.getElementById('g-canvas');
+          return [Math.round(c.width/z), Math.round(c.height/z)];
+        }""")
+    report['game_frame']=frames
+    want=[160,144]
+    for chip,got in frames.items():
+        if got != want:
+            issues.append(f'game frame is {got} on {chip}, expected {want}')
+
     pg.close(); b3.close()
     report['control_fit']=fits
     for f,d in fits.items():
