@@ -360,6 +360,7 @@ def main():
     # Scripts travel separately from levels: they are the part a generator
     # cannot invent, and the part our language was missing until now.
     scripts, routines, missing = read_scripts(src)
+    seen, dupes = set(), 0
     scripts = scripts + legacy_scripts
     routines = routines + legacy_routines
     if args.scripts and scripts:
@@ -372,6 +373,16 @@ def main():
                     continue
                 needed = routines_used_by(r['script'], by_name)
                 body = ('\n\n'.join(needed) + '\n\n' if needed else '') + r['script']
+                # One copy of each. A published game repeats a script - the
+                # same door in twelve rooms, the same greeting from every
+                # villager - and one pair repeated eighty-four times is not
+                # eighty-four examples, it is one example and a thumb on the
+                # scale.
+                key = (r['describe'], body)
+                if key in seen:
+                    dupes += 1
+                    continue
+                seen.add(key)
                 fh.write(json.dumps({'messages': [
                     {'role': 'system', 'content': 'You write NeoJutsu game scripts. Reply with script and nothing else.'},
                     {'role': 'user', 'content': r['describe']},
@@ -425,6 +436,7 @@ def main():
                       'by_mode': by, 'rejected': len(rejects),
                       'why': [r['why'][:50] for r in rejects[:6]],
                       'scripts': {'translated': len(scripts), 'routines': len(routines),
+                                  'written': len(seen), 'repeats_dropped': dupes,
                                   'file': args.scripts if scripts else None,
                                   # What our language still cannot say, counted
                                   # from a real game rather than imagined.

@@ -12,6 +12,7 @@ This is the pipeline, what it needs from you, and what it does not.
 ```
 tools/make_dataset.py    prompts -> games, graded by playing them   -> data/
 tools/import_games.py    your games -> the same JSONL               -> data/
+tools/import_gbstudio.py published GB Studio projects -> levels + scripts
 tools/train_lora.py      QLoRA fine-tune, one 24GB card             -> runs/
 tools/eval_model.py      generate -> validate -> play -> score      -> data/eval.json
 ```
@@ -19,6 +20,14 @@ tools/eval_model.py      generate -> validate -> play -> score      -> data/eval
 Everything is graded the same way at every stage: a game must validate, and a
 bot must be able to get somewhere in it. Data that cannot clear that bar does
 not go in, and a model that cannot clear it has not improved.
+
+## Two tasks, one format
+
+Every record is the same chat triple, and the system line says which job it
+is: *"You write NeoJutsu games"* for a level, *"You write NeoJutsu game
+scripts"* for a script. So they train together in one run and the model
+learns both, rather than needing two adapters. Mix them; the system prompt
+keeps them apart.
 
 ## Genres are kept apart
 
@@ -49,11 +58,24 @@ some of it is worth nothing, so:
 - **Prompts that produced nothing good.** Even without a fixed game, the
   prompt tells you where the vocabulary is thin.
 
+- **Published GB Studio projects.** The one source of real, hand-made Game
+  Boy levels in a format a script can read. `import_gbstudio.py` takes a
+  folder of them and writes both halves: the scenes become levels, and the
+  event graphs become scripts in our language. Thirty-four projects gave 788
+  levels and 1,439 scripts. Two things to know before trusting the output.
+  The old single-file format stores its collision layer two ways and reading
+  the wrong one produces a tidy stripe that looks like a level; `tests/
+  import_gbstudio_smoke.py` exists because forty per cent of the corpus was
+  once that. And a scene with no collision layer at all is a title card, not
+  an empty level, which is most of what the reject list holds.
+
 **Worth nothing, or worse**
 
 - **ROMs and binaries.** A model cannot learn this JSON format from a Game
   Boy ROM. Extracting tilemaps from one is a data-engineering project in its
-  own right, and the output is somebody else's level design.
+  own right, and the output is somebody else's level design. A GB Studio
+  project is the same games with the design still legible, which is why that
+  importer exists and a ROM reader does not.
 - **Screenshots and video.** Same problem, more of it.
 - **Other people's levels, redrawn.** Fine for you at home, a licensing
   problem the day it ships. Original layouts and CC0 sources stay clean.
@@ -84,6 +106,8 @@ is one definition of what a game is:
 ```bash
 python3 tools/make_dataset.py --count 3000
 python3 tools/import_games.py --in ~/my-levels --out data/imported.jsonl
+python3 tools/import_gbstudio.py --in ~/neojutsu-sources \
+        --out data/gbs-src.jsonl --scripts data/gbs-src-scripts.jsonl
 ```
 
 Train. Sized for a 24GB card: 4-bit base, LoRA adapters, gradient
@@ -91,9 +115,14 @@ checkpointing. A few thousand examples is a couple of hours, not a cluster.
 
 ```bash
 pip install "transformers>=4.44" peft trl bitsandbytes accelerate datasets
-python3 tools/train_lora.py --data data/games.jsonl --extra data/imported.jsonl \
-                            --out runs/neojutsu-v1
+python3 tools/train_lora.py --data data/games.jsonl \
+        --extra data/gbs-src.jsonl data/gbs-src-scripts.jsonl data/imported.jsonl \
+        --out runs/neojutsu-v1
 ```
+
+That is roughly 5,200 examples: 3,000 generated levels, 788 imported ones and
+1,439 scripts. The generated half teaches the shape; the imported half is the
+only part with anyone's taste in it.
 
 Judge it:
 

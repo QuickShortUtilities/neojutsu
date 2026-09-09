@@ -270,19 +270,64 @@ ACTION_WORDS = {
 
 
 def describe(lines, event):
-    """A plain sentence about what a translated script does."""
-    verbs = []
+    """A plain sentence about what a translated script does.
+
+    It has to tell one script from another, or a thousand of them collapse
+    onto a handful of prompts and the pairing being learned is a lottery: the
+    same words in, any of ninety-six different answers out. So the sentence
+    carries what is distinctive about this one - where it goes, who it names,
+    how long it is - and not only which verbs it happens to use.
+    """
+    verbs, rooms, actors, routines = [], [], [], []
+    branches = waits = 0
     for l in lines:
-        head = l.strip().split(' ')[0]
+        bits = l.strip().split(' ')
+        head = bits[0]
         w = ACTION_WORDS.get(head)
         if w and w not in verbs:
             verbs.append(w)
+        if head == 'if':
+            branches += 1
+        elif head == 'wait':
+            waits += 1
+        elif head == 'goto' and len(bits) > 1:
+            r = bits[1].strip('"')
+            if r and r not in rooms:
+                rooms.append(r)
+        elif head == 'do' and len(bits) > 1 and bits[1] not in routines:
+            routines.append(bits[1])
+        elif head in ('talk', 'move', 'face', 'hide', 'show', 'stop', 'speed') \
+                and len(bits) > 1 and bits[1].startswith('"'):
+            a = bits[1].strip('"')
+            if a and a not in actors:
+                actors.append(a)
     if not verbs:
         return None
+
     when = {'start': 'When the game starts', 'collect': 'When something is collected',
             'hurt': 'When the player is hit', 'kill': 'When an enemy dies',
             'land': 'On landing', 'win': 'On winning', 'lose': 'On losing',
             'tick': 'Every frame'}.get(event, 'When the game starts')
-    if len(verbs) > 4:
-        verbs = verbs[:4] + ['and more']
-    return f'{when}: a sequence that ' + ', then '.join(verbs) + '.'
+
+    shown = verbs[:4] + (['and more'] if len(verbs) > 4 else [])
+    out = f'{when}: a sequence that ' + ', then '.join(shown) + '.'
+
+    # Then the parts that make this script this one rather than a shape of one.
+    extra = []
+    if rooms:
+        extra.append('It ends up in "%s".' % rooms[0] if len(rooms) == 1
+                     else 'It moves between %d rooms.' % len(rooms))
+    if actors:
+        extra.append('It speaks to "%s".' % actors[0] if len(actors) == 1
+                     else 'It handles %d characters.' % len(actors))
+    if routines:
+        extra.append('It calls "%s".' % routines[0] if len(routines) == 1
+                     else 'It calls %d routines.' % len(routines))
+    if branches:
+        extra.append('One branch.' if branches == 1 else f'{branches} branches.')
+    if waits > 1:
+        extra.append(f'It pauses {waits} times.')
+    n = len([l for l in lines if l.strip()])
+    if n >= 30:
+        extra.append('A long one, %d lines.' % n)
+    return ' '.join([out] + extra[:3])
