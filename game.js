@@ -51,6 +51,7 @@
     wallJump: $('g-wall').checked,
     dash: $('g-dash').checked,
     attack: $('g-attack').checked,
+    coop: $('g-coop').checked,
     intro: { scene: $('g-intro').value, secs: +$('g-intro-secs').value, text: $('g-intro-text').value.trim() },
     outro: { scene: $('g-outro').value, secs: +$('g-outro-secs').value, text: $('g-outro-text').value.trim() },
     dir: +$('g-dir').value,
@@ -99,6 +100,7 @@
     spec.player.wallJump = c.wallJump;
     spec.player.dash = c.dash;
     spec.player.attack = c.attack;
+    spec.coop = c.coop;
     if (spec.script === undefined) spec.script = '';
     spec.rules = { ...(spec.rules || {}), collect: c.goal || 0 };
     [spec.sky0, spec.sky1] = SKIES[c.sky] || SKIES.day;
@@ -146,20 +148,39 @@
   const toggle = () => ($('g-play').getAttribute('aria-pressed') === 'true' ? pause() : play());
 
   // ---------- input ----------
+  /* One player gets both sets of keys, because there is no reason to make
+     someone alone choose. Two players split them: arrows and Z/X on the
+     right, WASD and F/G on the left, so two people can sit at one keyboard
+     without reaching across each other. */
   const KEYMAP = {
     ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
     ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
     Space: 'a', KeyZ: 'a', KeyJ: 'a', KeyX: 'b', KeyK: 'b',
   };
+  const KEYMAP_P1 = {
+    ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+    Space: 'a', KeyZ: 'a', KeyX: 'b',
+  };
+  const KEYMAP_P2 = {
+    KeyA: 'left', KeyD: 'right', KeyW: 'up', KeyS: 'down',
+    KeyF: 'a', KeyG: 'b', ShiftLeft: 'a',
+  };
+  // Which pad a key belongs to depends on whether anyone else is playing.
+  function routeKey(code) {
+    if (!game || !game.coop) { const k = KEYMAP[code]; return k ? [game && game.input, k] : null; }
+    if (KEYMAP_P1[code]) return [game.input, KEYMAP_P1[code]];
+    if (KEYMAP_P2[code]) return [game.input2, KEYMAP_P2[code]];
+    return null;
+  }
   function wireInput() {
     addEventListener('keydown', e => {
       if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
-      const k = KEYMAP[e.code];
-      if (k) { e.preventDefault(); if (game) game.input[k] = true; }
-      if (e.code === 'Space' && !k) { e.preventDefault(); toggle(); }
-      if (e.code === 'KeyR') { if (game) { game.reset(); present(); readout(); } }
+      const hit = routeKey(e.code);
+      if (hit && hit[0]) { e.preventDefault(); hit[0][hit[1]] = true; }
+      if (e.code === 'Space' && !hit) { e.preventDefault(); toggle(); }
+      if (e.code === 'KeyR' && !(game && game.coop)) { if (game) { game.reset(); present(); readout(); } }
     });
-    addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k && game) game.input[k] = false; });
+    addEventListener('keyup', e => { const hit = routeKey(e.code); if (hit && hit[0]) hit[0][hit[1]] = false; });
     for (const btn of $('g-pad').querySelectorAll('button')) {
       const k = btn.dataset.key;
       const set = on => { if (game) game.input[k] = on; btn.classList.toggle('on', on); };
@@ -318,6 +339,8 @@
     $('g-goal').value = need;
     for (const [id, key] of [['g-double','doubleJump'],['g-wall','wallJump'],['g-dash','dash'],['g-attack','attack']])
       $(id).checked = !!p[key];
+    $('g-coop').checked = !!(spec.coop || spec.players === 2);
+    if ($('g-coop-hint')) $('g-coop-hint').hidden = !$('g-coop').checked;
     window.NeoSelect?.refreshAll?.();
   }
 
@@ -789,8 +812,9 @@ end`;
       set('g-title', d.look.title);
       if (d.look.intro) { set('g-intro', d.look.intro.scene); set('g-intro-secs', d.look.intro.secs); set('g-intro-text', d.look.intro.text); }
       if (d.look.outro) { set('g-outro', d.look.outro.scene); set('g-outro-secs', d.look.outro.secs); set('g-outro-text', d.look.outro.text); }
-      for (const [id, k] of [['g-double','doubleJump'],['g-wall','wallJump'],['g-dash','dash'],['g-attack','attack']])
+      for (const [id, k] of [['g-double','doubleJump'],['g-wall','wallJump'],['g-dash','dash'],['g-attack','attack'],['g-coop','coop']])
         if ($(id)) $(id).checked = !!d.look[k];
+      if ($('g-coop-hint')) $('g-coop-hint').hidden = !$('g-coop').checked;
       if ($('g-edit')) $('g-edit').checked = d.look.edit !== false;
       if ($('g-grid')) $('g-grid').checked = d.look.grid !== false;
     }
@@ -1010,13 +1034,23 @@ function begin(){
 
 const KEY={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',ArrowUp:'up',KeyW:'up',
   ArrowDown:'down',KeyS:'down',Space:'a',KeyZ:'a',KeyX:'b',KeyK:'b'};
+// Alone you get both halves of the keyboard; together you get one each.
+const K1={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',Space:'a',KeyZ:'a',KeyX:'b'};
+const K2={KeyA:'left',KeyD:'right',KeyW:'up',KeyS:'down',KeyF:'a',KeyG:'b',ShiftLeft:'a'};
+function route(code){
+  if(!g) return null;
+  if(!g.coop){ const k=KEY[code]; return k?[g.input,k]:null; }
+  if(K1[code]) return [g.input,K1[code]];
+  if(K2[code]) return [g.input2,K2[code]];
+  return null;
+}
 addEventListener('keydown',e=>{
   if(!started){ begin(); return; }
   skip();
-  const k=KEY[e.code]; if(k && g){e.preventDefault(); g.input[k]=true;}
-  if(e.code==='KeyR' && g){ g.reset(); present(); }
+  const h=route(e.code); if(h){e.preventDefault(); h[0][h[1]]=true;}
+  if(e.code==='KeyR' && g && !g.coop){ g.reset(); present(); }
 });
-addEventListener('keyup',e=>{const k=KEY[e.code]; if(k && g) g.input[k]=false;});
+addEventListener('keyup',e=>{const h=route(e.code); if(h) h[0][h[1]]=false;});
 for(const b of document.querySelectorAll('#pad button')){const k=b.dataset.k;
   const set=on=>{ if(!started){begin();return;} skip(); if(g) g.input[k]=on; };
   b.addEventListener('pointerdown',e=>{e.preventDefault();set(true);});
@@ -1091,7 +1125,8 @@ present();
     });
     // Sky colours live in the spec, so changing them means rebuilding it.
     $('g-sky').addEventListener('input', () => { build(game ? game.snapshot() : spec); save(); });
-    for (const id of ['g-char', 'g-lives', 'g-goal', 'g-double', 'g-wall', 'g-dash', 'g-attack']) $(id).addEventListener('change', () => {
+    for (const id of ['g-char', 'g-lives', 'g-goal', 'g-double', 'g-wall', 'g-dash', 'g-attack', 'g-coop']) $(id).addEventListener('change', () => {
+      if ($('g-coop-hint')) $('g-coop-hint').hidden = !$('g-coop').checked;
       build(game ? game.snapshot() : spec); save();
     });
     for (const id of ['g-edit', 'g-grid']) $(id).addEventListener('change', () => {

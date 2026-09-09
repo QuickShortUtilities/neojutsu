@@ -160,6 +160,8 @@
     const mode = MODES.includes(spec.mode) ? spec.mode : 'platform';
     // Racer and shmup scroll the world past you; you never walk, you steer.
     const scrolling = mode === 'racer' || mode === 'shmup';
+    // Two on one screen. Netlink is a later problem; this is the sofa.
+    const coop = !!(spec.coop || spec.players === 2);
     const scrollCfg = Object.assign({ speed: 46, accel: 2.6, max: 130 }, spec.scroll || {});
     let scroll = 0;
     const lvl = makeLevel(spec.level || { w: 20, h: 18, tiles: '' });
@@ -179,7 +181,9 @@
                               maxFall: 240, char: 'hero',
                               doubleJump: false, wallJump: false, dash: false, attack: false },
                             spec.player || {});
-    let player, entities, state, score, keys, lives, message, elapsed, won;
+    const input = { left: false, right: false, up: false, down: false, a: false, b: false };
+    const input2 = { left: false, right: false, up: false, down: false, a: false, b: false };
+    let player, players, entities, state, score, keys, lives, message, elapsed, won;
     let doorsOpen, respawn, fired, effects, messageAt, shake = 0;
 
     function reset() {
@@ -190,13 +194,22 @@
       }
       const start = spec.start || { x: TILE, y: TILE };
       respawn = { x: start.x, y: start.y };
-      player = { x: start.x, y: start.y, w: 6, h: 12, vx: 0, vy: 0, grounded: false,
-                 face: 1, coyote: 0, buffer: 0, walk: 0, hurt: 0,
-                 wall: 0, dash: 0, dashLeft: P.dash ? 1 : 0, doubleLeft: P.doubleJump ? 1 : 0,
-                 shotCool: 0, shotHeld: false, bWasDown: false,
-                 // A moment of grace on arriving, so a turret already aimed at
-                 // the spawn cannot land a hit before anyone has moved.
-                 hurt: P.grace ?? 1.1 };
+      const body = (n, inp, dx) => ({
+        n, input: inp, tint: n === 2 ? (P.tint2 || '#ff2e88') : (P.tint || '#2ef2ff'),
+        char: n === 2 ? (P.char2 || 'ninja') : P.char,
+        sprite: n === 2 ? P.sprite2 : P.sprite,
+        x: start.x + dx, y: start.y, w: 6, h: 12, vx: 0, vy: 0, grounded: false,
+        face: 1, coyote: 0, buffer: 0, walk: 0,
+        wall: 0, dash: 0, dashLeft: P.dash ? 1 : 0, doubleLeft: P.doubleJump ? 1 : 0,
+        shotCool: 0, shotHeld: false, bWasDown: false, aWasDown: false,
+        // A moment of grace on arriving, so a turret already aimed at
+        // the spawn cannot land a hit before anyone has moved.
+        hurt: P.grace ?? 1.1,
+      });
+      // Player two stands a little to the side so the pair do not begin
+      // inside one another.
+      players = coop ? [body(1, input, 0), body(2, input2, 10)] : [body(1, input, 0)];
+      player = players[0];
       entities = (spec.entities || []).map(makeEntity);
       score = 0; keys = 0; lives = spec.lives ?? 3; elapsed = 0; won = false;
       state = 'play'; message = ''; messageAt = 0;
@@ -271,17 +284,18 @@
     // Only now, because reset fires the script's start event.
     reset();
 
-    const input = { left: false, right: false, up: false, down: false, a: false, b: false };
-    let aWasDown = false;
-
-    function die() {
-      if (player.hurt > 0) return;
-      lives--; player.hurt = Math.max(1.1, P.grace ?? 1.1); fire('hurt');
-      effects.push({ kind: 'pop', x: player.x, y: player.y, t: 0 });
+    /* Lives are shared. Two people on one sofa losing separate life counts
+       turns co-op into two solo games sitting next to each other; one pool
+       makes the other player's mistake your problem, which is the point. */
+    function die(p) {
+      p = p || player;
+      if (p.hurt > 0) return;
+      lives--; p.hurt = Math.max(1.1, P.grace ?? 1.1); fire('hurt');
+      effects.push({ kind: 'pop', x: p.x, y: p.y, t: 0 });
       if (lives <= 0) { state = 'over'; message = 'GAME OVER'; say('lose'); }
       else {
-        player.x = respawn.x; player.y = respawn.y;
-        player.vx = player.vy = 0; player.dash = 0;
+        p.x = respawn.x; p.y = respawn.y;
+        p.vx = p.vy = 0; p.dash = 0;
       }
     }
 
@@ -289,6 +303,23 @@
       if (state !== 'play') return;
       elapsed += dt;
       const ctx2 = { doorsOpen };
+      // The world scrolls once, not once per body.
+      if (scrolling) {
+        scroll = Math.min(scrollCfg.max, scroll + scrollCfg.accel * dt);
+        view.y -= scroll * dt;
+      }
+      for (const b of players) stepBody(b, b.input, dt, ctx2);
+      if (scrolling && view.y <= 0) { view.y = 0; finish(); }
+      updateEntities(dt, ctx2);
+      runTriggers();
+      fire('tick');
+      if (shake > 0) shake = Math.max(0, shake - dt * 12);
+    }
+
+    // One body's frame: steering, jumping, tiles underfoot, collision. It is
+    // the same code for one player or two - the only difference is which
+    // input map is handed in.
+    function stepBody(player, input, dt, ctx2) {
       const wasFalling = player.vy > 0;
       const on = tilesUnder(lvl, player);
       const has = k => on.some(t => t.info[k]);
@@ -323,8 +354,6 @@
       if (scrolling) {
         // The world comes to you. Steering is direct in both axes, there is no
         // gravity, and the far edge of the level is the finish line.
-        scroll = Math.min(scrollCfg.max, scroll + scrollCfg.accel * dt);
-        view.y -= scroll * dt;
         const dirY = (input.down ? 1 : 0) - (input.up ? 1 : 0);
         player.vx = dir * P.speed * 1.15;
         player.vy = dirY * P.speed * (mode === 'racer' ? 1.15 : 0.85);
@@ -333,7 +362,7 @@
       } else if (mode === 'platform') {
         player.coyote = player.grounded ? 0.09 : Math.max(0, player.coyote - dt);
         const jumpHeld = input.a || input.up;
-        if (jumpHeld && !aWasDown) player.buffer = 0.12;
+        if (jumpHeld && !player.aWasDown) player.buffer = 0.12;
         else player.buffer = Math.max(0, player.buffer - dt);
 
         if (onLadder) {
@@ -352,7 +381,7 @@
           player.vy = -P.jump * 0.86; player.doubleLeft--; player.buffer = 0; say('doubleJump');
         }
         if (!jumpHeld && player.vy < -40) player.vy *= 0.55;
-        aWasDown = jumpHeld;
+        player.aWasDown = jumpHeld;
 
         if (!onLadder) {
           const g = inWater ? P.gravity * 0.25 : P.gravity;
@@ -375,14 +404,13 @@
         player.x = Math.max(view.x + 1, Math.min(player.x, view.x + view.w - player.w - 1));
         player.y = Math.max(view.y + 1, Math.min(player.y, view.y + view.h - player.h - 1));
         for (const t of tilesUnder(lvl, player)) {
-          if (t.info.hazard || (mode === 'racer' && t.info.solid === true)) { die(); break; }
+          if (t.info.hazard || (mode === 'racer' && t.info.solid === true)) { die(player); break; }
           if (mode === 'shmup' && t.info.solid === true) {
             // walls stop you rather than kill you
             player.x -= player.vx * dt; player.y -= player.vy * dt;
             break;
           }
         }
-        if (view.y <= 0) { view.y = 0; finish(); }
         if (P.attack && mode === 'shmup' && input.a && player.shotCool <= 0) {
           const shot = makeEntity({ type: 'shot', x: player.x + 1, y: player.y - 4 });
           shot.vx = 0; shot.vy = -ENTITY.shot.speed * 1.4;
@@ -391,10 +419,6 @@
         player.shotCool = Math.max(0, player.shotCool - dt);
         player.walk += Math.abs(player.vx) * dt * 0.35;
         if (player.hurt > 0) player.hurt = Math.max(0, player.hurt - dt);
-        updateEntities(dt, ctx2);
-        runTriggers();
-        fire('tick');
-        if (shake > 0) shake = Math.max(0, shake - dt * 12);
         return;
       }
 
@@ -433,14 +457,14 @@
 
       // tile effects the body is standing inside
       for (const t of on) {
-        if (t.info.hazard) { die(); break; }
+        if (t.info.hazard) { die(player); break; }
         if (t.info.checkpoint && (respawn.x !== t.tx * TILE || respawn.y !== t.ty * TILE)) {
           respawn = { x: t.tx * TILE, y: t.ty * TILE };
           message = 'CHECKPOINT'; messageAt = elapsed; say('checkpoint');
         }
         if (t.info.exit) finish();
       }
-      if (player.y > lvl.h * TILE + 40) die();
+      if (player.y > lvl.h * TILE + 40) die(player);
 
       // player shots
       if (P.attack && input.b && !player.shotHeld && player.shotCool <= 0 && player.dash <= 0) {
@@ -450,11 +474,6 @@
       }
       player.shotHeld = input.b;
       player.shotCool = Math.max(0, player.shotCool - dt);
-
-      updateEntities(dt, ctx2);
-      runTriggers();
-      fire('tick');
-      if (shake > 0) shake = Math.max(0, shake - dt * 12);
     }
 
     function breakTile(tx, ty) {
@@ -466,6 +485,18 @@
       const need = (spec.rules && spec.rules.collect) || 0;
       if (score >= need) { state = 'won'; won = true; message = 'CLEAR'; say('win'); }
       else { message = `${need - score} TO GO`; messageAt = elapsed; }
+    }
+
+    // With two on screen an enemy has to choose. It chooses the nearer one,
+    // which is also what a player expects when they step in front of a turret
+    // to draw fire off the other.
+    function nearest(e) {
+      let best = players[0], bestD = Infinity;
+      for (const b of players) {
+        const d = Math.hypot((b.x + b.w / 2) - (e.x + e.w / 2), (b.y + b.h / 2) - (e.y + e.h / 2));
+        if (d < bestD) { bestD = d; best = b; }
+      }
+      return best;
     }
 
     function updateEntities(dt, ctx2) {
@@ -480,14 +511,15 @@
           // A moving platform carries whatever is riding it.
           e.t += dt;
           const nx = e.home.x + Math.sin(e.t * (e.def.speed / d.span) * 2) * d.span;
-          const carry = player.grounded && player.y + player.h <= e.y + 3 &&
-                        player.x + player.w > e.x && player.x < e.x + e.w;
+          const riders = players.filter(b => b.grounded && b.y + b.h <= e.y + 3 &&
+                                              b.x + b.w > e.x && b.x < e.x + e.w);
           const dxp = nx - e.x; e.x = nx;
-          if (carry) { player.x += dxp; player.y = e.y - player.h; }
+          for (const b of riders) { b.x += dxp; b.y = e.y - b.h; }
         } else if (d.enemy && !d.still) {
           if (d.chases) {
-            const dx = (player.x + player.w / 2) - (e.x + e.w / 2);
-            const dy = (player.y + player.h / 2) - (e.y + e.h / 2);
+            const target = nearest(e);
+            const dx = (target.x + target.w / 2) - (e.x + e.w / 2);
+            const dy = (target.y + target.h / 2) - (e.y + e.h / 2);
             const near = Math.hypot(dx, dy) < d.sight;
             e.vx = near ? Math.sign(dx) * d.speed : 0;
             if (mode === 'topdown') { e.vy = near ? Math.sign(dy) * d.speed : 0; e.y += e.vy * dt; }
@@ -516,8 +548,9 @@
           e.cool -= dt;
           if (e.cool <= 0) {
             e.cool = d.fires;
-            const dx = (player.x + player.w / 2) - (e.x + e.w / 2);
-            const dy = (player.y + player.h / 2) - (e.y + e.h / 2);
+            const target = nearest(e);
+            const dx = (target.x + target.w / 2) - (e.x + e.w / 2);
+            const dy = (target.y + target.h / 2) - (e.y + e.h / 2);
             const len = Math.hypot(dx, dy) || 1;
             if (len < 140) {
               const shot = makeEntity({ type: 'shot', x: e.x + 2, y: e.y + 2 });
@@ -540,24 +573,27 @@
           if (!e.alive) continue;
         }
 
-        if (!overlaps(player, e)) continue;
-        if (d.collect) {
-          e.alive = false;
-          say(d.key ? 'key' : d.score >= 5 ? 'gem' : 'coin');
-          if (d.key) keys++;
-          else if (d.heal) lives = Math.min(9, lives + 1);
-          else score += d.score || 1;
-          effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 });
-          fire('collect');
-        } else if (d.goal) {
-          finish();
-        } else if ((d.enemy || (d.bullet && e.foe)) && player.hurt <= 0) {
-          if (d.bullet) { e.alive = false; die(); }
-          else if (mode === 'platform' && player.vy > 40 && player.y + player.h - player.vy * dt <= e.y + 4 && !d.still) {
-            e.hp -= 1;
-            player.vy = -P.jump * 0.7;
-            if (e.hp <= 0) { e.alive = false; score += 1; effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 }); fire('kill'); }
-          } else die();
+        for (const b of players) {
+          if (!overlaps(b, e)) continue;
+          if (d.collect) {
+            e.alive = false;
+            say(d.key ? 'key' : d.score >= 5 ? 'gem' : 'coin');
+            if (d.key) keys++;
+            else if (d.heal) lives = Math.min(9, lives + 1);
+            else score += d.score || 1;
+            effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 });
+            fire('collect');
+          } else if (d.goal) {
+            finish();
+          } else if ((d.enemy || (d.bullet && e.foe)) && b.hurt <= 0) {
+            if (d.bullet) { e.alive = false; die(b); }
+            else if (mode === 'platform' && b.vy > 40 && b.y + b.h - b.vy * dt <= e.y + 4 && !d.still) {
+              e.hp -= 1;
+              b.vy = -P.jump * 0.7;
+              if (e.hp <= 0) { e.alive = false; score += 1; effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 }); fire('kill'); }
+            } else die(b);
+          }
+          if (!e.alive) break;
         }
       }
       entities = entities.filter(e => e.alive || !e.def.bullet);
@@ -612,10 +648,13 @@
         return;
       }
       const dead = view.w * 0.22;
-      const px = player.x + player.w / 2;
+      // With two players the camera follows the pair's midpoint, so neither
+      // is the one who owns the screen.
+      let px = 0, py = 0;
+      for (const b of players) { px += b.x + b.w / 2; py += b.y + b.h / 2; }
+      px /= players.length; py /= players.length;
       if (px - view.x < dead) view.x = px - dead;
       if (px - view.x > view.w - dead) view.x = px - (view.w - dead);
-      const py = player.y + player.h / 2;
       const deadY = view.h * 0.3;
       if (py - view.y < deadY) view.y = py - deadY;
       if (py - view.y > view.h - deadY) view.y = py - (view.h - deadY);
@@ -740,18 +779,20 @@
         return ok;
       }
 
-      // the player, drawn with the studio's own character sprites
-      const psx = Math.round(player.x + player.w / 2 - ox), psy = Math.round(player.y + player.h - oy);
-      const blink = player.hurt > 0 && Math.floor(player.hurt * 20) % 2;
-      if (!blink) {
-        const chars = window.NeoScene && window.NeoScene.CHARS;
-        const pStep = player.grounded && Math.abs(player.vx) > 6 ? (Math.floor(elapsed * 10) % 2) * -1 : 0;
-        const pArt = useArt && typeof P.sprite === 'number'
-          && art.draw(ctx, P.sprite, psx, psy + pStep,
-                      { colour: P.tint || '#2ef2ff', outline: '#0a0714', flip: player.face < 0 });
+      // the players, drawn with the studio's own character sprites
+      const chars = window.NeoScene && window.NeoScene.CHARS;
+      for (const b of players) {
+        if (b.hurt > 0 && Math.floor(b.hurt * 20) % 2) continue;      // blink while stunned
+        const psx = Math.round(b.x + b.w / 2 - ox), psy = Math.round(b.y + b.h - oy);
+        const pStep = b.grounded && Math.abs(b.vx) > 6 ? (Math.floor(elapsed * 10) % 2) * -1 : 0;
+        const pArt = useArt && typeof b.sprite === 'number'
+          && art.draw(ctx, b.sprite, psx, psy + pStep,
+                      { colour: b.tint, outline: '#0a0714', flip: b.face < 0 });
         if (pArt) { /* drawn from the atlas */ }
-        else if (chars && chars[P.char]) window.NeoScene.drawChar(ctx, chars[P.char], psx, psy, 1, player.walk, player.face);
-        else { ctx.fillStyle = '#2ef2ff'; ctx.fillRect(psx - 3, psy - 12, 6, 12); }
+        else if (chars && chars[b.char]) window.NeoScene.drawChar(ctx, chars[b.char], psx, psy, 1, b.walk, b.face);
+        else { ctx.fillStyle = b.tint; ctx.fillRect(psx - 3, psy - 12, 6, 12); }
+        // A marker over player two, so nobody has to ask which one they are.
+        if (coop && b.n === 2) { ctx.fillStyle = b.tint; ctx.fillRect(psx - 1, psy - b.h - 5, 2, 2); }
       }
 
       for (const fx of effects) {
@@ -811,6 +852,8 @@
       get score() { return score; },
       get lives() { return lives; },
       get player() { return player; },
+      get players() { return players; },
+      get coop() { return coop; },
       get level() { return lvl; },
       get view() { return view; },
       get freeCam() { return freeCam; },
@@ -823,6 +866,7 @@
       get entities() { return entities; },
       get elapsed() { return elapsed; },
       input,
+      input2,
       start() { if (running) return; running = true; last = performance.now(); acc = 0; raf = requestAnimationFrame(frame); },
       stop() { running = false; cancelAnimationFrame(raf); },
       reset() { reset(); view.x = view.y = 0; draw(); },
@@ -928,8 +972,14 @@
 
     // A game nobody can finish is a broken game, so the goal is checked too.
     const need = (spec.rules && spec.rules.collect) || 0;
-    const pickups = ents.filter(e => e && ENTITY[e.type] && ENTITY[e.type].collect && !ENTITY[e.type].key).length;
-    if (need > pickups) bad(`rules.collect is ${need} but only ${pickups} pickups exist`);
+    /* Only what actually raises the score counts. A heart heals and a key
+       unlocks; neither adds a point, so counting them here once passed a
+       game that asked for fourteen when thirteen was all anyone could get.
+       A gem is worth five, so the total is a sum and not a tally. */
+    const scoring = ents.filter(e => e && ENTITY[e.type] && ENTITY[e.type].collect
+                                  && !ENTITY[e.type].key && !ENTITY[e.type].heal);
+    const reachable = scoring.reduce((n, e) => n + (ENTITY[e.type].score || 1), 0);
+    if (need > reachable) bad(`rules.collect is ${need} but only ${reachable} point(s) can be collected`);
     const keysNeeded = (spec.rules && spec.rules.keys) || 0;
     const keys = ents.filter(e => e && e.type === 'key').length;
     if (keysNeeded > keys) bad(`rules.keys is ${keysNeeded} but only ${keys} key(s) exist`);
