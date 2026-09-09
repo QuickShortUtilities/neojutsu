@@ -6,3 +6,5 @@
 data/*.jsonl
 data/by-genre/
 runs/
+__pycache__/
+*.pyc
