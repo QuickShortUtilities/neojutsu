@@ -189,7 +189,13 @@
        it and they come down to you. It is the one arcade shape this engine
        could not make - every other mode is a body travelling through a level,
        and this is a level travelling towards a body. */
-    const MODES = ['platform', 'topdown', 'racer', 'shmup', 'invaders'];
+    /* `blocks` is the one shape here with no avatar in it at all. Everything
+       else is a body moving through a level; this is a level being built out
+       of the thing you are steering, and it stops when there is no room to
+       put the next one. It takes the tilemap, the renderer, the palette, the
+       HUD, the script layer and the packaging exactly as they are - what it
+       supplies is its own idea of what a frame is. */
+    const MODES = ['platform', 'topdown', 'racer', 'shmup', 'invaders', 'blocks'];
     const mode = MODES.includes(spec.mode) ? spec.mode : 'platform';
     // Racer and shmup scroll the world past you; you never walk, you steer.
     const scrolling = mode === 'racer' || mode === 'shmup';
@@ -229,6 +235,13 @@
     let doorsOpen, respawn, fired, effects, messageAt, shake = 0;
     // How long the things chasing you have left to be afraid of you.
     let scared = 0;
+    /* The falling-block game's whole state. Declared up here with the rest of
+       it because reset() runs before the code further down has been reached,
+       and a `let` is not available before its own line. */
+    let piece = null, dropAt = 0, moveAt = 0, lines = 0, bag = [];
+    // The well is narrower than the level it sits in, and a row is full when
+    // the well is full - not when the whole board is, which never happens.
+    let wellL = 1, wellR = 1;
     /* Speech. A message is the game talking to the room; a bubble is a
        character talking, anchored to whoever said it and gone a few seconds
        later. Stories are made of these. */
@@ -323,6 +336,8 @@
       fired = [];
       if (scriptEnv) { scriptEnv.vars = {}; scriptFault = ''; scriptLog = []; }
       loadStage(0);
+      piece = null; dropAt = 0; moveAt = 0; lines = 0; bag = [];
+      if (mode === 'blocks') measureWell();
       if (program) fire('start');
     }
     // The script sees numbers and may call actions. It never sees the engine,
@@ -602,6 +617,13 @@
       if (scrolling) {
         scroll = Math.min(scrollCfg.max, scroll + scrollCfg.accel * dt);
         view.y -= scroll * dt;
+      }
+      if (mode === 'blocks') {
+        blocksStep(dt, input);
+        runTriggers(); runStory(); pumpThreads(dt);
+        for (const b of bubbles) b.t += dt;
+        bubbles = bubbles.filter(b => b.t < b.life);
+        return;
       }
       if (mode === 'invaders') marchStep(dt);
       for (const b of players) stepBody(b, b.input, dt, ctx2);
@@ -900,6 +922,141 @@
 
        Fewer of them left means faster, which is the other half of it. */
     let marchDir = 1, marchStart = 0;
+    /* ---------- falling blocks ----------
+       Seven shapes, a well, and a floor that rises. There is no player body:
+       `piece` is the thing you are steering and it stops being yours the
+       moment it lands, at which point it is level. Rows that fill up come out
+       and everything above them comes down.
+
+       The shapes are written as the cells they occupy at rotation zero, and
+       turned about their own middle - which keeps a bar a bar when it stands
+       up, rather than sliding it a tile sideways every time. */
+    const SHAPES = [
+      { cells: [[0, 1], [1, 1], [2, 1], [3, 1]], size: 4, tile: 2 },   // bar
+      { cells: [[0, 0], [0, 1], [1, 1], [2, 1]], size: 3, tile: 1 },   // J
+      { cells: [[2, 0], [0, 1], [1, 1], [2, 1]], size: 3, tile: 1 },   // L
+      { cells: [[1, 0], [2, 0], [0, 1], [1, 1]], size: 3, tile: 7 },   // S
+      { cells: [[0, 0], [1, 0], [1, 1], [2, 1]], size: 3, tile: 7 },   // Z
+      { cells: [[1, 0], [0, 1], [1, 1], [2, 1]], size: 3, tile: 15 },  // T
+      { cells: [[0, 0], [1, 0], [0, 1], [1, 1]], size: 2, tile: 2 },   // square
+    ];
+
+    // Where a shape's cells land at a given turn, about its own middle.
+    function shapeAt(sh, turn) {
+      const n = sh.size - 1;
+      return sh.cells.map(([x, y]) => {
+        for (let t = 0; t < ((turn % 4) + 4) % 4; t++) { const k = x; x = n - y; y = k; }
+        return [x, y];
+      });
+    }
+    const cellsOf = p => shapeAt(SHAPES[p.i], p.turn).map(([x, y]) => [p.x + x, p.y + y]);
+    const roomFor = p => cellsOf(p).every(([x, y]) =>
+      x >= 0 && x < lvl.w && y < lvl.h && (y < 0 || !lvl.at(x, y)));
+
+    /* Drawn from a bag of all seven, so you get every shape before you get any
+       of them twice - a run of four bars in a row is a random number
+       generator, not a game. */
+    /* Where the well is: the open run across the top of the level, taken
+       outwards from the middle. Checking the whole board width instead meant
+       a row was never full, because the columns outside the container are
+       empty and always will be - so nothing ever cleared. */
+    function measureWell() {
+      const mid = Math.floor(lvl.w / 2);
+      let l = mid, r = mid;
+      while (l > 0 && !lvl.at(l - 1, 0)) l--;
+      while (r < lvl.w - 1 && !lvl.at(r + 1, 0)) r++;
+      wellL = l; wellR = r;
+    }
+
+    function nextPiece() {
+      if (wellR <= wellL) measureWell();
+      if (!bag.length) {
+        bag = [0, 1, 2, 3, 4, 5, 6];
+        for (let i = bag.length - 1; i > 0; i--) {
+          const j = Math.floor(rand() * (i + 1));
+          [bag[i], bag[j]] = [bag[j], bag[i]];
+        }
+      }
+      const i = bag.pop();
+      // Centred in the well, not in the level.
+      const p = { i, turn: 0,
+                  x: wellL + Math.floor((wellR - wellL + 1 - SHAPES[i].size) / 2), y: 0 };
+      if (!roomFor(p)) { state = 'over'; message = 'STACKED OUT'; say('hurt'); return null; }
+      return p;
+    }
+
+    function lockPiece() {
+      for (const [x, y] of cellsOf(piece)) {
+        if (y >= 0 && y < lvl.h && x >= 0 && x < lvl.w) lvl.tiles[y * lvl.w + x] = SHAPES[piece.i].tile;
+      }
+      say('land');
+      // Full rows come out, and everything above drops into the gap.
+      let cleared = 0;
+      for (let y = lvl.h - 1; y >= 0; y--) {
+        let full = true;
+        for (let x = wellL; x <= wellR; x++) if (!lvl.at(x, y)) { full = false; break; }
+        if (!full) continue;
+        cleared++;
+        for (let ry = y; ry > 0; ry--) {
+          for (let x = wellL; x <= wellR; x++) lvl.tiles[ry * lvl.w + x] = lvl.at(x, ry - 1);
+        }
+        for (let x = wellL; x <= wellR; x++) lvl.tiles[x] = 0;
+        y++;                                        // look at this row again
+      }
+      if (cleared) {
+        lines += cleared;
+        // Four at once is worth far more than four one at a time, which is
+        // the whole reason anybody builds a well instead of a staircase.
+        score += [0, 1, 3, 5, 8][cleared] || 8;
+        effects.push({ kind: 'break', x: 0, y: 0, t: 0 });
+        say('gem');
+        fire('collect');
+      }
+      const want = stageRules().lines || 0;
+      if (want && lines >= want) { state = 'won'; won = true; message = 'CLEAR'; say('win'); return; }
+      piece = nextPiece();
+    }
+
+    function blocksStep(dt, keysIn) {
+      if (!piece) { piece = nextPiece(); if (!piece) return; }
+      // Sideways and soft drop are on a repeat, so a held key walks rather
+      // than teleports.
+      moveAt -= dt;
+      if (moveAt <= 0) {
+        const dx = (keysIn.right ? 1 : 0) - (keysIn.left ? 1 : 0);
+        if (dx) {
+          const t = { ...piece, x: piece.x + dx };
+          if (roomFor(t)) { piece = t; say('step'); }
+          moveAt = 0.11;
+        }
+      }
+      if (keysIn.a && !piece.turned) {
+        const t = { ...piece, turn: piece.turn + 1 };
+        // A nudge off the wall, so turning against it works rather than fails.
+        for (const kick of [0, -1, 1, -2, 2]) {
+          const k = { ...t, x: t.x + kick };
+          if (roomFor(k)) { piece = { ...k, turned: true }; say('jump'); break; }
+        }
+        if (!piece.turned) piece = { ...piece, turned: true };
+      }
+      if (!keysIn.a) piece = { ...piece, turned: false };
+
+      /* How fast it falls. Every ten lines takes a slice off, down to a floor
+         you cannot reason your way out of. Holding down is a soft drop. */
+      const level = Math.floor(lines / 10);
+      const fall = keysIn.down ? 0.04 : Math.max(0.12, 0.75 - level * 0.07);
+      // Pressing down has to bite now, not when the slow interval it is
+      // already inside happens to run out.
+      if (dropAt > fall) dropAt = fall;
+      dropAt -= dt;
+      if (dropAt <= 0) {
+        dropAt = fall;
+        const t = { ...piece, y: piece.y + 1 };
+        if (roomFor(t)) piece = t;
+        else lockPiece();
+      }
+    }
+
     function marchStep(dt) {
       const rank = entities.filter(e => e.alive && !e.hidden && e.def.march);
       if (!rank.length) return;
@@ -1327,9 +1484,26 @@
         return ok;
       }
 
+      /* The piece in the air. It is drawn the way a locked block is drawn, so
+         the thing you are steering and the pile it is about to join look like
+         the same material - which is the whole read of this game. */
+      if (mode === 'blocks' && piece) {
+        const info = tileInfo(SHAPES[piece.i].tile);
+        for (const [cx, cy] of cellsOf(piece)) {
+          if (cy < 0) continue;
+          const sx = cx * TILE - ox, sy = cy * TILE - oy;
+          ctx.fillStyle = info.fill || '#26262f';
+          ctx.fillRect(sx, sy, TILE, TILE);
+          ctx.fillStyle = info.top || '#9a9aab';
+          ctx.fillRect(sx, sy, TILE, 2);
+        }
+      }
+
       // the players, drawn with the studio's own character sprites
       const chars = window.NeoScene && window.NeoScene.CHARS;
-      for (const b of players) {
+      // A falling-block game has nobody in it. The thing you steer is the
+      // piece, and it has already been drawn.
+      for (const b of (mode === 'blocks' ? [] : players)) {
         if (b.hidden) continue;                                       // taken off stage by a script
         if (b.hurt > 0 && Math.floor(b.hurt * 20) % 2) continue;      // blink while stunned
         const psx = Math.round(b.x + b.w / 2 - ox), psy = Math.round(b.y + b.h - oy);
@@ -1495,6 +1669,9 @@
       get score() { return score; },
       get lives() { return lives; },
       get keys() { return keys; },
+      // Rows taken out, for a game whose score is not a pile of coins.
+      get lines() { return lines; },
+      get piece() { return piece; },
       get player() { return player; },
       get players() { return players; },
       get bubbles() { return bubbles; },
@@ -1727,7 +1904,8 @@
                                      && (ENTITY[e.type].hp || 1) < 99)) {
       bad('rules.clearFoes but there is nothing to clear');
     }
-    if (!hasEnd && !scriptWins && !r.clearAll && !r.clearFoes) {
+    if (r.lines !== undefined && !(r.lines > 0)) bad('rules.lines must be a positive count');
+    if (!hasEnd && !scriptWins && !r.clearAll && !r.clearFoes && !r.lines) {
       warnings.push('no goal and no script that wins - the game cannot be completed');
     }
 

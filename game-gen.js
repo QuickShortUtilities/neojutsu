@@ -91,7 +91,10 @@
     /* A maze you are chased round, eating as you go, is a different game from
        a dungeon with a flag in it - so it is asked first, before "maze" on its
        own settles for the dungeon. */
-    if (/space invaders|invaders|galaga|galaxian|fixed shooter|wave of aliens/.test(raw)) {
+    if (/tetris|falling blocks?|block puzzle|stacker|drop the blocks|line clear/.test(raw)) {
+      want.mode = 'blocks';
+    }
+    else if (/space invaders|invaders|galaga|galaxian|fixed shooter|wave of aliens/.test(raw)) {
       want.mode = 'invaders';
     }
     else if (/pac.?man|maze chase|chase.*maze|eat the dots|dot.?muncher|ghosts?\b/.test(raw)) {
@@ -700,6 +703,31 @@
              keys: 0, clearFoes: true, grace: 1.6 };
   }
 
+  /* A well. Nothing else - no cast, no scenery, no exit. The level of a
+     falling-block game is the pile you make of it, and everything that is
+     there at the start is the shape of the container. */
+  function blocks(r, o) {
+    const { w, h, difficulty } = o;
+    const g = Array.from({ length: h }, () => Array(w).fill('0'));
+    // A well ten wide, centred, with a floor. Ten is the width this game has
+    // been played at since 1984 and every shape is designed around it.
+    const bore = 10;
+    const left = Math.floor((w - bore) / 2) - 1, right = left + bore + 1;
+    for (let y = 0; y < h; y++) { g[y][left] = '2'; g[y][right] = '2'; }
+    for (let x = left; x <= right; x++) g[h - 1][x] = '2';
+    /* A few rows of rubbish at the bottom on the harder settings, so it does
+       not begin from nothing every time. */
+    for (let k = 0; k < difficulty; k++) {
+      const y = h - 2 - k;
+      for (let x = left + 1; x < right; x++) if (r() < .55) g[y][x] = '1';
+      // never a full row: it would come out on the first frame
+      g[y][left + 1 + Math.floor(r() * bore)] = '0';
+    }
+    // Nobody stands here; it is a formality the spec asks for.
+    return { g, ents: [], start: { x: Math.floor(w / 2) * T, y: T },
+             keys: 0, lines: 6 + difficulty * 4 };
+  }
+
   const TOPDOWN_SHAPES = { rooms: tdRooms, arena: tdArena, cross: topdown, maze: tdMaze };
 
   /* Which overhead layout the words asked for. A tank battle wants open
@@ -934,7 +962,7 @@
        screen a hundred and sixty pixels wide, and covering half a maze while
        something is chasing you through it is not a story beat, it is a
        blindfold. Those games talk through the banner instead. */
-    if (o.mode === 'invaders' || o.win === 'clear') return [];
+    if (o.mode === 'invaders' || o.mode === 'blocks' || o.win === 'clear') return [];
     const beats = [{ at: +(0.6 + r() * 0.5).toFixed(1),
                      text: pick(r, ARRIVE[o.theme] || ['Here we go.']) }];
     if (need >= 4 && r() < 0.75) {
@@ -1009,7 +1037,7 @@
     /* Nothing in the play area of a fixed shooter. The whole screen is the
        fight, and a tree standing in it looks like a thing you are meant to
        shoot at. */
-    if (o.mode === 'invaders') return [];
+    if (o.mode === 'invaders' || o.mode === 'blocks') return [];
     const { w, h } = o, g = built.g, props = [];
     /* Solid means solid, not "not empty". Road, water, grass and a checkpoint
        are all tiles you walk through, and counting them as ground meant a
@@ -1101,7 +1129,7 @@
     let w, h;
     // A fixed screen is the screen. Nothing about it scrolls, so nothing
     // about it may be bigger than what you can see.
-    if (mode === 'invaders') [w, h] = [20, 18];
+    if (mode === 'invaders' || mode === 'blocks') [w, h] = [20, 18];
     else if (mode === 'racer' || mode === 'shmup') [w, h] = [jog(20, 2, 16), jog(pick(r, [70, 90, 120]), 12, 56)];
     else if (mode === 'topdown') {
       /* A chase has to fit the screen. Half the game is seeing where the
@@ -1122,6 +1150,8 @@
     if (mode === 'racer' || mode === 'shmup') {
       built = (mode === 'racer' ? roadway : starlane)(r, o);
       populate(r, o, built, mode);
+    } else if (mode === 'blocks') {
+      built = blocks(r, o);
     } else if (mode === 'invaders') {
       built = invaders(r, o);
     } else if (mode === 'topdown') {
@@ -1137,7 +1167,10 @@
         populate(r, o, built);
       }
     }
-    makeStartSafe(built, { w, h });
+    /* A falling-block game has nobody to keep safe, and its start point is
+       only a formality - running the usual pass over it cut a hole in the
+       wall of the well, and the pieces fell out through it. */
+    if (mode !== 'blocks') makeStartSafe(built, { w, h });
     /* Nothing outside the level. Shapes clamp the tiles they draw and have
        more than once forgotten to clamp the things they put on them, and a
        coin past the right-hand edge is a pickup target nobody can ever meet.
@@ -1169,6 +1202,7 @@
        is the ending. Say so in the rules, and do not also ask for a number. */
     const clearAll = !!built.clearAll;
     const clearFoes = !!built.clearFoes;
+    const lineTarget = built.lines || 0;
     const pickups = built.ents.filter(e => e.type === 'coin' || e.type === 'gem').length;
     if (want.collect === undefined && pickups && r() < .75) need = Math.max(1, Math.round(pickups * pick(r, [.5, .7, 1])));
 
@@ -1208,6 +1242,7 @@
       props: dress(r, o, built),
       rules: clearAll ? { collect: 0, keys, clearAll: true }
            : clearFoes ? { collect: 0, keys, clearFoes: true }
+           : lineTarget ? { collect: 0, keys, lines: lineTarget }
            : { collect: need, keys },
       story: story(r, o, need),
       script: script(r, o, need),
