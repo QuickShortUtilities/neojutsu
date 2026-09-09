@@ -52,9 +52,24 @@ def _tile_look():
     return {int(k): tuple(v) for k, v in json.loads(body).items()}
 
 
+def _scene_types():
+    """Which of their scene types each of ours becomes, read out of the same
+    file the browser exporter uses. `None` means there is no counterpart."""
+    import re
+    src = (ROOT / 'game-gbs.js').read_text(encoding='utf-8')
+    i = src.index('const SCENE_TYPE = {')
+    body = src[i + len('const SCENE_TYPE = '):src.index('};', i) + 1]
+    body = re.sub(r'//[^\n]*', '', body)
+    body = re.sub(r'([A-Za-z_][A-Za-z_0-9]*)\s*:', r'"\1":', body)
+    body = re.sub(r"'([^']*)'", r'"\1"', body)          # their quotes, not ours
+    body = re.sub(r',\s*}', '}', body)
+    return json.loads(body)
+
+
 # Which of the four shades a tile of ours is drawn in, and whether it stops you.
 # GB Studio collision bits: 1 top, 2 bottom, 4 left, 8 right, 16 ladder.
 TILE_LOOK = _tile_look()
+SCENE_TYPE = _scene_types()
 
 
 def encode_rle(cells):
@@ -198,6 +213,12 @@ def stages_of(spec):
 
 
 def export(spec, out, name):
+    # A falling-block game is rules rather than a room; there is nothing in its
+    # level but the walls of the well, and it would open over there and do
+    # nothing at all.
+    if SCENE_TYPE.get(spec.get('mode'), 'TOPDOWN') is None:
+        print(f"a {spec.get('mode')} game has no GB Studio equivalent", file=sys.stderr)
+        return None
     out = Path(out).expanduser()
     stages = stages_of(spec)
     scene_ids, first = [], None
@@ -262,7 +283,7 @@ def export(spec, out, name):
         cells = [TILE_LOOK.get(grid[y][x], (3, 0))[1] for y in range(h) for x in range(w)]
         write(out / 'project' / 'scenes' / room / 'scene.gbsres', {
             '_resourceType': 'scene', 'id': sid, '_index': i,
-            'type': 'PLATFORM' if spec.get('mode') == 'platform' else 'TOPDOWN',
+            'type': SCENE_TYPE.get(spec.get('mode')) or 'TOPDOWN',
             'name': st.get('name') or f'Room {i + 1}', 'symbol': f'scene_{room}',
             'x': 40 + i * 240, 'y': 40, 'width': w, 'height': h,
             'backgroundId': bid, 'tilesetId': '', 'colorModeOverride': 'none',

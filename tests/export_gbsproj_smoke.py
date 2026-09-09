@@ -128,6 +128,18 @@ try:
             issues.append('the browser and the command line disagree about the tile table')
         report['tile_table_shared'] = {k: list(v) for k, v in theirs.items()} == mine
 
+        # and about which of our modes becomes which of their scene types
+        types = page.evaluate('()=>window.NeoGBS.SCENE_TYPE')
+        if types != E.SCENE_TYPE:
+            issues.append(f'the two exporters disagree about scene types: {types} vs {E.SCENE_TYPE}')
+        report['scene_types'] = types
+        # a rider is side-on and must not go across as a room seen from above
+        if types.get('rider') != 'PLATFORM':
+            issues.append(f"a rider exports as {types.get('rider')}")
+        # and a well is rules, not a room
+        if types.get('blocks') is not None:
+            issues.append('a falling-block game claims a GB Studio equivalent')
+
         page.evaluate("""()=>{ const s=document.getElementById('g-template');
           s.value='quest'; s.dispatchEvent(new Event('change',{bubbles:true})); }""")
         page.wait_for_timeout(1200)
@@ -172,6 +184,16 @@ try:
             issues.append(f'page errors during export: {perr[:2]}')
         br.close()
     httpd.shutdown()
+    # ---- and what cannot travel says so, rather than exporting nonsense ----
+    src2 = (ROOT / 'game-templates.js').read_text(encoding='utf-8')
+    j = src2.index('window.NeoGameTemplates =') + len('window.NeoGameTemplates =')
+    tpl = json.loads(src2[j:src2.rindex('};') + 1])
+    if 'stack' in tpl:
+        made = E.export(tpl['stack'], tmp / 'refused', 'stack')
+        if made is not None:
+            issues.append('a falling-block game exported a project anyway')
+        report['refuses_blocks'] = made is None
+
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

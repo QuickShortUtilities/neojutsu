@@ -55,6 +55,21 @@
   };
   const look = id => TILE_LOOK[id] || TILE_LOOK[0];
 
+  /* Which of their scene types each of ours becomes. Everything that was not
+     a platformer used to go across as TOPDOWN, which turned a rider into a
+     room seen from above and a falling-block well into one as well. `null`
+     means there is no counterpart over there at all, and saying so is better
+     than exporting a shape their engine cannot run. */
+  const SCENE_TYPE = {
+    platform: 'PLATFORM',
+    rider:    'PLATFORM',      // side-on, with gravity
+    topdown:  'TOPDOWN',
+    invaders: 'TOPDOWN',       // a fixed screen; they have no name for one
+    racer:    'TOPDOWN',
+    shmup:    'SHMUP',         // this one they do have
+    blocks:   null,            // a well is not a scene
+  };
+
   // ---------- a zip, stored rather than compressed ----------
   /* Nothing here is big enough for deflate to be worth writing, and a stored
      entry is a header, the bytes, and a checksum. */
@@ -217,6 +232,14 @@
   }
 
   async function project(spec, title) {
+    /* Some games have no counterpart on the hardware through this route. A
+       falling-block game is rules, not a room: there is nothing in its level
+       but the walls of the well, and handing that over as a scene would
+       produce a project that opens and does nothing. */
+    if (SCENE_TYPE[spec.mode] === null) {
+      throw new Error(`a ${spec.mode} game has no GB Studio equivalent - `
+                    + 'its rules are the game, and only rooms travel this way');
+    }
     const name = title || spec.name || 'neojutsu-game';
     const files = [];
     const add = (path, obj) => files.push({ name: path, bytes: utf8(JSON.stringify(obj, null, 2)) });
@@ -276,7 +299,7 @@
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) cells.push(look(grid[y][x])[1]);
       add(`project/scenes/${room}/scene.gbsres`, {
         _resourceType: 'scene', id: sid, _index: n,
-        type: spec.mode === 'platform' ? 'PLATFORM' : 'TOPDOWN',
+        type: SCENE_TYPE[spec.mode] || 'TOPDOWN',
         name: st.name || `Room ${n + 1}`, symbol: `scene_${room}`,
         x: 40 + n * 240, y: 40, width: w, height: h,
         backgroundId: bid, tilesetId: '', colorModeOverride: 'none',
@@ -326,5 +349,5 @@
     return { blob: zip(files), rooms: n, sprites: Object.keys(sprites).length, files: files.length };
   }
 
-  window.NeoGBS = { project, zip, crc32, encodeRLE, TILE_LOOK, DMG, SPRITE_KEY };
+  window.NeoGBS = { project, zip, crc32, encodeRLE, TILE_LOOK, SCENE_TYPE, DMG, SPRITE_KEY };
 })();

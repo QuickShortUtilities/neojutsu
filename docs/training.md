@@ -80,16 +80,43 @@ some of it is worth nothing, so:
 - **Other people's levels, redrawn.** Fine for you at home, a licensing
   problem the day it ships. Original layouts and CC0 sources stay clean.
 
+## Seven kinds of game, not one with seven skins
+
+For a long while every mode here was the same game: a body moving through a
+tilemap, collecting things, reaching a flag. Gravity on or off, scrolling or
+not, shooting up or sideways - the tilemaps differed and the game did not.
+
+What makes a genre is how it ends and what a frame is, so those are what
+vary now:
+
+| mode | a frame is | you finish by |
+|---|---|---|
+| `platform` | a body under gravity | reaching the flag |
+| `topdown` | a body on a floor | the flag, or clearing the dots, or beating the rivals |
+| `racer` | the world coming at you | arriving at the far end |
+| `shmup` | the world coming at you, with a gun | arriving at the far end |
+| `invaders` | a formation coming down at you | clearing it |
+| `rider` | a bike with the throttle on | reaching the finish, having landed level |
+| `blocks` | a piece falling into a well | clearing enough rows |
+
+The endings are `collect`, `clearAll`, `clearFoes`, `lines` and `beat`, plus
+walking into a goal. A new genre almost always means a new ending; if it does
+not, it is probably a skin.
+
 ## What the generated half covers
 
 Prompts are built from a vocabulary, so what the vocabulary cannot say is not
-in the corpus however many games you generate. It asks for four genres, eight
-places, seven mechanics, five abilities including a tank's turret, a boss, a
-clock, two players, a run of several rooms, a hero, a number of lives, five
-level shapes and a pickup count - and it is worth checking that list against
-what the generator can build whenever the generator learns something new. A
-feature nothing asks for is a feature the model never sees: the tank existed
-for a day with no prompt in the corpus mentioning one.
+in the corpus however many games you generate. It asks for all seven genres,
+eight places, seven mechanics, five abilities including a tank's turret, a
+boss, a clock, two players, a run of several rooms, a hero, a number of
+lives, five level shapes and a pickup count - and it is worth checking that
+list against what the generator can build whenever the generator learns
+something new. A feature nothing asks for is a feature the model never sees:
+the tank existed for a day with no prompt in the corpus mentioning one.
+
+Games you finish by clearing the board take none of the clauses that assume a
+count or a flag. Asking a maze chase for eight coins asks for something it
+will not do.
 
 Watch for prompts that quietly change the genre behind their own back. "driving
 armour" reads as a racing game because of *driv*, and "three rooms" reads as an
