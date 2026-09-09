@@ -25,14 +25,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from make_dataset import BUILD, serve, record  # noqa: E402
+from level_kit import furnish, describe  # noqa: E402
 
 T = 8
 MODES = {'TOPDOWN': 'topdown', 'PLATFORM': 'platform', 'SHMUP': 'shmup'}
-SKY = {
-    'platform': ('#1b2a5c', '#7fc4e8'),
-    'topdown':  ('#0d0a16', '#241a30'),
-    'shmup':    ('#0a0714', '#2a2340'),
-}
 
 
 def decode_collisions(s):
@@ -92,21 +88,8 @@ def transpose(grid, w, h):
     return [[grid[y][x] for y in range(h)] for x in range(w)], h, w
 
 
-def surfaces(grid, w, h):
-    """Every ledge with room to stand on it."""
-    out = []
-    for x in range(1, w - 1):
-        for y in range(2, h):
-            if grid[y][x] and not grid[y - 1][x] and not grid[y - 2][x]:
-                out.append((x, y))
-    return out
-
-
-def open_cells(grid, w, h):
-    return [(x, y) for y in range(1, h - 1) for x in range(1, w - 1) if not grid[y][x]]
-
-
 def build_spec(scene, name, rng):
+    """A scene becomes terrain; level_kit puts the game into it."""
     mode = MODES.get(scene.get('type'))
     if not mode:
         return None, f"scene type {scene.get('type')} has no equivalent"
@@ -115,77 +98,7 @@ def build_spec(scene, name, rng):
         return None, 'collision layer did not decode'
     if mode == 'shmup':
         grid, w, h = transpose(grid, w, h)
-    if w < 8 or h < 8 or w * h > 40000:
-        return None, f'{w}x{h} is not a level we can use'
-    solid = sum(1 for row in grid for c in row if c)
-    if solid < (w * h) * 0.04:
-        return None, 'almost nothing in it'
-
-    ents, start = [], None
-    if mode == 'platform':
-        spots = surfaces(grid, w, h)
-        if len(spots) < 6:
-            return None, 'no ledges to stand on'
-        spots.sort()
-        sx, sy = spots[0]
-        start = {'x': sx * T, 'y': (sy - 2) * T}
-        picks = spots[2::max(1, len(spots) // 14)][:14]
-        for x, y in picks:
-            ents.append({'type': 'coin', 'x': x * T + 1, 'y': (y - 1) * T + 1})
-        gx, gy = spots[-1]
-        ents.append({'type': 'goal', 'x': gx * T, 'y': (gy - 2) * T})
-    elif mode == 'topdown':
-        cells = open_cells(grid, w, h)
-        if len(cells) < 30:
-            return None, 'nowhere to walk'
-        cells.sort(key=lambda c: (c[0], c[1]))
-        sx, sy = cells[0]
-        start = {'x': sx * T, 'y': sy * T}
-        for x, y in cells[4::max(1, len(cells) // 12)][:12]:
-            ents.append({'type': 'coin', 'x': x * T + 1, 'y': y * T + 1})
-        gx, gy = cells[-1]
-        ents.append({'type': 'goal', 'x': gx * T, 'y': gy * T})
-    else:                                       # shmup: the far edge is the finish
-        cells = open_cells(grid, w, h)
-        if len(cells) < 30:
-            return None, 'nowhere to fly'
-        low = max(cells, key=lambda c: c[1])
-        start = {'x': (w // 2) * T, 'y': (low[1] - 1) * T}
-        for x, y in cells[6::max(1, len(cells) // 10)][:10]:
-            ents.append({'type': 'coin', 'x': x * T + 1, 'y': y * T + 1})
-
-    coins = sum(1 for e in ents if e['type'] == 'coin')
-    sky0, sky1 = SKY[mode]
-    spec = {
-        'name': name[:40],
-        'mode': mode,
-        'seed': f'gbs{abs(hash(name)) % 9999}',
-        'sky0': sky0, 'sky1': sky1,
-        'player': {'char': 'hero'},
-        'start': start,
-        'lives': 3,
-        'level': {'w': w, 'h': h, 'tiles': '\n'.join(''.join(f'{c:x}' for c in row) for row in grid)},
-        'entities': ents,
-        'rules': {'collect': max(0, coins - 2), 'keys': 0},
-    }
-    return spec, None
-
-
-def describe(spec, scene):
-    kind = {'platform': 'a platformer', 'topdown': 'a top-down dungeon',
-            'shmup': 'a space shooter'}[spec['mode']]
-    bits = [kind]
-    lvl = spec['level']
-    if lvl['w'] >= 48:
-        bits.append('long')
-    elif lvl['w'] <= 24:
-        bits.append('short')
-    if lvl['h'] >= 30:
-        bits.append('tall')
-    need = spec['rules']['collect']
-    if need:
-        bits.append(f'{need} coins to collect')
-    return 'Make ' + ', '.join(bits) + '.'
+    return furnish(grid, w, h, mode, name)
 
 
 def main():
@@ -241,7 +154,7 @@ def main():
                     elif v.get('moved', 0) < args.min_moved:
                         rejects.append({'scene': name, 'why': f"a bot got {v.get('moved', 0)}px into it"})
                     else:
-                        kept.append((describe(spec, scene), spec))
+                        kept.append((describe(spec), spec))
             b.close()
     finally:
         srv.shutdown()
