@@ -27,6 +27,16 @@
     message: 1, win: 0, lose: 0, open: 0, give: 1, hurt: 0, heal: 1,
     spawn: 3, tile: 3, warp: 2, push: 2, gravity: 1, speed: 1, shake: 1, print: 1,
     talk: [1, 2],
+    /* Sequencing. Without a wait a script has no time in it, so nothing can
+       happen after something else - no cutscene, no boss pattern, no door
+       that opens a beat after the switch. */
+    wait: 1,
+    /* Actors. In a real game most of the script is aimed at a named thing in
+       the level: move it, stop it, hide it, arm it. Every entity can carry a
+       tag, and these address it. */
+    move: 3, stop: 1, hide: 1, show: 1, face: 2, setsprite: 2, remove: 1,
+    shoot: [1, 2],
+
   };
 
   // ---------- tokeniser ----------
@@ -125,6 +135,12 @@
         // restarting the game restarts the clock too.
         return { k: 'every', secs, body, id: everyId++ };
       }
+      if (t === 'do') {
+        const name = peek();
+        if (!name || !/^[A-Za-z_]/.test(name)) { errors.push('do needs the name of a routine'); return { k: 'noop' }; }
+        next();
+        return { k: 'do', name };
+      }
       if (Object.prototype.hasOwnProperty.call(ACTIONS, t)) {
         const args = [];
         const want = ACTIONS[t];
@@ -143,11 +159,22 @@
       return { k: 'noop' };
     }
 
-    const events = {};
+    const events = {}, routines = {};
     for (;;) {
       skipNL();
       if (peek() === null) break;
-      if (peek() !== 'on') { errors.push(`expected "on", found "${peek()}"`); next(); continue; }
+      // A routine is a piece of the game you can name and use more than once,
+      // which is how a game gets built out of parts instead of one long list.
+      if (peek() === 'define') {
+        next();
+        const name = next();
+        if (!name || !/^[A-Za-z_]/.test(name)) errors.push('define needs a name');
+        const body = block(['end']);
+        expect('end');
+        if (name) routines[name] = body;
+        continue;
+      }
+      if (peek() !== 'on') { errors.push(`expected "on" or "define", found "${peek()}"`); next(); continue; }
       next();
       const name = next();
       if (!EVENTS.includes(name)) errors.push(`unknown event "${name}"`);
@@ -155,15 +182,33 @@
       expect('end');
       (events[name] = events[name] || []).push(...body);
     }
-    return { events, errors };
+    // A routine that is used but never written is a typo, and finding it at
+    // compile time is better than finding it when the boss does not appear.
+    const seen = new Set();
+    (function scan(list) {
+      for (const st of list || []) {
+        if (!st) continue;
+        if (st.k === 'do') { seen.add(st.name); if (!routines[st.name]) errors.push(`no routine called "${st.name}"`); }
+        scan(st.then); scan(st.other); scan(st.body);
+      }
+    })([].concat(...Object.values(events), ...Object.values(routines)));
+    return { events, routines, errors };
   }
 
   // ---------- interpreter ----------
-  function run(program, event, env) {
+  /* Running a script is no longer "do all of it now".
+
+     A game needs time in it: open the gate, wait, then let the water in. So a
+     firing becomes a thread that the engine steps, and `wait` suspends it
+     until the clock catches up. Everything else - conditions, loops, routines
+     - is the same language it was, but it can now be spread across seconds
+     instead of happening in one indivisible instant. */
+  function makeThread(program, event, env) {
     const body = program && program.events && program.events[event];
-    if (!body || !body.length) return;
-    let steps = 0;
+    if (!body || !body.length) return null;
+    const routines = (program && program.routines) || {};
     const vars = env.vars;
+    let steps = 0;
 
     const read = name => {
       if (name === 'random') return env.random();
@@ -201,20 +246,20 @@
       return 0;
     }
 
-    function exec(list, depth) {
+    function* exec(list, depth) {
       for (const st of list) {
         if (++steps > MAX_STEPS) throw new RangeError('script ran too long');
         switch (st.k) {
           case 'set': vars[st.name] = ev(st.value, depth); break;
           case 'if':
-            if (ev(st.cond, depth)) exec(st.then, depth + 1);
-            else exec(st.other, depth + 1);
+            if (ev(st.cond, depth)) yield* exec(st.then, depth + 1);
+            else yield* exec(st.other, depth + 1);
             break;
           case 'while': {
             let guard = 0;
             while (ev(st.cond, depth)) {
-              exec(st.body, depth + 1);
-              if (++guard > 500 || steps > MAX_STEPS) throw new RangeError('loop ran too long');
+              yield* exec(st.body, depth + 1);
+              if (++guard > 500) throw new RangeError('loop ran too long');
             }
             break;
           }
@@ -224,22 +269,72 @@
             const now = env.read('time'), gap = ev(st.secs, depth) || 1;
             const key = '__every' + st.id;
             const last = Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : 0;
-            if (now - last >= gap) { vars[key] = now; exec(st.body, depth + 1); }
+            if (now - last >= gap) { vars[key] = now; yield* exec(st.body, depth + 1); }
             break;
           }
-          case 'call': env.act(st.name, st.args.map(a => ev(a, depth))); break;
+          case 'do': {
+            if (depth > MAX_DEPTH) throw new RangeError('script nested too deeply');
+            yield* exec(routines[st.name] || [], depth + 1);
+            break;
+          }
+          case 'call': {
+            const args = st.args.map(a => ev(a, depth));
+            if (st.name === 'wait') { yield Math.max(0, Math.min(60, +args[0] || 0)); break; }
+            env.act(st.name, args);
+            break;
+          }
         }
       }
     }
 
-    try { exec(body, 0); }
-    catch (e) { env.fault(e && e.message ? e.message : String(e)); }
+    return { gen: exec(body, 0), wait: 0, done: false, event, fault: '',
+             // The step budget is per resume, so a thread that lives for a
+             // minute is not starved by what it did a minute ago.
+             fresh() { steps = 0; } };
+  }
+
+  // One frame of one thread. Returns whether it is still going.
+  function resume(thread, dt) {
+    if (!thread || thread.done) return false;
+    if (thread.wait > 0) {
+      thread.wait -= dt;
+      if (thread.wait > 0) return true;
+    }
+    thread.fresh();
+    try {
+      const r = thread.gen.next();
+      if (r.done) { thread.done = true; return false; }
+      const secs = +r.value || 0;
+      thread.wait = secs > 0 ? secs : 0;
+      return true;
+    } catch (e) {
+      thread.done = true;
+      thread.fault = e && e.message ? e.message : String(e);
+      return false;
+    }
+  }
+
+  /* The old contract: run the whole thing now. Kept because per-frame logic
+     wants it and because a wait has no meaning in something that must finish
+     inside one frame. Waits collapse to nothing here. */
+  function run(program, event, env) {
+    const t = makeThread(program, event, env);
+    if (!t) return;
+    for (let i = 0; i < 512; i++) {
+      t.fresh();
+      let r;
+      try { r = t.gen.next(); }
+      catch (e) { env.fault(e && e.message ? e.message : String(e)); return; }
+      if (r.done) return;
+    }
+    env.fault('script ran too long');
   }
 
   const compile = src => {
     const r = parse(String(src || ''));
-    return { events: r.events, errors: r.errors, empty: !Object.keys(r.events).length };
+    return { events: r.events, routines: r.routines, errors: r.errors,
+             empty: !Object.keys(r.events).length };
   };
 
-  window.NeoScript = { compile, run, EVENTS, READS, ACTIONS, MAX_STEPS };
+  window.NeoScript = { compile, run, makeThread, resume, EVENTS, READS, ACTIONS, MAX_STEPS };
 })();

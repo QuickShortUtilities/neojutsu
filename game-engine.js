@@ -115,7 +115,10 @@
     return { id: ++entitySeq, type: e.type, x: e.x, y: e.y, w: def.w, h: def.h, def,
              vx: (def.speed || 0) * (e.dir === -1 ? -1 : 1), vy: 0, hp: def.hp || 1,
              home: { x: e.x, y: e.y }, alive: true, t: (e.x * 7 + e.y * 13) % 628 / 100,
-             life: 0, cool: 0, tag: e.tag || '' };
+             life: 0, cool: 0, tag: e.tag || '',
+             // What a script can change about an actor: where it is going,
+             // whether it is on stage, and what it looks like.
+             hidden: false, goal: null, sprite: (typeof e.sprite === 'number' ? e.sprite : null) };
   }
 
   // ---------- collision ----------
@@ -246,6 +249,7 @@
       }
       doorsOpen = false; effects = []; shake = 0;
       message = ''; messageAt = 0;
+      threads = [];
     }
 
     function stageRules() {
@@ -264,6 +268,11 @@
     // The script sees numbers and may call actions. It never sees the engine,
     // the page, or anything it could use to reach either.
     let program = null, scriptLog = [], scriptFault = '';
+    /* A firing is a thread now, not an instant. Most of them run to the end
+       in the frame they start - a script with no wait in it behaves exactly
+       as it always did - but one that waits carries on across seconds. */
+    let threads = [];
+    const MAX_THREADS = 8;
     function compileScript() {
       scriptLog = []; scriptFault = '';
       if (!spec.script || !window.NeoScript) { program = null; return { errors: [] }; }
@@ -323,11 +332,48 @@
             if (args.length >= 2) speak(args[1], String(args[0]));
             else speak(args[0], 'player');
             break;
+          /* Actors. Most of a real game's script is aimed at a named thing in
+             the level rather than at the world in general, so these take a
+             tag and act on everything wearing it. */
+          case 'move': {
+            for (const e of tagged(args[0])) {
+              e.goal = { x: Math.max(0, Math.min(lvl.w - 1, Math.round(n(args[1])))) * TILE,
+                         y: Math.max(0, Math.min(lvl.h - 1, Math.round(n(args[2])))) * TILE };
+            }
+            break;
+          }
+          case 'stop': for (const e of tagged(args[0])) { e.goal = null; e.vx = 0; e.vy = 0; } break;
+          case 'hide': for (const e of tagged(args[0])) e.hidden = true; break;
+          case 'show': for (const e of tagged(args[0])) e.hidden = false; break;
+          case 'face': for (const e of tagged(args[0])) { const d = n(args[1]) < 0 ? -1 : 1; e.vx = Math.abs(e.vx) * d; e.face = d; } break;
+          case 'setsprite': for (const e of tagged(args[0])) e.sprite = Math.max(0, Math.round(n(args[1]))); break;
+          case 'remove': for (const e of tagged(args[0])) { e.alive = false; effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 }); } break;
+          case 'shoot': {
+            const deg = args.length > 1 ? n(args[1]) : 90;      // 90 is straight down
+            const rad = deg * Math.PI / 180;
+            for (const e of tagged(args[0])) {
+              if (entities.length > 400) break;
+              const shot = makeEntity({ type: 'shot', x: e.x + e.w / 2 - 1, y: e.y + e.h / 2 - 1 });
+              shot.vx = Math.cos(rad) * ENTITY.shot.speed * 0.8;
+              shot.vy = Math.sin(rad) * ENTITY.shot.speed * 0.8;
+              shot.foe = true;
+              entities.push(shot);
+            }
+            say('shoot');
+            break;
+          }
           case 'print': if (scriptLog.length < 50) scriptLog.push(String(args[0]).slice(0, 80)); break;
         }
       },
       fault(msg) { if (!scriptFault) scriptFault = msg; },
     };
+    // Every actor wearing a tag. Naming several the same is how a script
+    // commands a group without knowing how many there are.
+    function tagged(name) {
+      const t = String(name);
+      return t ? entities.filter(e => e.alive && e.tag === t) : [];
+    }
+
     // Who is talking: a body, an entity with a matching tag, or the player.
     function speaker(who) {
       if (!who || who === 'player' || who === 'p1') return players[0];
@@ -348,7 +394,30 @@
     }
 
     const say = name => { if (opts.onEvent) opts.onEvent(name); };
-    const fire = name => { say(name); storyEvent(name); if (program) window.NeoScript.run(program, name, scriptEnv); };
+    function pumpThreads(dt) {
+      if (!threads.length) return;
+      for (const t of threads) {
+        window.NeoScript.resume(t, dt);
+        if (t.fault && !scriptFault) scriptFault = t.fault;
+      }
+      threads = threads.filter(t => !t.done);
+    }
+
+    const fire = name => {
+      say(name);
+      storyEvent(name);
+      if (!program) return;
+      // Per-frame logic runs one at a time; starting a new `on tick` while the
+      // last one is still waiting would pile up a thread a frame forever.
+      if (name === 'tick' && threads.some(t => t.event === 'tick')) return;
+      if (threads.length >= MAX_THREADS) return;
+      const t = window.NeoScript.makeThread(program, name, scriptEnv);
+      if (!t) return;
+      // Run it once immediately, so anything without a wait finishes now.
+      window.NeoScript.resume(t, 0);
+      if (t.fault && !scriptFault) scriptFault = t.fault;
+      if (!t.done) threads.push(t);
+    };
 
     // Only now, because reset fires the script's start event.
     reset();
@@ -390,6 +459,7 @@
       updateEntities(dt, ctx2);
       runTriggers();
       runStory();
+      pumpThreads(dt);
       for (const b of bubbles) b.t += dt;
       bubbles = bubbles.filter(b => b.t < b.life);
       fire('tick');
@@ -604,9 +674,25 @@
     function updateEntities(dt, ctx2) {
       for (const e of entities) {
         if (!e.alive) continue;
+        // Hidden is off stage: it does not move, and nothing can touch it.
+        if (e.hidden) continue;
         const d = e.def;
 
-        if (d.bullet) {
+        /* Sent somewhere by a script. A goal overrides whatever the thing
+           would do on its own, which is what makes a guard walk to the gate
+           in a cutscene instead of patrolling through it. */
+        if (e.goal) {
+          const gx = e.goal.x - e.x, gy = e.goal.y - e.y;
+          const dist = Math.hypot(gx, gy);
+          const sp = Math.max(14, d.speed || 30);
+          if (dist <= sp * dt + 0.5) {
+            e.x = e.goal.x; e.y = e.goal.y; e.goal = null; e.vx = 0; e.vy = 0;
+          } else {
+            e.vx = gx / dist * sp; e.vy = gy / dist * sp;
+            e.x += e.vx * dt; e.y += e.vy * dt;
+            if (e.vx) e.face = e.vx > 0 ? 1 : -1;
+          }
+        } else if (d.bullet) {
           e.x += e.vx * dt; e.y += e.vy * dt; e.life += dt;
           if (e.life > 2.2 || solidAt(lvl, Math.floor(e.x / TILE), Math.floor(e.y / TILE), ctx2)) { e.alive = false; continue; }
         } else if (d.platform) {
@@ -676,7 +762,7 @@
         }
 
         for (const b of players) {
-          if (!overlaps(b, e)) continue;
+          if (e.hidden || !overlaps(b, e)) continue;
           if (d.collect) {
             e.alive = false;
             say(d.key ? 'key' : d.score >= 5 ? 'gem' : 'coin');
@@ -850,7 +936,7 @@
       if (useArt) drawProps(false);
 
       for (const e of entities) {
-        if (!e.alive) continue;
+        if (!e.alive || e.hidden) continue;
         const sx = Math.round(e.x - ox), sy = Math.round(e.y - oy);
         if (sx < -16 || sx > view.w + 16) continue;
         if (useArt && drawEntityArt(e, sx, sy, cat)) continue;
@@ -887,7 +973,9 @@
       // restart and on someone else's machine - the same promise the seeded
       // audio and video make.
       function drawEntityArt(e, sx, sy, cat) {
-        const idx = art.forEntity(e.type, cat, e.home.x * 7 + e.home.y * 13);
+        const idx = typeof e.sprite === 'number' && e.sprite !== null
+          ? e.sprite
+          : art.forEntity(e.type, cat, e.home.x * 7 + e.home.y * 13);
         if (idx == null) return false;
         const locked = spec.rules && spec.rules.collect && score < spec.rules.collect;
         const colour = e.def.key ? '#2ef2ff'
@@ -1076,6 +1164,9 @@
       panBy(dx, dy) { view.x += dx; view.y += dy; camera(); draw(); },
       panTo(x, y) { view.x = x; view.y = y; camera(); draw(); },
       get scriptLog() { return scriptLog; },
+      // What the script has remembered, and how many sequences are running.
+      scriptState() { return scriptEnv ? scriptEnv.vars : {}; },
+      get scriptThreads() { return threads.length; },
       get scriptFault() { return scriptFault; },
       setScript(src) { spec.script = src; const r = compileScript(); reset(); draw(); return r; },
       get entities() { return entities; },
