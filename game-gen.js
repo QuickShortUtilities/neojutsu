@@ -525,9 +525,12 @@
 
   function chooseTopdown(want, r) {
     if (want.shape && TOPDOWN_SHAPES[want.shape]) return want.shape;
+    /* Asking for doors and locked rooms is asking for a shape, and it beats
+       the tank: a tank in a dungeon is a tank in a dungeon, but a request for
+       locked rooms answered with an open field is the wrong game. */
+    if (want.mech === 'doors') return 'rooms';
     if (want.abilities && want.abilities.includes('aimLock')) return 'arena';
     if (want.boss) return 'arena';
-    if (want.mech === 'doors') return 'rooms';
     return pick(r, ['rooms', 'arena', 'cross']);
   }
 

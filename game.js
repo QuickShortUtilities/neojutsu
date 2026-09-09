@@ -354,12 +354,22 @@
     window.NeoSelect?.refreshAll?.();
   }
 
+  /* Read back in the words a person would use. These are the spec's own
+     keys, and printing them raw told the player their game had "aimLock" and
+     called a racing game a platformer. */
+  const SAID = {
+    doubleJump: 'double jump', wallJump: 'wall jump', dash: 'dash',
+    attack: 'a gun', aimLock: 'a turret',
+  };
+  const MODE_SAID = { topdown: 'top-down', platform: 'platformer',
+                      racer: 'racing', shmup: 'a shooter' };
+
   function describeUnderstanding(u) {
     const bits = [];
     if (u.theme) bits.push(`<b>${u.theme}</b>`);
-    if (u.mode) bits.push(`<b>${u.mode === 'topdown' ? 'top-down' : 'platformer'}</b>`);
+    if (u.mode) bits.push(`<b>${MODE_SAID[u.mode] || u.mode}</b>`);
     if (u.mech) bits.push(`<b>${u.mech}</b>`);
-    if (u.abilities && u.abilities.length) bits.push(u.abilities.map(a => `<b>${a}</b>`).join(' + '));
+    if (u.abilities && u.abilities.length) bits.push(u.abilities.map(a => `<b>${SAID[a] || a}</b>`).join(' + '));
     if (u.difficulty !== undefined) bits.push(`<b>${['easy','normal','hard'][u.difficulty]}</b>`);
     if (u.size) bits.push(`<b>${u.size}</b>`);
     if (u.collect !== undefined) bits.push(`<b>${u.collect} to collect</b>`);
