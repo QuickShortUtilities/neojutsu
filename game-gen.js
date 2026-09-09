@@ -581,78 +581,83 @@
   function tdMaze(r, o) {
     const { w, h, difficulty } = o;
     const g = Array.from({ length: h }, () => Array(w).fill('2'));
-    const half = Math.floor(w / 2);
 
-    // Carve the left half on a two-tile grid, then mirror it.
-    const cut = (x, y, cw, ch) => {
-      for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
-        if (g[y + j] && g[y + j][x + i] !== undefined) g[y + j][x + i] = '0';
+    /* Carved as a proper maze, on a coarse grid of two-by-two rooms with one
+       tile of wall between them, and joined by a backtracker that visits
+       every room. Connectivity is then a property of the algorithm rather
+       than something to hope for: the first version mirrored one half and cut
+       a corridor through the middle, and four mazes in six came out with
+       parts of themselves walled off - which, when clearing the board is the
+       only way to win, is a game that cannot be finished. */
+    const cols = Math.floor((w - 1) / 3), rows = Math.floor((h - 1) / 3);
+    if (cols < 3 || rows < 3) return tdArena(r, o);
+    const room = (i, j) => ({ x: 1 + i * 3, y: 1 + j * 3 });
+    const carve = (x, y, cw, ch) => {
+      for (let b = 0; b < ch; b++) for (let a = 0; a < cw; a++) {
+        if (g[y + b] && g[y + b][x + a] !== undefined) g[y + b][x + a] = '0';
       }
     };
-    /* Corridors two wide with real wall between them. Spacing them three
-       apart left one-tile walls, which reads as specks in an open room rather
-       than as a maze - the wall has to be thick enough to be somewhere you
-       cannot go. */
-    const rows = [], cols = [];
-    for (let y = 2; y < h - 3; y += 5) { cut(2, y, half - 3, 2); rows.push(y); }
-    for (let x = 2; x < half - 3; x += 6) { cut(x, 2, 2, h - 4); cols.push(x); }
-    // A few crossings closed off, so it is a maze and not a grid of streets.
-    for (let i = 0; i < 1 + difficulty; i++) {
-      const y = rows[1 + Math.floor(r() * Math.max(1, rows.length - 1))];
-      const x = cols[Math.floor(r() * cols.length)];
-      if (y === undefined || x === undefined) continue;
-      for (let j = 0; j < 2; j++) for (let k = 0; k < 2; k++) {
-        if (g[y + j]) g[y + j][x + k] = '2';
-      }
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      const c = room(i, j); carve(c.x, c.y, 2, 2);
     }
-    for (let y = 0; y < h; y++) for (let x = 0; x < half; x++) g[y][w - 1 - x] = g[y][x];
 
-    // A corridor straight through the middle, so the two halves are one maze.
-    const mid = Math.floor(h / 2);
-    for (let x = 1; x < w - 1; x++) { g[mid][x] = '0'; if (g[mid + 1]) g[mid + 1][x] = '0'; }
+    const seen = new Set(['0,0']);
+    const stack = [[0, 0]];
+    while (stack.length) {
+      const [i, j] = stack[stack.length - 1];
+      const next = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+        .map(([di, dj]) => [i + di, j + dj])
+        .filter(([ni, nj]) => ni >= 0 && nj >= 0 && ni < cols && nj < rows && !seen.has(`${ni},${nj}`));
+      if (!next.length) { stack.pop(); continue; }
+      const [ni, nj] = next[Math.floor(r() * next.length)];
+      const a = room(i, j), b = room(ni, nj);
+      // the wall between the two rooms, opened the full width of the passage
+      if (ni !== i) carve(Math.min(a.x, b.x) + 2, a.y, 1, 2);
+      else carve(a.x, Math.min(a.y, b.y) + 2, 2, 1);
+      seen.add(`${ni},${nj}`); stack.push([ni, nj]);
+    }
+    // A few extra ways round, so it is a maze to be chased in rather than a
+    // tree with one route through it.
+    for (let k = 0; k < 3 + difficulty * 2; k++) {
+      const i = Math.floor(r() * cols), j = Math.floor(r() * rows);
+      const across = r() < .5;
+      if (across && i + 1 < cols) carve(room(i, j).x + 2, room(i, j).y, 1, 2);
+      else if (!across && j + 1 < rows) carve(room(i, j).x, room(i, j).y + 2, 2, 1);
+    }
 
+    // Where a body twelve pixels tall can stand: it always spans two rows.
     const open = [];
     for (let y = 1; y < h - 2; y++) for (let x = 1; x < w - 1; x++) {
       if (g[y][x] === '0' && g[y + 1][x] === '0') open.push([x, y]);
     }
-    if (open.length < 24) return tdArena(r, o);          // too tight to chase in
+    if (open.length < 24) return tdArena(r, o);
 
-    /* You start low and they start high, the way this game has always been
-       laid out. Dropping everybody in the middle together put a ghost seven
-       tiles away at the whistle. */
-    const low = open.filter(([, y]) => y > h * 0.6);
-    const start = (low[Math.floor(low.length / 2)] || open[Math.floor(open.length / 2)]);
-    const far = open.filter(([x, y]) => Math.hypot(x - start[0], y - start[1]) > Math.min(w, h) / 2)
-                    .sort((a, bb) => Math.hypot(bb[0] - start[0], bb[1] - start[1])
-                                   - Math.hypot(a[0] - start[0], a[1] - start[1]));
+    const bottom = room(0, rows - 1);
+    const start = [bottom.x, bottom.y];
+    const dist = ([x, y]) => Math.hypot(x - start[0], y - start[1]);
+    const far = open.slice().sort((a, b) => dist(b) - dist(a));
+
     const ents = [];
-
-    /* A dot on everything you can walk on, minus where the cast stands. This
-       is what makes it a board to clear rather than a level to cross. */
     const busy = new Set([`${start[0]},${start[1]}`]);
-    const corners = [open[0], open[open.length - 1],
-                     far[0] || open[1], far[far.length - 1] || open[2]];
-    for (let i = 0; i < 4; i++) {
-      const c = corners[i];
-      if (!c) continue;
-      busy.add(`${c[0]},${c[1]}`);
-      ents.push({ type: 'pellet', x: c[0] * T, y: c[1] * T });
+    // A pellet in each far corner of the board.
+    for (const [i, j] of [[0, 0], [cols - 1, 0], [0, rows - 1], [cols - 1, rows - 1]]) {
+      const c = room(i, j);
+      if (c.x === start[0] && c.y === start[1]) continue;
+      busy.add(`${c.x},${c.y}`);
+      ents.push({ type: 'pellet', x: c.x * T, y: c.y * T });
     }
     /* Let out one at a time, a couple of seconds apart. All four at the
-       whistle is not a chase, it is a pincer - and it made two mazes in five
-       cost a life before anybody had touched a key. */
-    const hunters = spread(far.length >= 4 ? far : open, 3 + difficulty);
-    hunters.forEach(([x, y], i) => {
+       whistle is not a chase, it is a pincer. */
+    spread(far, 3 + difficulty).forEach(([x, y], i) => {
       busy.add(`${x},${y}`);
       ents.push({ type: 'ghost', x: x * T, y: y * T, dir: r() < .5 ? -1 : 1,
                   wake: +(1.5 + i * 2.5).toFixed(1) });
     });
     for (const [x, y] of open) {
       if (busy.has(`${x},${y}`)) continue;
-      if ((x + y) % 2) continue;                          // every other cell, not a carpet
+      if (y % 3 !== 1) continue;                 // one line of dots per corridor
       ents.push({ type: 'dot', x: x * T + 2, y: y * T + 2 });
     }
-    // Long enough to see where they are before they are on you.
     return { g, ents, start: { x: start[0] * T, y: start[1] * T },
              keys: 0, clearAll: true, grace: 2.6 };
   }
@@ -925,6 +930,11 @@
      when you reach the far end is a story about the game being played rather
      than about the clock. */
   function story(r, o, need) {
+    /* Not in an arcade game. A speech bubble is three lines of text on a
+       screen a hundred and sixty pixels wide, and covering half a maze while
+       something is chasing you through it is not a story beat, it is a
+       blindfold. Those games talk through the banner instead. */
+    if (o.mode === 'invaders' || o.win === 'clear') return [];
     const beats = [{ at: +(0.6 + r() * 0.5).toFixed(1),
                      text: pick(r, ARRIVE[o.theme] || ['Here we go.']) }];
     if (need >= 4 && r() < 0.75) {

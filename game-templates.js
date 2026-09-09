@@ -2934,6 +2934,627 @@
       }
     ],
     "script": "on start\n  message \"GOOD LUCK\"\n  message \"FIND THE KEY\"\nend\n\non collect\n  if keys >= 1\n    open\n    message \"IT OPENS\"\n  end\n  if score >= 10\n    message \"RUN\"\n    shake 5\n    speed 120\n    spawn \"chaser\" 4 12\n  end\nend"
+  },
+  "chase": {
+    "name": "Maze chase",
+    "kanji": "\u8ffd",
+    "mode": "topdown",
+    "cat": "dungeon",
+    "seed": "chase3",
+    "sky0": "#0a1424",
+    "sky1": "#2a5a7a",
+    "player": {
+      "char": "mage",
+      "grace": 2.6
+    },
+    "start": {
+      "x": 8,
+      "y": 104
+    },
+    "lives": 4,
+    "level": {
+      "w": 20,
+      "h": 18,
+      "tiles": "22222222222222222222\n20020000000020000022\n20020000000020000022\n20020022220022220022\n20020000020000020022\n20020000020000020022\n20022220022220020022\n20000020020000020022\n20000020020000020022\n20020020020022220022\n20000000020020000022\n20000000020020000022\n20022220020020020022\n20000000020000020022\n20000000020000020022\n22222222222222222222\n22222222222222222222\n22222222222222222222"
+    },
+    "entities": [
+      {
+        "type": "pellet",
+        "x": 8,
+        "y": 8
+      },
+      {
+        "type": "pellet",
+        "x": 128,
+        "y": 8
+      },
+      {
+        "type": "pellet",
+        "x": 128,
+        "y": 104
+      },
+      {
+        "type": "ghost",
+        "x": 136,
+        "y": 8,
+        "dir": -1,
+        "wake": 1.5
+      },
+      {
+        "type": "ghost",
+        "x": 104,
+        "y": 56,
+        "dir": -1,
+        "wake": 4
+      },
+      {
+        "type": "ghost",
+        "x": 80,
+        "y": 96,
+        "dir": 1,
+        "wake": 6.5
+      },
+      {
+        "type": "dot",
+        "x": 18,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 34,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 42,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 50,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 58,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 66,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 74,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 82,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 90,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 106,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 114,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 122,
+        "y": 10
+      },
+      {
+        "type": "dot",
+        "x": 10,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 18,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 34,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 42,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 50,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 58,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 66,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 82,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 90,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 98,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 106,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 114,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 130,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 138,
+        "y": 34
+      },
+      {
+        "type": "dot",
+        "x": 10,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 18,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 26,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 34,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 42,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 58,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 66,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 82,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 90,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 98,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 114,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 130,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 138,
+        "y": 58
+      },
+      {
+        "type": "dot",
+        "x": 10,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 18,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 26,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 34,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 42,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 50,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 58,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 66,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 82,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 90,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 106,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 114,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 122,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 130,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 138,
+        "y": 82
+      },
+      {
+        "type": "dot",
+        "x": 18,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 26,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 34,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 42,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 50,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 58,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 66,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 82,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 90,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 98,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 106,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 114,
+        "y": 106
+      },
+      {
+        "type": "dot",
+        "x": 138,
+        "y": 106
+      }
+    ],
+    "props": [
+      {
+        "i": 109,
+        "x": 28,
+        "y": 75,
+        "t": "#405462",
+        "b": 1
+      },
+      {
+        "i": 108,
+        "x": 52,
+        "y": 123,
+        "t": "#405462",
+        "b": 1
+      },
+      {
+        "i": 109,
+        "x": 132,
+        "y": 123,
+        "t": "#405462",
+        "b": 1
+      },
+      {
+        "i": 12,
+        "x": 20,
+        "y": 120,
+        "t": "#7fa8c4"
+      },
+      {
+        "i": 57,
+        "x": 28,
+        "y": 72,
+        "t": "#7fa8c4"
+      },
+      {
+        "i": 61,
+        "x": 44,
+        "y": 120,
+        "t": "#7fa8c4"
+      },
+      {
+        "i": 12,
+        "x": 60,
+        "y": 120,
+        "t": "#7fa8c4"
+      },
+      {
+        "i": 567,
+        "x": 84,
+        "y": 120,
+        "t": "#7fa8c4"
+      },
+      {
+        "i": 567,
+        "x": 92,
+        "y": 48,
+        "t": "#7fa8c4"
+      },
+      {
+        "i": 12,
+        "x": 100,
+        "y": 72,
+        "t": "#7fa8c4"
+      },
+      {
+        "i": 567,
+        "x": 108,
+        "y": 120,
+        "t": "#7fa8c4"
+      },
+      {
+        "i": 61,
+        "x": 124,
+        "y": 96,
+        "t": "#7fa8c4"
+      },
+      {
+        "i": 12,
+        "x": 132,
+        "y": 120,
+        "t": "#7fa8c4"
+      }
+    ],
+    "rules": {
+      "collect": 0,
+      "keys": 0,
+      "clearAll": true
+    },
+    "script": "on start\n  message \"BEGIN\"\n  set streak 0\nend\n\non collect\n  if score == 5\n    heal 1\n    message \"HAVE A LIFE\"\n  end\n  set streak streak + 1\n  if streak >= 4\n    give 2\n    message \"STREAK\"\n    set streak 0\n  end\nend\n\non hurt\n  set streak 0\nend",
+    "story": []
+  },
+  "squadron": {
+    "name": "Squadron",
+    "kanji": "\u968a",
+    "mode": "invaders",
+    "cat": "shooter",
+    "seed": "squadron0",
+    "sky0": "#1b2a5c",
+    "sky1": "#bfe9ff",
+    "player": {
+      "char": "hero",
+      "attack": true,
+      "speed": 96,
+      "grace": 1.6
+    },
+    "start": {
+      "x": 80,
+      "y": 120
+    },
+    "lives": 2,
+    "level": {
+      "w": 20,
+      "h": 18,
+      "tiles": "22222222222222222222\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20777007770077700777\n20777007770077700777\n20000000000000000002\n20000000000000000002\n20000000000000000002\n22222222222222222222"
+    },
+    "entities": [
+      {
+        "type": "invader",
+        "x": 40,
+        "y": 16
+      },
+      {
+        "type": "invader",
+        "x": 56,
+        "y": 16
+      },
+      {
+        "type": "invader",
+        "x": 72,
+        "y": 16
+      },
+      {
+        "type": "invader",
+        "x": 88,
+        "y": 16
+      },
+      {
+        "type": "invader",
+        "x": 104,
+        "y": 16
+      },
+      {
+        "type": "invader",
+        "x": 40,
+        "y": 32
+      },
+      {
+        "type": "invader",
+        "x": 56,
+        "y": 32
+      },
+      {
+        "type": "invader",
+        "x": 72,
+        "y": 32
+      },
+      {
+        "type": "invader",
+        "x": 88,
+        "y": 32
+      },
+      {
+        "type": "invader",
+        "x": 104,
+        "y": 32
+      },
+      {
+        "type": "invader",
+        "x": 40,
+        "y": 48
+      },
+      {
+        "type": "invader",
+        "x": 56,
+        "y": 48
+      },
+      {
+        "type": "invader",
+        "x": 72,
+        "y": 48
+      },
+      {
+        "type": "invader",
+        "x": 88,
+        "y": 48
+      },
+      {
+        "type": "invader",
+        "x": 104,
+        "y": 48
+      },
+      {
+        "type": "invader",
+        "x": 40,
+        "y": 64
+      },
+      {
+        "type": "invader",
+        "x": 56,
+        "y": 64
+      },
+      {
+        "type": "invader",
+        "x": 72,
+        "y": 64
+      },
+      {
+        "type": "invader",
+        "x": 88,
+        "y": 64
+      },
+      {
+        "type": "invader",
+        "x": 104,
+        "y": 64
+      }
+    ],
+    "props": [],
+    "rules": {
+      "collect": 0,
+      "keys": 0,
+      "clearFoes": true
+    },
+    "script": "on start\n  message \"GOOD LUCK\"\n  message \"FIND THE FLAG\"\nend\n\non hurt\n  message \"TRY AGAIN\"\nend\n\non collect\n  if coins == 1\n    message \"ONE LEFT\"\n  end\nend",
+    "story": []
   }
 };
 })();

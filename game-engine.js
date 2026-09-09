@@ -741,6 +741,17 @@
           if (vdir) { player.aimX = 0; player.aimY = vdir; }
           else if (dir) { player.aimX = dir; player.aimY = 0; }
         }
+
+        /* Line up with the corridor you are in. A body twelve pixels tall in
+           a sixteen-pixel corridor has four pixels of slack, and asking a
+           player to find them by hand is what makes a maze unplayable - a bot
+           that plays one for forty-five seconds ate three dots out of
+           forty-five. Only ever on the axis you are not steering, so it never
+           argues with a deliberate move, and through the velocity so the
+           collision code still has the last word. */
+        const pull = (at, to) => Math.max(-100, Math.min(100, (to - at) * 9));
+        if (dir && !vdir) player.vy = pull(player.y, Math.round(player.y / TILE) * TILE);
+        else if (vdir && !dir) player.vx = pull(player.x, Math.round(player.x / TILE) * TILE);
       }
 
       if (scrolling) {

@@ -91,9 +91,16 @@ CHECK = """(key)=>{
   return {
     mode: t.mode, size:[lvl.w,lvl.h], entities:(st.entities||[]).length,
     coins, need,
-    // Scrolling games finish by arriving at the exit strip, not at a flag.
-    hasGoal: stages.every(s => (s.entities||[]).some(e=>e.type==='goal')
-                            || /i/.test(String((s.level||{}).tiles||''))),
+    /* Every game has to be finishable, but not every game is finished by
+       walking into something. A scroller arrives at the exit strip; a maze is
+       cleared of its dots; an arena is cleared of its enemies. */
+    hasGoal: stages.every(s => {
+      const r = s.rules || t.rules || {};
+      if (r.clearAll) return (s.entities||[]).some(e=>e.type==='dot'||e.type==='coin'||e.type==='gem');
+      if (r.clearFoes) return (s.entities||[]).some(e=>e.type==='invader'||e.type==='walker'
+                                                    ||e.type==='chaser'||e.type==='hunter');
+      return (s.entities||[]).some(e=>e.type==='goal') || /i/.test(String((s.level||{}).tiles||''));
+    }),
     stageCount: stages.length, badStages,
     distinctTiles: tiles.size, startsAlive, settled,
     scriptErrors: script.errors, fault: g.scriptFault, fairOpening,

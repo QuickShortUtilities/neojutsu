@@ -37,8 +37,14 @@ try:
         except Exception as e:
             issues.append(f'record {i} answer is not JSON: {e}'); continue
         specs.append(spec)
-        for key in ('mode', 'level', 'entities', 'start'):
-            if key not in spec:
+        # A run of rooms keeps its level, cast and start on each room rather
+        # than on the game, so look where the game actually put them.
+        rooms = spec.get('levels')
+        where = rooms[0] if isinstance(rooms, list) and rooms else spec
+        if 'mode' not in spec:
+            issues.append(f'record {i} has no mode')
+        for key in ('level', 'entities', 'start'):
+            if key not in where:
                 issues.append(f'record {i} has no {key}')
 
     # the answer must be one object and nothing else - no prose, no fences
@@ -49,7 +55,7 @@ try:
 
     # genres are labelled and kept apart
     modes = {s.get('mode') for s in specs}
-    if not modes <= {'platform', 'topdown', 'racer', 'shmup'}:
+    if not modes <= {'platform', 'topdown', 'racer', 'shmup', 'invaders'}:
         issues.append(f'unexpected modes: {modes}')
     gdir = tmp / 'genre'
     written = {p.stem for p in gdir.glob('*.jsonl')} if gdir.exists() else set()
@@ -63,15 +69,15 @@ try:
     # it draws and forgets the pickups it puts on them leaves a coin past the
     # right-hand edge, and a collect target nobody can ever meet.
     for i, spec in enumerate(specs):
-        lvl = spec.get('level') or {}
+        lvl = where.get('level') or {}
         wpx, hpx = (lvl.get('w') or 0) * 8, (lvl.get('h') or 0) * 8
-        for e in (spec.get('entities') or []):
+        for e in (where.get('entities') or []):
             if not (0 <= e.get('x', -1) < wpx and 0 <= e.get('y', -1) < hpx):
                 issues.append(f"record {i}: a {e.get('type')} sits outside the level")
                 break
-        coins = sum(1 for e in (spec.get('entities') or [])
-                    if e.get('type') in ('coin', 'gem'))
-        want = (spec.get('rules') or {}).get('collect') or 0
+        coins = sum(1 for e in (where.get('entities') or [])
+                    if e.get('type') in ('coin', 'gem', 'dot'))
+        want = ((where.get('rules') or spec.get('rules')) or {}).get('collect') or 0
         if want > coins:
             issues.append(f'record {i}: asks for {want} pickups but has {coins}')
 

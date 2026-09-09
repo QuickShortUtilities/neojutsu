@@ -33,6 +33,12 @@ KINDS = [
                   'a car race', 'a speedway run']),
     ('shmup',    ['a space shooter', 'a shoot-em-up', 'a starfighter run',
                   'a bullet hell', 'a dogfight in space']),
+    # The two arcade shapes. They are their own genres, not a platformer with
+    # the gravity turned off, and nothing in the corpus was ever one.
+    ('invaders', ['a space invaders game', 'a fixed shooter', 'a galaga style game',
+                  'a wave of aliens coming down']),
+    ('topdown',  ['a pac-man style maze chase', 'a maze chase with ghosts',
+                  'a dot muncher in a maze', 'a maze where ghosts chase you']),
 ]
 PLACES = {
     'cave':    ['underground', 'in a cave', 'in a dark cavern', 'in a deep mine'],
@@ -89,6 +95,13 @@ SIZES = {'wide': ['long', 'big', 'sprawling'], 'small': ['short', 'small', 'quic
          'tall': ['tall', 'vertical']}
 OPENERS = ['Make ', 'Create ', 'Build ', 'Design ', 'Generate ', '']
 
+# Games you finish by clearing the board rather than by reaching a number or a
+# flag. They take none of the clauses that assume either.
+ARCADE = {'a space invaders game', 'a fixed shooter', 'a galaga style game',
+          'a wave of aliens coming down', 'a pac-man style maze chase',
+          'a maze chase with ghosts', 'a dot muncher in a maze',
+          'a maze where ghosts chase you'}
+
 
 def collect_of(spec):
     """What the game asks you to pick up. A run of rooms keeps its rules on
@@ -103,8 +116,10 @@ def collect_of(spec):
 def make_prompt(rng):
     """A description, and the things it commits the generator to."""
     mode, kinds = rng.choice(KINDS)
-    parts = [rng.choice(kinds)]
+    kind = rng.choice(kinds)
+    parts = [kind]
     expect = {'mode': mode}
+    arcade = kind in ARCADE
 
     theme = rng.choice(list(PLACES)) if rng.random() < 0.8 else None
     if theme:
@@ -157,7 +172,9 @@ def make_prompt(rng):
         size = rng.choice(list(SIZES))
         parts.append(rng.choice(SIZES[size]))
 
-    if rng.random() < 0.45:
+    # Not for the arcade shapes. You finish those by clearing the board, and
+    # asking one of them for eight coins asks for something it will not do.
+    if not arcade and rng.random() < 0.45:
         n = rng.randint(3, 16)
         parts.append(f'{n} coins to collect')
         expect['collect'] = n
