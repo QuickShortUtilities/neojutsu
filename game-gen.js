@@ -40,6 +40,15 @@
   const CHARS = ['hero', 'knight', 'mage', 'ninja', 'rogue', 'robot', 'beast', 'princess'];
 
   const rng = seed => window.NeoGame.rng(seed);
+  // n items taken evenly across a list, so a handful of things are spread out
+  // rather than heaped in whatever corner the list happens to start in.
+  const spread = (items, n) => {
+    if (!items.length || n <= 0) return [];
+    const step = Math.max(1, Math.floor(items.length / n));
+    const out = [];
+    for (let i = 0; i < items.length && out.length < n; i += step) out.push(items[i]);
+    return out;
+  };
   const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
   const hit = (text, words) => words.some(w => text.includes(w));
 
@@ -79,7 +88,13 @@
     const mech = best(MECHANICS, v => v); if (mech) want.mech = mech;
     want.abilities = Object.entries(ABILITIES).filter(([, v]) => hit(t, v)).map(([k]) => k);
 
-    if (/\brac(e|ing)|driv(e|ing)|car\b|speedway|highway|kart|rally\b/.test(raw)) want.mode = 'racer';
+    /* A maze you are chased round, eating as you go, is a different game from
+       a dungeon with a flag in it - so it is asked first, before "maze" on its
+       own settles for the dungeon. */
+    if (/pac.?man|maze chase|chase.*maze|eat the dots|dot.?muncher|ghosts?\b/.test(raw)) {
+      want.mode = 'topdown'; want.chase = true;
+    }
+    else if (/\brac(e|ing)|driv(e|ing)|car\b|speedway|highway|kart|rally\b/.test(raw)) want.mode = 'racer';
     else if (/shoot.?.?em.?up|shmup|space shooter|starfighter|dogfight|bullet hell/.test(raw)) want.mode = 'shmup';
     else if (/top.?down|overhead|dungeon|maze|room|zelda|tank/.test(raw)) want.mode = 'topdown';
     if (/platform|jump|side.?scroll|mario|climb|ledge/.test(raw)) want.mode = want.mode || 'platform';
@@ -555,7 +570,91 @@
     return { g, ents, start: { x: 2 * T, y: 2 * T }, keys: 0 };
   }
 
-  const TOPDOWN_SHAPES = { rooms: tdRooms, arena: tdArena, cross: topdown };
+  /* A maze to be chased round. Not a level with a flag at the end: the board
+     is the level, every dot has to go, and the four things hunting you can be
+     hunted back for a few seconds at a time. Built symmetrically, because a
+     maze you can read at a glance is the whole appeal - you are meant to know
+     where the corner goes before you turn it. */
+  function tdMaze(r, o) {
+    const { w, h, difficulty } = o;
+    const g = Array.from({ length: h }, () => Array(w).fill('2'));
+    const half = Math.floor(w / 2);
+
+    // Carve the left half on a two-tile grid, then mirror it.
+    const cut = (x, y, cw, ch) => {
+      for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
+        if (g[y + j] && g[y + j][x + i] !== undefined) g[y + j][x + i] = '0';
+      }
+    };
+    /* Corridors two wide with real wall between them. Spacing them three
+       apart left one-tile walls, which reads as specks in an open room rather
+       than as a maze - the wall has to be thick enough to be somewhere you
+       cannot go. */
+    const rows = [], cols = [];
+    for (let y = 2; y < h - 3; y += 5) { cut(2, y, half - 3, 2); rows.push(y); }
+    for (let x = 2; x < half - 3; x += 6) { cut(x, 2, 2, h - 4); cols.push(x); }
+    // A few crossings closed off, so it is a maze and not a grid of streets.
+    for (let i = 0; i < 1 + difficulty; i++) {
+      const y = rows[1 + Math.floor(r() * Math.max(1, rows.length - 1))];
+      const x = cols[Math.floor(r() * cols.length)];
+      if (y === undefined || x === undefined) continue;
+      for (let j = 0; j < 2; j++) for (let k = 0; k < 2; k++) {
+        if (g[y + j]) g[y + j][x + k] = '2';
+      }
+    }
+    for (let y = 0; y < h; y++) for (let x = 0; x < half; x++) g[y][w - 1 - x] = g[y][x];
+
+    // A corridor straight through the middle, so the two halves are one maze.
+    const mid = Math.floor(h / 2);
+    for (let x = 1; x < w - 1; x++) { g[mid][x] = '0'; if (g[mid + 1]) g[mid + 1][x] = '0'; }
+
+    const open = [];
+    for (let y = 1; y < h - 2; y++) for (let x = 1; x < w - 1; x++) {
+      if (g[y][x] === '0' && g[y + 1][x] === '0') open.push([x, y]);
+    }
+    if (open.length < 24) return tdArena(r, o);          // too tight to chase in
+
+    /* You start low and they start high, the way this game has always been
+       laid out. Dropping everybody in the middle together put a ghost seven
+       tiles away at the whistle. */
+    const low = open.filter(([, y]) => y > h * 0.6);
+    const start = (low[Math.floor(low.length / 2)] || open[Math.floor(open.length / 2)]);
+    const far = open.filter(([x, y]) => Math.hypot(x - start[0], y - start[1]) > Math.min(w, h) / 2)
+                    .sort((a, bb) => Math.hypot(bb[0] - start[0], bb[1] - start[1])
+                                   - Math.hypot(a[0] - start[0], a[1] - start[1]));
+    const ents = [];
+
+    /* A dot on everything you can walk on, minus where the cast stands. This
+       is what makes it a board to clear rather than a level to cross. */
+    const busy = new Set([`${start[0]},${start[1]}`]);
+    const corners = [open[0], open[open.length - 1],
+                     far[0] || open[1], far[far.length - 1] || open[2]];
+    for (let i = 0; i < 4; i++) {
+      const c = corners[i];
+      if (!c) continue;
+      busy.add(`${c[0]},${c[1]}`);
+      ents.push({ type: 'pellet', x: c[0] * T, y: c[1] * T });
+    }
+    /* Let out one at a time, a couple of seconds apart. All four at the
+       whistle is not a chase, it is a pincer - and it made two mazes in five
+       cost a life before anybody had touched a key. */
+    const hunters = spread(far.length >= 4 ? far : open, 3 + difficulty);
+    hunters.forEach(([x, y], i) => {
+      busy.add(`${x},${y}`);
+      ents.push({ type: 'ghost', x: x * T, y: y * T, dir: r() < .5 ? -1 : 1,
+                  wake: +(1.5 + i * 2.5).toFixed(1) });
+    });
+    for (const [x, y] of open) {
+      if (busy.has(`${x},${y}`)) continue;
+      if ((x + y) % 2) continue;                          // every other cell, not a carpet
+      ents.push({ type: 'dot', x: x * T + 2, y: y * T + 2 });
+    }
+    // Long enough to see where they are before they are on you.
+    return { g, ents, start: { x: start[0] * T, y: start[1] * T },
+             keys: 0, clearAll: true, grace: 2.6 };
+  }
+
+  const TOPDOWN_SHAPES = { rooms: tdRooms, arena: tdArena, cross: topdown, maze: tdMaze };
 
   /* Which overhead layout the words asked for. A tank battle wants open
      ground and cover; a dungeon wants rooms and a locked door; anything else
@@ -583,6 +682,7 @@
     /* Asking for doors and locked rooms is asking for a shape, and it beats
        the tank: a tank in a dungeon is a tank in a dungeon, but a request for
        locked rooms answered with an open field is the wrong game. */
+    if (want.chase) return 'maze';
     if (want.mech === 'doors') return 'rooms';
     if (want.abilities && want.abilities.includes('aimLock')) return 'arena';
     if (want.boss) return 'arena';
@@ -691,6 +791,7 @@
       const rec = lib && lib.byId(id);
       if (!rec || chosen.includes(id)) return;
       if (lib.fitsMode && !lib.fitsMode(rec, o.mode)) return;
+      if (lib.fitsWin && !lib.fitsWin(rec, o.win)) return;
       chosen.push(id); parts.push(rec.code);
     };
 
@@ -702,7 +803,7 @@
     if (o.shape === 'tower' && r() < .5) take('nudge');
 
     // then one or two for flavour, so no two generated games read alike
-    const flavour = ['speedup', 'moon', 'waves', 'halfway', 'panic', 'combo', 'guide', 'blink'];
+    const flavour = ['speedup', 'moon', 'waves', 'halfway', 'panic', 'combo', 'guide', 'blink', 'sweep'];
     const extra = 1 + Math.floor(r() * 2);
     /* Ask again when a pick does not fit. Counting attempts rather than
        recipes left overhead games with nothing but "GO" whenever the dice
@@ -823,7 +924,7 @@
       return Math.hypot(e.x - built.start.x, e.y - built.start.y) > 5 * T;
     });
   }
-  const ENEMY_TYPES = new Set(['walker', 'flyer', 'chaser', 'jumper', 'turret', 'hunter', 'spike']);
+  const ENEMY_TYPES = new Set(['walker', 'flyer', 'chaser', 'jumper', 'turret', 'hunter', 'ghost', 'spike']);
 
   /* ---- dressing the level ----
      A generated level used to arrive bare: correct, playable, and looking
@@ -945,8 +1046,13 @@
     let w, h;
     if (mode === 'racer' || mode === 'shmup') [w, h] = [jog(20, 2, 16), jog(pick(r, [70, 90, 120]), 12, 56)];
     else if (mode === 'topdown') {
-      const [bw, bh] = pick(r, [[26, 20], [30, 22], [34, 24]]);
-      [w, h] = [jog(bw, 4, 22), jog(bh, 3, 18)];
+      /* A chase has to fit the screen. Half the game is seeing where the
+         things hunting you are, and a board that scrolls hides them. */
+      if (want.chase) [w, h] = [20, 18];
+      else {
+        const [bw, bh] = pick(r, [[26, 20], [30, 22], [34, 24]]);
+        [w, h] = [jog(bw, 4, 22), jog(bh, 3, 18)];
+      }
     } else {
       const [bw, bh] = { small: [28, 16], normal: [40, 18], wide: [56, 18], tall: [22, 34] }[size];
       [w, h] = [jog(bw, 4, 20), jog(bh, 2, 14)];
@@ -981,6 +1087,9 @@
     // The script and the story are written for the level that was actually
     // built, not for the one the words asked for.
     o.keys = keys; o.mode = mode;
+    // Which kind of ending this game has, so the script written for it does
+    // not send the player after a flag that is not in the level.
+    o.win = built.clearAll ? 'clear' : 'goal';
     // If a number of pickups was asked for, make sure that many exist rather
     // than quietly settling for however many the level happened to get.
     let need = 0;
@@ -996,6 +1105,9 @@
       }
       need = Math.min(need, built.ents.filter(e => e.type === 'coin' || e.type === 'gem').length);
     }
+    /* A board to clear has no target to hit and no flag to reach - clearing it
+       is the ending. Say so in the rules, and do not also ask for a number. */
+    const clearAll = !!built.clearAll;
     const pickups = built.ents.filter(e => e.type === 'coin' || e.type === 'gem').length;
     if (want.collect === undefined && pickups && r() < .75) need = Math.max(1, Math.round(pickups * pick(r, [.5, .7, 1])));
 
@@ -1007,6 +1119,7 @@
     /* A tank is a vehicle with a gun. Asking for one and being handed an
        unarmed man on foot is not what anybody meant, so the turret brings the
        gun and the hull with it. */
+    if (built.grace) player.grace = built.grace;
     if (player.aimLock && mode === 'topdown') {
       player.attack = true;
       player.speed = 64;
@@ -1031,7 +1144,7 @@
       level: { w, h, tiles: built.g.map(row => row.join('')).join('\n') },
       entities: built.ents,
       props: dress(r, o, built),
-      rules: { collect: need, keys },
+      rules: clearAll ? { collect: 0, keys, clearAll: true } : { collect: need, keys },
       story: story(r, o, need),
       script: script(r, o, need),
     };

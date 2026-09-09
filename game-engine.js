@@ -98,6 +98,10 @@
     gem:    { w: 7, h: 7,  collect: true, score: 5 },
     heart:  { w: 7, h: 6,  collect: true, heal: 1 },
     key:    { w: 6, h: 7,  collect: true, key: true },
+    /* A maze game is not a level with a flag at the end of it. Every dot has
+       to go, and the one thing that turns the chase round is a pellet. */
+    dot:    { w: 4, h: 4,  collect: true, score: 1 },
+    pellet: { w: 7, h: 7,  collect: true, score: 5, scare: 7 },
     goal:   { w: 8, h: 12, goal: true },
     walker: { w: 8, h: 10, enemy: true, speed: 22, turns: true, hp: 1 },
     flyer:  { w: 8, h: 8,  enemy: true, speed: 26, floats: true, hp: 1 },
@@ -107,6 +111,11 @@
     // Hunts you and shoots back. A walker that fires is a soldier; a chaser
     // that fires is an enemy tank, and nothing else in the cast is both.
     hunter: { w: 8, h: 10, enemy: true, speed: 26, chases: true, sight: 110, fires: 1.7, hp: 2 },
+    /* A ghost always knows where you are - that is the genre - so it is slow
+       enough to be outrun instead. A chaser at its own speed catches a
+       standing player in a second and a half, which makes a maze a coin flip
+       rather than a chase. */
+    ghost:  { w: 8, h: 10, enemy: true, speed: 30, chases: true, sight: 9999, hp: 1 },
     spike:  { w: 8, h: 4,  enemy: true, speed: 0, still: true, hp: 99 },
     shot:   { w: 3, h: 3,  bullet: true, speed: 110 },
     mover:  { w: 16, h: 4, platform: true, speed: 26, span: 48 },
@@ -126,6 +135,11 @@
              // What a script can change about an actor: where it is going,
              // whether it is on stage, and what it looks like.
              hidden: false, goal: null, sprite: (typeof e.sprite === 'number' ? e.sprite : null),
+             /* When this thing starts moving. A maze game lets its hunters out
+                one at a time rather than all four at the whistle, and a boss
+                that waits for you to be in the room is the same idea. Until
+                then it sits where it was put. */
+             wake: e.wake || 0,
              to: e.to };
   }
 
@@ -205,6 +219,8 @@
     const input2 = { left: false, right: false, up: false, down: false, a: false, b: false };
     let player, players, entities, state, score, keys, lives, message, elapsed, won;
     let doorsOpen, respawn, fired, effects, messageAt, shake = 0;
+    // How long the things chasing you have left to be afraid of you.
+    let scared = 0;
     /* Speech. A message is the game talking to the room; a bubble is a
        character talking, anchored to whoever said it and gone a few seconds
        later. Stories are made of these. */
@@ -258,7 +274,7 @@
         view.y = Math.max(0, lvl.h * TILE - view.h);
         view.x = Math.max(0, Math.min(view.x, lvl.w * TILE - view.w));
       }
-      doorsOpen = false; effects = []; shake = 0;
+      doorsOpen = false; effects = []; shake = 0; scared = 0;
       message = ''; messageAt = 0;
       threads = [];
     }
@@ -843,6 +859,7 @@
         // Hidden is off stage: it does not move, and nothing can touch it.
         if (e.hidden) continue;
         const d = e.def;
+        if (e.wake && elapsed < e.wake) continue;      // not out yet
 
         /* Sent somewhere by a script. A goal overrides whatever the thing
            would do on its own, which is what makes a guard walk to the gate
@@ -884,9 +901,14 @@
             const target = nearest(e);
             const dx = (target.x + target.w / 2) - (e.x + e.w / 2);
             const dy = (target.y + target.h / 2) - (e.y + e.h / 2);
-            const near = Math.hypot(dx, dy) < d.sight;
-            e.vx = near ? Math.sign(dx) * e.speed : 0;
-            if (mode === 'topdown') { e.vy = near ? Math.sign(dy) * e.speed : 0; e.y += e.vy * dt; }
+            /* Frightened, it goes the other way and goes slower, and it can
+               see you from anywhere - a ghost that stopped fleeing because you
+               were out of range would just wait for you round the corner. */
+            const run = scared > 0 ? -1 : 1;
+            const near = run < 0 || Math.hypot(dx, dy) < d.sight;
+            const sp = e.speed * (run < 0 ? 0.6 : 1);
+            e.vx = near ? Math.sign(dx) * sp * run : 0;
+            if (mode === 'topdown') { e.vy = near ? Math.sign(dy) * sp * run : 0; e.y += e.vy * dt; }
             e.x += e.vx * dt;
             if (solidAt(lvl, Math.floor((e.x + (e.vx > 0 ? e.w : 0)) / TILE), Math.floor((e.y + e.h / 2) / TILE), ctx2)) e.x -= e.vx * dt;
           } else if (d.floats) {
@@ -945,10 +967,19 @@
             if (d.key) keys++;
             else if (d.heal) lives = Math.min(9, lives + 1);
             else score += d.score || 1;
+            /* The whole of a maze game in one line: for a few seconds the
+               things chasing you are the things running away, and touching
+               one is worth points rather than a life. */
+            if (d.scare) { scared = d.scare; say('gem'); }
             effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 });
             fire('collect');
           } else if (d.goal) {
             finish(e.to);
+          } else if (d.enemy && scared > 0 && !d.still) {
+            // Caught while it was running: it goes, and it is worth taking.
+            e.alive = false; score += 3;
+            effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 });
+            say('gem'); fire('kill');
           } else if ((d.enemy || (d.bullet && e.foe)) && b.hurt <= 0) {
             if (d.bullet) { e.alive = false; die(b); }
             else if (mode === 'platform' && b.vy > 40 && b.y + b.h - b.vy * dt <= e.y + 4 && !d.still) {
@@ -961,6 +992,22 @@
         }
       }
       entities = entities.filter(e => e.alive || !e.def.bullet);
+      if (scared > 0) scared = Math.max(0, scared - dt);
+
+      /* Two ways to finish that are not walking into a flag.
+
+         `clearAll` is the maze game: every dot has to go, and there is no
+         exit to reach because clearing the board is the exit. `clearFoes` is
+         the arena: the room is the level and the last one standing wins.
+         Without these, every game this engine can describe ends the same way,
+         which is most of the reason they all felt like the same game. */
+      const rules = stageRules();
+      if (state === 'play' && (rules.clearAll || rules.clearFoes)) {
+        const left = entities.filter(e => e.alive && !e.hidden &&
+          (rules.clearAll ? e.def.collect && !e.def.key : e.def.enemy && e.def.hp < 99)).length;
+        if (left === 0) finish();
+      }
+
       for (const fx of effects) fx.t += dt;
       effects = effects.filter(fx => fx.t < 0.35);
     }
@@ -1457,6 +1504,7 @@
           entities: entities.map(e => ({ type: e.type, x: Math.round(e.home.x), y: Math.round(e.home.y),
                                          dir: e.vx < 0 ? -1 : 1,
                                          ...(e.tag ? { tag: e.tag } : {}),
+                                         ...(e.wake ? { wake: e.wake } : {}),
                                          ...(e.to !== undefined ? { to: e.to } : {}),
                                          ...(typeof e.sprite === 'number' ? { sprite: e.sprite } : {}) })),
           props: props.map(pr => ({ i: pr.i, x: pr.x, y: pr.y, ...(pr.t ? { t: pr.t } : {}), ...(pr.b ? { b: 1 } : {}) })),
@@ -1585,7 +1633,18 @@
     if (keysNeeded > keys) bad(`rules.keys is ${keysNeeded} but only ${keys} key(s) exist`);
     const hasEnd = ents.some(e => e && ENTITY[e.type] && ENTITY[e.type].goal);
     const scriptWins = typeof spec.script === 'string' && /\bwin\b/.test(spec.script);
-    if (!hasEnd && !scriptWins) warnings.push('no goal and no script that wins - the game cannot be completed');
+    /* Clearing the board is an ending too. A maze game has no flag in it and
+       an arena has no way out; saying they cannot be completed because there
+       is no goal to walk into is the old assumption talking. */
+    const r = spec.rules || {};
+    if (r.clearAll && !scoring.length) bad('rules.clearAll but there is nothing to collect');
+    if (r.clearFoes && !ents.some(e => e && ENTITY[e.type] && ENTITY[e.type].enemy
+                                     && (ENTITY[e.type].hp || 1) < 99)) {
+      bad('rules.clearFoes but there is nothing to clear');
+    }
+    if (!hasEnd && !scriptWins && !r.clearAll && !r.clearFoes) {
+      warnings.push('no goal and no script that wins - the game cannot be completed');
+    }
 
     if (spec.script !== undefined) {
       if (typeof spec.script !== 'string') bad('script must be text');

@@ -142,6 +142,8 @@ end` },
 
     { id: 'guide', name: 'Talk to the player', kanji: '導', tags: ['friendly'],
       blurb: 'Say something at the start, when hurt, and near the end.',
+      // Only where there is a flag to find. A maze game is cleared, not crossed.
+      wins: ['goal'],
       code: `on start
   message "FIND THE FLAG"
 end
@@ -176,6 +178,20 @@ end` },
   end
 end` },
 
+    { id: 'sweep', name: 'Clear the board', kanji: '掃', tags: ['friendly'], wins: ['clear'],
+      blurb: 'For a game you finish by leaving nothing behind.',
+      code: `on start
+  message "EAT THEM ALL"
+end
+on collect
+  if coins == 1
+    message "ONE LEFT"
+  end
+end
+on hurt
+  message "THEY GOT ME"
+end` },
+
     { id: 'blink', name: 'Vanishing ground', kanji: '瞬', tags: ['hazard'], modes: ['platform'],
       blurb: 'A block appears and disappears under you.',
       code: `on start
@@ -199,6 +215,11 @@ end` },
      to an overhead game, and ground that vanishes under you needs a body that
      can fall. A recipe with no `modes` suits every mode. */
   const fitsMode = (rec, mode) => !rec || !rec.modes || rec.modes.includes(mode);
+  /* And which ending. A recipe that says "find the flag" in a game with no
+     flag in it is worse than no recipe: it sends the player looking for
+     something that is not there, which is the whole complaint about these
+     games all being one game. `win` is 'goal' or 'clear'. */
+  const fitsWin = (rec, win) => !rec || !rec.wins || rec.wins.includes(win || 'goal');
   const forTags = tags => R.filter(r => r.tags.some(t => tags.includes(t)));
 
   // Joining scripts means merging their events, so two recipes that both use
@@ -217,5 +238,5 @@ end` },
       .join('\n\n');
   }
 
-  window.NeoRecipes = { list: R, byId, forTags, merge, fitsMode };
+  window.NeoRecipes = { list: R, byId, forTags, merge, fitsMode, fitsWin };
 })();
