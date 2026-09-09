@@ -52,18 +52,67 @@ entity `x`/`y` are in **pixels**. A piece on tile `(tx, ty)` sits at
 | 17 | `h` | backwall | decoration |
 | 18 | `i` | exit | finishes the level |
 
+## Modes
+
+`mode` decides what kind of game this is, and it is not a setting on one game
+— each is its own frame, with its own idea of what a life, a win and a control
+mean. Anything else falls back to `platform`.
+
+| mode | the shape of it | how it usually ends |
+|------|-----------------|---------------------|
+| `platform` | side-on, gravity, you jump | reach the flag |
+| `topdown` | overhead, no gravity, you aim in four directions | reach the flag, clear the board, or beat every rival |
+| `racer` | a road comes down at you; you steer | arrive at the top |
+| `shmup` | a climb comes down at you; you steer and shoot up | arrive alive |
+| `scramble` | a cave comes at you sideways; you fly and shoot forward | arrive at the far end |
+| `invaders` | one fixed screen; a formation comes down to you | clear the formation |
+| `rider` | a bike whose throttle is always on; you jump and land level | reach the finish |
+| `blocks` | a well; the piece you steer becomes the level when it lands | clear the line target |
+
 ## Entities
 
-`coin` (+1) · `gem` (+5) · `heart` (+1 life) · `key` · `goal` ·
-`walker` (paces, turns at edges) · `flyer` (bobs) · `chaser` (hunts on sight) ·
-`jumper` (hops) · `turret` (fires at you) · `spike` (static) · `mover` (moving platform)
+Pickups — `coin` (+1) · `gem` (+5) · `heart` (+1 life) · `key` ·
+`dot` (+1, what a maze is made of) · `pellet` (+5, and enemies flee for 7s)
+
+The way out — `goal`
+
+Enemies — `walker` (paces, turns at edges) · `flyer` (bobs) ·
+`chaser` (hunts on sight) · `jumper` (hops) · `turret` (fires at you) ·
+`hunter` (hunts *and* fires) · `ghost` (always knows where you are, slow enough
+to outrun) · `invader` (moves as a formation, drops a row at the wall) ·
+`rival` (touching it starts a turn-based fight, not a death) · `spike` (static)
+
+Scenery and machinery — `mover` (moving platform)
 
 Enemies take an optional `"dir": 1` or `-1`.
 
 ## Rules
 
+Every game needs exactly one ending. `collect` is the default; the rest replace it.
+
 `rules.collect` — pickups needed before the goal opens.
 `rules.keys` — keys needed before doors open.
+`rules.clearAll` — every pickup on the board; there is no exit to reach.
+`rules.clearFoes` — every enemy that can be killed.
+`rules.lines` — rows to clear, for `blocks`.
+`rules.beat` — rivals to beat, for a game of fights.
+
+## The other keys
+
+`levels` — a run of rooms, each `{ name, level, entities, props, story, start,
+rules }`. Score, lives and keys carry across; everything else belongs to the
+room. A game with `levels` ignores the single `level` beside it.
+
+`props` — scenery, `{ i, x, y, t, b }`: a sprite index, a position in pixels,
+a tint, and `b: 1` to draw it behind the level instead of on top. Never solid.
+
+`story` — speech bubbles, `{ text, … }` plus one trigger: `at` (seconds),
+`score`, `keys`, `reach` (a tile column), or `on` (`kill`, `hurt`).
+
+`scroll` — `{ speed, accel, max }` in pixels per second, for the three modes
+where the world travels and you only steer.
+
+`coop: true` — a second player on the same keyboard, sharing the lives.
 
 ## Script
 
