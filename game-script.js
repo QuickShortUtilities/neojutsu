@@ -52,7 +52,10 @@
     while ((m = re.exec(src)) !== null) {
       const t = m[1];
       if (t.startsWith('#')) continue;                       // comment
-      out.push({ v: t, i: m.index });
+      // Where the token itself starts, not where its leading whitespace does.
+      // m.index points at the skipped spaces, so anything reasoning about
+      // whether two tokens touch was measuring the gap it meant to detect.
+      out.push({ v: t, i: m.index + (m[0].length - t.length) });
       if (re.lastIndex === m.index) re.lastIndex++;
     }
     return out;
@@ -66,6 +69,7 @@
     const errors = [];
     let p = 0, everyId = 0;
     const peek = () => (toks[p] ? toks[p].v : null);
+    const at = i => toks[i] || null;
     const next = () => (toks[p] ? toks[p++].v : null);
     const skipNL = () => { while (peek() === '\n') p++; };
     const expect = v => { if (peek() === v) { p++; return true; } errors.push(`expected "${v}"`); return false; };
@@ -83,10 +87,27 @@
       return { k: 'num', v: 0 };
     }
     const LEVELS = [['or'], ['and'], ['==', '!=', '<', '>', '<=', '>='], ['+', '-'], ['*', '/', '%']];
+    /* `face "guard" -1` is two arguments, not one subtraction.
+
+       A minus that has a space before it and none after belongs to the number
+       that follows, the way it does when anyone writes it. Without this rule
+       every command taking a negative second value silently became one
+       argument and failed to compile - found by translating real scripts,
+       which is exactly the sort of thing writing our own examples would not
+       have turned up. `a - 1` and `a-1` are still subtraction. */
+    function tightMinus() {
+      const tok = at(p), rhs = at(p + 1), lhs = at(p - 1);
+      if (!tok || tok.v !== '-' || !rhs) return false;
+      const gapBefore = !lhs || tok.i > lhs.i + String(lhs.v).length;
+      const gapAfter = rhs.i > tok.i + 1;
+      return gapBefore && !gapAfter;
+    }
+
     function binary(level) {
       if (level >= LEVELS.length) return primary();
       let left = binary(level + 1);
       while (LEVELS[level].includes(peek())) {
+        if (peek() === '-' && tightMinus()) break;
         const op = next();
         left = { k: 'bin', op, a: left, b: binary(level + 1) };
       }

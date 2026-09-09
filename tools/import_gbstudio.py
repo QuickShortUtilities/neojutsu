@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from make_dataset import BUILD, serve, record  # noqa: E402
 from level_kit import furnish, describe  # noqa: E402
+import gbs_script  # noqa: E402
 
 T = 8
 MODES = {'TOPDOWN': 'topdown', 'PLATFORM': 'platform', 'SHMUP': 'shmup'}
@@ -101,6 +102,75 @@ def build_spec(scene, name, rng):
     return furnish(grid, w, h, mode, name)
 
 
+def read_scripts(src):
+    """Every script in a project, translated, plus what would not translate."""
+    actors, routines, defs = {}, {}, {}
+    for f in src.rglob('scenes/**/actors/*.gbsres'):
+        try:
+            a = json.loads(f.read_text(encoding='utf-8'))
+            actors[a.get('id')] = gbs_script.slug(a.get('name'))
+        except Exception:
+            pass
+    for f in src.rglob('scripts/**/*.gbsres'):
+        try:
+            c = json.loads(f.read_text(encoding='utf-8'))
+            if c.get('_resourceType') in (None, 'customEvent') or 'script' in c:
+                routines[c.get('id')] = gbs_script.slug(c.get('name'))
+                defs[gbs_script.slug(c.get('name'))] = c.get('script') or []
+        except Exception:
+            pass
+
+    ctx = gbs_script.Ctx(actors=actors, routines=routines)
+    out, seen = [], set()
+
+    def take(nodes, event, self_tag, where):
+        if not nodes:
+            return
+        ctx.self_tag = self_tag
+        lines = gbs_script.translate(nodes, ctx)
+        lines = [l for l in lines if l.strip()]
+        if len(lines) < 2:
+            return
+        body = '\n'.join('  ' + l for l in lines)
+        src_text = f'on {event}\n{body}\nend'
+        key = src_text
+        if key in seen:
+            return
+        seen.add(key)
+        out.append({'where': where, 'event': event, 'lines': len(lines), 'script': src_text,
+                    'describe': gbs_script.describe(lines, event)})
+
+    for f in src.rglob('scenes/**/scene.gbsres'):
+        try:
+            d = json.loads(f.read_text(encoding='utf-8'))
+        except Exception:
+            continue
+        take(d.get('script'), 'start', '', d.get('name') or f.parent.name)
+    for f in src.rglob('scenes/**/triggers/*.gbsres'):
+        try:
+            d = json.loads(f.read_text(encoding='utf-8'))
+        except Exception:
+            continue
+        take(d.get('script'), 'start', '', f'trigger {d.get("name") or f.stem}')
+    for f in src.rglob('scenes/**/actors/*.gbsres'):
+        try:
+            d = json.loads(f.read_text(encoding='utf-8'))
+        except Exception:
+            continue
+        tag = gbs_script.slug(d.get('name'))
+        take(d.get('startScript'), 'start', tag, f'actor {d.get("name")}')
+        take(d.get('updateScript'), 'tick', tag, f'actor {d.get("name")} each frame')
+
+    # Routines that got used, written out so a translated script compiles.
+    used = []
+    for name in sorted(ctx.used_routines):
+        ctx.self_tag = ''
+        lines = [l for l in gbs_script.translate(defs.get(name) or [], ctx) if l.strip()]
+        body = '\n'.join('  ' + l for l in lines) if lines else '  print "todo"'
+        used.append(f'define {name}\n{body}\nend')
+    return out, used, ctx.missing
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--in', dest='src', required=True, help='a GB Studio project folder, or a folder of them')
@@ -108,6 +178,8 @@ def main():
     ap.add_argument('--rejects', default='data/gbstudio-rejects.jsonl')
     ap.add_argument('--min-moved', type=int, default=24)
     ap.add_argument('--seed', default='gbs')
+    ap.add_argument('--scripts', default='data/gbstudio-scripts.jsonl',
+                    help='where to write translated scripts as training pairs')
     args = ap.parse_args()
 
     src = Path(args.src).expanduser()
@@ -130,6 +202,23 @@ def main():
             rejects.append({'scene': name, 'why': why})
         else:
             made.append((name, spec, scene))
+
+    # Scripts travel separately from levels: they are the part a generator
+    # cannot invent, and the part our language was missing until now.
+    scripts, routines, missing = read_scripts(src)
+    if args.scripts and scripts:
+        sp = ROOT / args.scripts
+        sp.parent.mkdir(parents=True, exist_ok=True)
+        preamble = ('\n\n'.join(routines) + '\n\n') if routines else ''
+        with sp.open('w', encoding='utf-8') as fh:
+            for r in scripts:
+                if not r['describe']:
+                    continue
+                fh.write(json.dumps({'messages': [
+                    {'role': 'system', 'content': 'You write NeoJutsu game scripts. Reply with script and nothing else.'},
+                    {'role': 'user', 'content': r['describe']},
+                    {'role': 'assistant', 'content': preamble + r['script']},
+                ]}, ensure_ascii=False) + '\n')
 
     from playwright.sync_api import sync_playwright
     kept = []
@@ -176,7 +265,12 @@ def main():
         by[spec['mode']] = by.get(spec['mode'], 0) + 1
     print(json.dumps({'scenes': len(scenes), 'written': len(kept), 'file': str(out),
                       'by_mode': by, 'rejected': len(rejects),
-                      'why': [r['why'][:50] for r in rejects[:6]]}, indent=2))
+                      'why': [r['why'][:50] for r in rejects[:6]],
+                      'scripts': {'translated': len(scripts), 'routines': len(routines),
+                                  'file': args.scripts if scripts else None,
+                                  # What our language still cannot say, counted
+                                  # from a real game rather than imagined.
+                                  'no_equivalent': dict(missing.most_common(10))}}, indent=2))
     return 0
 
 
