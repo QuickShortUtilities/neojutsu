@@ -22,7 +22,7 @@
   // Every tile and piece the engine knows, in the order they are most used.
   const PIECES = [0, 1, 2, 3, 7, 15, 4, 14, 6, 5, 8, 9, 10, 11, 12, 13, 18, 16, 17];
   const PLACEABLE = ['coin', 'gem', 'heart', 'key', 'goal',
-                     'walker', 'flyer', 'chaser', 'jumper', 'turret', 'spike', 'mover'];
+                     'walker', 'flyer', 'chaser', 'jumper', 'turret', 'hunter', 'spike', 'mover'];
 
   let game = null, spec = null, brush = { kind: 'tile', id: 1 }, painting = false;
   // Decor colour. Scenery is tinted at draw time rather than baked, so the
@@ -51,6 +51,7 @@
     wallJump: $('g-wall').checked,
     dash: $('g-dash').checked,
     attack: $('g-attack').checked,
+    aimLock: $('g-aimlock').checked,
     coop: $('g-coop').checked,
     intro: { scene: $('g-intro').value, secs: +$('g-intro-secs').value, text: $('g-intro-text').value.trim() },
     outro: { scene: $('g-outro').value, secs: +$('g-outro-secs').value, text: $('g-outro-text').value.trim() },
@@ -129,9 +130,15 @@
     const v = game.view;
     const at = game.freeCam ? ` · at ${Math.round(v.x / T)},${Math.round(v.y / T)}` : '';
     $('g-meta').textContent = `${l.w}×${l.h} tiles · ${game.entities.length} pieces · ${spec.mode}${at}`;
-    $('g-help').textContent = spec.mode === 'platform'
-      ? 'Arrows or WASD to move · Z / Space to jump'
-      : 'Arrows or WASD to move in any direction';
+    /* Say what the keys actually do in this game. A top-down shooter whose
+       help line only mentions moving leaves the gun undiscovered. */
+    const p = spec.player || {};
+    const bits = ['Arrows or WASD to move'];
+    if (spec.mode === 'platform') bits.push('Z / Space to jump');
+    if (p.attack) bits.push('X to shoot');
+    else if (p.dash) bits.push('X to dash');
+    if (p.aimLock && spec.mode === 'topdown') bits.push('hold Z to hold your aim');
+    $('g-help').textContent = bits.join(' · ');
   }
 
   function setPlaying(on) {
@@ -340,7 +347,7 @@
       $('g-goal').append(o);
     }
     $('g-goal').value = need;
-    for (const [id, key] of [['g-double','doubleJump'],['g-wall','wallJump'],['g-dash','dash'],['g-attack','attack']])
+    for (const [id, key] of [['g-double','doubleJump'],['g-wall','wallJump'],['g-dash','dash'],['g-attack','attack'],['g-aimlock','aimLock']])
       $(id).checked = !!p[key];
     $('g-coop').checked = !!(spec.coop || spec.players === 2);
     if ($('g-coop-hint')) $('g-coop-hint').hidden = !$('g-coop').checked;
@@ -1164,7 +1171,7 @@ end`;
       set('g-title', d.look.title);
       if (d.look.intro) { set('g-intro', d.look.intro.scene); set('g-intro-secs', d.look.intro.secs); set('g-intro-text', d.look.intro.text); }
       if (d.look.outro) { set('g-outro', d.look.outro.scene); set('g-outro-secs', d.look.outro.secs); set('g-outro-text', d.look.outro.text); }
-      for (const [id, k] of [['g-double','doubleJump'],['g-wall','wallJump'],['g-dash','dash'],['g-attack','attack'],['g-coop','coop']])
+      for (const [id, k] of [['g-double','doubleJump'],['g-wall','wallJump'],['g-dash','dash'],['g-attack','attack'],['g-aimlock','aimLock'],['g-coop','coop']])
         if ($(id)) $(id).checked = !!d.look[k];
       if ($('g-coop-hint')) $('g-coop-hint').hidden = !$('g-coop').checked;
       if ($('g-edit')) $('g-edit').checked = d.look.edit !== false;
@@ -1483,7 +1490,7 @@ present();
     });
     // Sky colours live in the spec, so changing them means rebuilding it.
     $('g-sky').addEventListener('input', () => { build(game ? game.snapshot() : spec); save(); });
-    for (const id of ['g-char', 'g-lives', 'g-goal', 'g-double', 'g-wall', 'g-dash', 'g-attack', 'g-coop']) $(id).addEventListener('change', () => {
+    for (const id of ['g-char', 'g-lives', 'g-goal', 'g-double', 'g-wall', 'g-dash', 'g-attack', 'g-aimlock', 'g-coop']) $(id).addEventListener('change', () => {
       if ($('g-coop-hint')) $('g-coop-hint').hidden = !$('g-coop').checked;
       build(game ? game.snapshot() : spec); save();
     });

@@ -35,6 +35,7 @@
     wallJump:   ['wall jump', 'wall-jump', 'climb walls', 'wall climb'],
     dash:       ['dash', 'sprint', 'boost', 'rush'],
     attack:     ['shoot', 'shooting', 'gun', 'attack', 'fight', 'blast', 'weapon'],
+    aimLock:    ['tank', 'tanks', 'turret', 'artillery', 'armour', 'armor'],
   };
   const CHARS = ['hero', 'knight', 'mage', 'ninja', 'rogue', 'robot', 'beast', 'princess'];
 
@@ -80,13 +81,15 @@
 
     if (/\brac(e|ing)|driv(e|ing)|car\b|speedway|highway|kart|rally\b/.test(raw)) want.mode = 'racer';
     else if (/shoot.?.?em.?up|shmup|space shooter|starfighter|dogfight|bullet hell/.test(raw)) want.mode = 'shmup';
-    else if (/top.?down|overhead|dungeon|maze|room|zelda/.test(raw)) want.mode = 'topdown';
+    else if (/top.?down|overhead|dungeon|maze|room|zelda|tank/.test(raw)) want.mode = 'topdown';
     if (/platform|jump|side.?scroll|mario|climb|ledge/.test(raw)) want.mode = want.mode || 'platform';
     // Some mechanics and every shape only make sense side-on, so asking for one
     // implies the mode rather than leaving it to chance.
     if (!want.mode && ['springs', 'belts', 'breakables', 'moving', 'ice'].includes(want.mech))
       want.mode = 'platform';
-    if (want.shape && !['racer','shmup'].includes(want.mode)) want.mode = 'platform';
+    // A shape word usually means a side-on level, but not when the request
+    // already said overhead - "a tank battle in a cavern" is still a tank.
+    if (want.shape && !['racer', 'shmup', 'topdown'].includes(want.mode)) want.mode = 'platform';
 
     if (/\b(hard|difficult|brutal|tough|punishing)\b/.test(t)) want.difficulty = 2;
     else if (/\b(easy|gentle|simple|relaxed|calm)\b/.test(t)) want.difficulty = 0;
@@ -355,6 +358,176 @@
     return { g, ents, start: { x: 2 * T, y: (ground - 2) * T } };
   }
 
+  /* ---- overhead layouts ----
+     One layout made every overhead game the same game: four corner rooms and
+     a crossroads, whether you asked for a dungeon, a farm or a tank battle.
+     A dungeon is a grid of rooms joined by doorways; an arena is open ground
+     with cover you can lose; the crossroads is still here, as one of three. */
+
+  // A grid of walled rooms, joined into one connected map. Zelda's shape: you
+  // always know which room you are in, and the doorway you came through.
+  function tdRooms(r, o) {
+    const { w, h, difficulty } = o;
+    const g = Array.from({ length: h }, () => Array(w).fill('1'));
+    const cols = w >= 30 ? 3 : 2, rowsN = h >= 22 ? 3 : 2;
+    const rw = Math.floor(w / cols), rh = Math.floor(h / rowsN);
+    const room = (i, j) => ({ x0: i * rw, y0: j * rh, x1: i * rw + rw - 1, y1: j * rh + rh - 1 });
+
+    const floors = [];
+    for (let j = 0; j < rowsN; j++) for (let i = 0; i < cols; i++) {
+      const R = room(i, j);
+      for (let y = R.y0 + 1; y < R.y1; y++) for (let x = R.x0 + 1; x < R.x1; x++) g[y][x] = '0';
+      floors.push({ i, j, R });
+    }
+
+    /* Join the rooms with a spanning tree, so every room is reachable without
+       a single wall having to be guessed at, then open a couple of extra
+       doorways so the map has loops rather than one forced route. */
+    const seen = new Set(['0,0']);
+    const edges = [];
+    const frontier = [[0, 0]];
+    while (frontier.length) {
+      const [i, j] = frontier.splice(Math.floor(r() * frontier.length), 1)[0];
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di, nj = j + dj, k = `${ni},${nj}`;
+        if (ni < 0 || nj < 0 || ni >= cols || nj >= rowsN || seen.has(k)) continue;
+        seen.add(k); edges.push([i, j, ni, nj]); frontier.push([ni, nj]);
+      }
+    }
+    for (let extra = 0; extra < 2; extra++) {
+      const i = Math.floor(r() * cols), j = Math.floor(r() * rowsN);
+      const [di, dj] = pick(r, [[1, 0], [0, 1]]);
+      if (i + di < cols && j + dj < rowsN) edges.push([i, j, i + di, j + dj]);
+    }
+
+    const last = floors[floors.length - 1];
+    const doors = [];
+    for (const [i, j, ni, nj] of edges) {
+      const A = room(i, j), B = room(ni, nj);
+      // A doorway on the goal room's wall is one you will have to unlock.
+      const guards = (i === last.i && j === last.j) || (ni === last.i && nj === last.j);
+      /* Two rooms are separated by two walls, not one - each keeps its own -
+         so a doorway has to go through both or it connects nothing. And it is
+         cut two cells wide, because the body walking through is taller than a
+         tile and will not thread a single-cell hole. */
+      const cells = [];
+      if (ni !== i) {
+        const x = (ni > i ? A.x1 : B.x1);                     // left wall of the pair
+        const y = Math.floor((A.y0 + A.y1) / 2);
+        for (const yy of [y, y + 1]) for (const xx of [x, x + 1]) cells.push([xx, yy]);
+      } else {
+        const y = (nj > j ? A.y1 : B.y1);                     // upper wall of the pair
+        const x = Math.floor((A.x0 + A.x1) / 2);
+        for (const yy of [y, y + 1]) for (const xx of [x, x + 1]) cells.push([xx, yy]);
+      }
+      for (const [x, y] of cells) if (g[y] && g[y][x] !== undefined) g[y][x] = '0';
+      doors.push({ cells, guards });
+    }
+
+    const mid = f => ({ x: Math.floor((f.R.x0 + f.R.x1) / 2), y: Math.floor((f.R.y0 + f.R.y1) / 2) });
+    const first = floors[0];
+    const ents = [];
+    for (const f of floors.slice(1, -1)) {
+      const c = mid(f);
+      ents.push({ type: 'coin', x: c.x * T, y: c.y * T });
+      if (r() < .7) ents.push({ type: pick(r, ['walker', 'chaser', 'turret']),
+                                x: (c.x + 1) * T, y: (c.y + 1) * T, dir: 1 });
+    }
+    for (let i = 0; i < difficulty; i++) {
+      const f = pick(r, floors.slice(1));
+      const c = mid(f);
+      ents.push({ type: 'chaser', x: (c.x - 1) * T, y: c.y * T, dir: -1 });
+    }
+
+    /* Lock every way into the goal room and put the key in some other room.
+       That is the shape of a dungeon - the way on is shut until you have been
+       elsewhere - and locking all of them, rather than one door chosen at
+       random, is what makes it certainly solvable rather than usually. */
+    let keys = 0;
+    const guarding = doors.filter(d => d.guards);
+    const elsewhere = floors.slice(1, -1);
+    if (guarding.length && elsewhere.length) {
+      for (const d of guarding) for (const [x, y] of d.cells) g[y][x] = 'c';
+      const kf = mid(pick(r, elsewhere));
+      ents.push({ type: 'key', x: kf.x * T, y: kf.y * T });
+      keys = 1;
+    }
+    const goalAt = mid(last);
+    ents.push({ type: 'goal', x: goalAt.x * T, y: goalAt.y * T });
+    const s = mid(first);
+    return { g, ents, start: { x: s.x * T, y: s.y * T }, keys };
+  }
+
+  // Open ground with cover. Battle City's shape: nowhere to hide for long,
+  // because brick is something your own gun takes away.
+  function tdArena(r, o) {
+    const { w, h, difficulty, armed } = o;
+    const g = Array.from({ length: h }, () => Array(w).fill('0'));
+    for (let x = 0; x < w; x++) { g[0][x] = '2'; g[h - 1][x] = '2'; }
+    for (let y = 0; y < h; y++) { g[y][0] = '2'; g[y][w - 1] = '2'; }
+
+    // Blocks of cover, mostly brick you can shoot away, some steel you cannot.
+    const blocks = 6 + difficulty * 3;
+    for (let i = 0; i < blocks; i++) {
+      const bw = 2 + Math.floor(r() * 4), bh = 2 + Math.floor(r() * 3);
+      const bx = 3 + Math.floor(r() * (w - bw - 6));
+      const by = 3 + Math.floor(r() * (h - bh - 6));
+      const ch = r() < .78 ? '7' : '2';
+      for (let y = by; y < by + bh; y++) for (let x = bx; x < bx + bw; x++) g[y][x] = ch;
+    }
+    // Keep the corner you start in clear, so you are not spawned inside cover.
+    for (let y = 1; y < 5; y++) for (let x = 1; x < 6; x++) g[y][x] = '0';
+
+    const ents = [];
+    const far = () => {
+      for (let tries = 0; tries < 40; tries++) {
+        const x = 6 + Math.floor(r() * (w - 12)), y = 5 + Math.floor(r() * (h - 10));
+        if (g[y][x] === '0' && (x > 10 || y > 8)) return { x, y };
+      }
+      return { x: w - 4, y: h - 4 };
+    };
+    /* Who you are fighting. Enemy tanks belong in a tank battle; an arena
+       that is not one gets things that come at you rather than shoot at you,
+       or a quiet village ends up defended by armour. */
+    const foes = armed ? ['hunter', 'hunter', 'turret'] : ['chaser', 'walker', 'turret'];
+    for (let i = 0; i < 3 + difficulty * 2; i++) {
+      const p = far();
+      ents.push({ type: pick(r, foes), x: p.x * T, y: p.y * T, dir: 1 });
+    }
+    for (let i = 0; i < 3; i++) { const p = far(); ents.push({ type: 'coin', x: p.x * T, y: p.y * T }); }
+    const gp = far();
+    ents.push({ type: 'goal', x: gp.x * T, y: gp.y * T });
+    return { g, ents, start: { x: 2 * T, y: 2 * T }, keys: 0 };
+  }
+
+  const TOPDOWN_SHAPES = { rooms: tdRooms, arena: tdArena, cross: topdown };
+
+  /* Which overhead layout the words asked for. A tank battle wants open
+     ground and cover; a dungeon wants rooms and a locked door; anything else
+     gets whichever fits, so two runs of "a forest" are not the same map. */
+  /* Which cast of creatures a game gets. Left unset, every generated game
+     drew the same handful of monsters whatever you asked for - which is a
+     large part of why they all felt like the same game with a new palette. */
+  function chooseCat(want, mode, theme, shape) {
+    if (mode === 'racer') return 'racing';
+    if (mode === 'shmup') return 'shooter';
+    if ((want.abilities || []).includes('aimLock')) return 'shooter';
+    if (theme === 'factory' || theme === 'sky') return 'scifi';
+    if (mode === 'topdown') return shape === 'rooms' ? 'dungeon'
+                                 : (theme === 'ruins' || theme === 'temple') ? 'adventure' : 'rpg';
+    if ((want.abilities || []).includes('attack')) return 'shooter';
+    if (theme === 'ruins' || theme === 'temple') return 'adventure';
+    return 'platformer';
+  }
+
+  function chooseTopdown(want, r) {
+    if (want.shape && TOPDOWN_SHAPES[want.shape]) return want.shape;
+    if (want.abilities && want.abilities.includes('aimLock')) return 'arena';
+    if (want.boss) return 'arena';
+    if (want.mech === 'doors') return 'rooms';
+    return pick(r, ['rooms', 'arena', 'cross']);
+  }
+
   function topdown(r, o) {
     const { w, h, mech, difficulty } = o;
     const g = Array.from({ length: h }, () => Array(w).fill('1'));
@@ -515,7 +688,7 @@
       return Math.hypot(e.x - built.start.x, e.y - built.start.y) > 5 * T;
     });
   }
-  const ENEMY_TYPES = new Set(['walker', 'flyer', 'chaser', 'jumper', 'turret', 'spike']);
+  const ENEMY_TYPES = new Set(['walker', 'flyer', 'chaser', 'jumper', 'turret', 'hunter', 'spike']);
 
   /* ---- dressing the level ----
      A generated level used to arrive bare: correct, playable, and looking
@@ -607,12 +780,16 @@
     else if (mode === 'topdown') [w, h] = pick(r, [[26, 20], [30, 22], [34, 24]]);
     else [w, h] = { small: [28, 16], normal: [40, 18], wide: [56, 18], tall: [22, 34] }[size];
 
-    const o = { w, h, mech, theme, difficulty, timed: !!want.timed, boss: !!want.boss };
+    const armed = !!(want.abilities || []).includes('aimLock');
+    const o = { w, h, mech, theme, difficulty, timed: !!want.timed, boss: !!want.boss, armed };
     let built;
     if (mode === 'racer' || mode === 'shmup') {
       built = (mode === 'racer' ? roadway : starlane)(r, o);
       populate(r, o, built, mode);
-    } else if (mode === 'topdown') built = topdown(r, o);
+    } else if (mode === 'topdown') {
+      o.shape = chooseTopdown(want, r);
+      built = TOPDOWN_SHAPES[o.shape](r, o);
+    }
     else {
       const shape = chooseShape(want, theme, mech, size, r);
       o.shape = shape;
@@ -647,11 +824,23 @@
     if (mode === 'shmup') player.attack = true;
     if (mode === 'racer' || mode === 'shmup') player.speed = 96;
     for (const a of (want.abilities || [])) player[a] = true;
+    /* A tank is a vehicle with a gun. Asking for one and being handed an
+       unarmed man on foot is not what anybody meant, so the turret brings the
+       gun and the hull with it. */
+    if (player.aimLock && mode === 'topdown') {
+      player.attack = true;
+      player.speed = 64;
+      const tanks = (window.NeoSprites && window.NeoSprites.TOPDOWN_VEHICLES) || [];
+      if (tanks.length && player.sprite == null) player.sprite = pick(r, tanks);
+    } else {
+      delete player.aimLock;
+    }
     if (size === 'tall' && !player.doubleJump && !want.abilities.length) player.doubleJump = true;
 
     const spec = {
       name: (String(prompt || '').trim().slice(0, 40) || `${theme} run`).replace(/\s+/g, ' '),
       mode, seed: s,
+      cat: chooseCat(want, mode, theme, o.shape),
       sky0: t.sky[0], sky1: t.sky[1],
       player,
       start: built.start,
@@ -711,6 +900,64 @@
   // Valid is not the same as playable. A game that passes every structural check
   // and then kills you before you have touched a key is still a bad game, so the
   // candidate is played for a moment before it is accepted.
+  /* Can you actually get there? A level can be legal, look right and kill
+     nobody, and still be a room with the exit walled off - which is how "it
+     generated fine" and "it is not a game" end up both being true. So walk
+     it: flood out from the start over everything a body fits through, and
+     insist the goal is on the far side, and that every key is reachable
+     without already having gone through the door it opens. */
+  function reachable(spec, level, start, ents) {
+    const W = level.w, H = level.h;
+    const rows = String(level.tiles).trim().split('\n');
+    const id = (x, y) => (rows[y] && rows[y][x] !== undefined) ? (parseInt(rows[y][x], 36) || 0) : 1;
+    const T_ = window.NeoGame.TILES;
+    const solid = (x, y, doorsOpen) => {
+      if (x < 0 || y < 0 || x >= W || y >= H) return true;
+      const t = T_[id(x, y)] || T_[0];
+      if (t.door) return !doorsOpen;
+      return t.solid === true;
+    };
+    /* The body is 6 wide and 12 tall against 8px tiles, so it always occupies
+       two rows. A gap one tile tall is not a gap it can stand in. */
+    const open = (x, y, d) => !solid(x, y, d) && !solid(x, y + 1, d);
+
+    const flood = (doorsOpen) => {
+      const sx = Math.floor(start.x / T), sy = Math.floor(start.y / T);
+      const seen = new Set();
+      let q = [[sx, sy]];
+      // If the start itself is tight, step out to the nearest cell that fits.
+      if (!open(sx, sy, doorsOpen)) {
+        q = [];
+        for (let y = 0; y < H && !q.length; y++) for (let x = 0; x < W; x++)
+          if (open(x, y, doorsOpen)) { q = [[x, y]]; break; }
+      }
+      for (const [x, y] of q) seen.add(x + ',' + y);
+      while (q.length) {
+        const [x, y] = q.pop();
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy, k = nx + ',' + ny;
+          if (seen.has(k) || !open(nx, ny, doorsOpen)) continue;
+          seen.add(k); q.push([nx, ny]);
+        }
+      }
+      return seen;
+    };
+
+    const shut = flood(false), opened = flood(true);
+    const at = e => {
+      // An entity stands on a tile; accept either row it overlaps.
+      const x = Math.floor((e.x + 2) / T), y = Math.floor(e.y / T);
+      return [x + ',' + y, x + ',' + (y + 1), x + ',' + (y - 1)];
+    };
+    const any = (set, e) => at(e).some(k => set.has(k));
+
+    for (const e of ents) {
+      if (e.type === 'key' && !any(shut, e)) return 'a key is behind the door it opens';
+      if (e.type === 'goal' && !any(opened, e)) return 'the goal cannot be reached';
+    }
+    return null;
+  }
+
   function survives(spec) {
     try {
       const cv = document.createElement('canvas');
@@ -718,6 +965,8 @@
       const g = window.NeoGame.create(cv, JSON.parse(JSON.stringify(spec)), { hud: false });
       // Every room, not only the first. A run whose third stage drowns you on
       // arrival is a broken run, and nobody finds out until they get there.
+      const stages = Array.isArray(spec.levels) && spec.levels.length ? spec.levels
+                   : [{ level: spec.level, entities: spec.entities, start: spec.start }];
       for (let i = 0; i < g.stages; i++) {
         if (i) g.goToStage(i);
         g.tick(3.2);
@@ -725,6 +974,14 @@
         if (g.lives < (spec.lives ?? 3)) return false;    // hit before moving
         if (g.player.y > g.level.h * 8 + 40) return false;
         if (g.scriptFault) return false;
+        // Only overhead levels are walked. A platformer's route runs through
+        // jumps, and a flood fill has no idea how high anything can jump.
+        if (spec.mode === 'topdown') {
+          const st = stages[i] || stages[0];
+          const why = reachable(spec, st.level || spec.level, st.start || spec.start,
+                                st.entities || spec.entities || []);
+          if (why) return false;
+        }
       }
       return true;
     } catch { return false; }

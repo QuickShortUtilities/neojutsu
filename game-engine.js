@@ -104,6 +104,9 @@
     chaser: { w: 8, h: 10, enemy: true, speed: 40, chases: true, sight: 90, hp: 2 },
     jumper: { w: 9, h: 9,  enemy: true, speed: 14, hops: true, hp: 1 },
     turret: { w: 8, h: 8,  enemy: true, speed: 0, fires: 1.4, hp: 3, still: true },
+    // Hunts you and shoots back. A walker that fires is a soldier; a chaser
+    // that fires is an enemy tank, and nothing else in the cast is both.
+    hunter: { w: 8, h: 10, enemy: true, speed: 26, chases: true, sight: 110, fires: 1.7, hp: 2 },
     spike:  { w: 8, h: 4,  enemy: true, speed: 0, still: true, hp: 99 },
     shot:   { w: 3, h: 3,  bullet: true, speed: 110 },
     mover:  { w: 16, h: 4, platform: true, speed: 26, span: 48 },
@@ -191,7 +194,8 @@
 
     const P = Object.assign({ speed: 82, accel: 700, friction: 820, jump: 205, gravity: 560,
                               maxFall: 240, char: 'hero',
-                              doubleJump: false, wallJump: false, dash: false, attack: false },
+                              doubleJump: false, wallJump: false, dash: false, attack: false,
+                              aimLock: false },
                             spec.player || {});
     const input = { left: false, right: false, up: false, down: false, a: false, b: false };
     const input2 = { left: false, right: false, up: false, down: false, a: false, b: false };
@@ -211,7 +215,7 @@
         char: n === 2 ? (P.char2 || 'ninja') : P.char,
         sprite: (n === 2 ? P.sprite2 : P.sprite) ?? auto,
         x: start.x + dx, y: start.y, w: 6, h: 12, vx: 0, vy: 0, grounded: false,
-        face: 1, coyote: 0, buffer: 0, walk: 0,
+        face: 1, aimX: 1, aimY: 0, coyote: 0, buffer: 0, walk: 0,
         wall: 0, dash: 0, dashLeft: P.dash ? 1 : 0, doubleLeft: P.doubleJump ? 1 : 0,
         shotCool: 0, shotHeld: false, bWasDown: false, aWasDown: false,
         // A script may command a body the same way it commands an actor.
@@ -634,6 +638,21 @@
       } else {
         const vdir = (input.down ? 1 : 0) - (input.up ? 1 : 0);
         player.vy = vdir * P.speed;
+
+        /* A tank turns its hull and its gun together. Holding A pins the gun
+           where it is, so you can circle a target and keep shooting at it -
+           there is no second stick on a Game Boy pad, and A is the button a
+           top-down game leaves free. */
+        const locked = !!(P.aimLock && input.a);
+
+        /* Which way you point, in four directions rather than two. Walking
+           sets it, so a shot goes where you are heading without a second key.
+           Up and down win a diagonal: if right kept priority while you held
+           up-and-right, nothing would ever aim up. */
+        if (!locked) {
+          if (vdir) { player.aimX = 0; player.aimY = vdir; }
+          else if (dir) { player.aimX = dir; player.aimY = 0; }
+        }
       }
 
       if (scrolling) {
@@ -707,8 +726,17 @@
 
       // player shots
       if (P.attack && input.b && !player.shotHeld && player.shotCool <= 0 && player.dash <= 0) {
-        entities.push(makeEntity({ type: 'shot', x: player.x + (player.face > 0 ? player.w : -3), y: player.y + 4 }));
-        entities[entities.length - 1].vx = player.face * ENTITY.shot.speed;
+        // Sideways in a platformer; wherever you point in a top-down one.
+        const ax = mode === 'topdown' ? player.aimX : player.face;
+        const ay = mode === 'topdown' ? player.aimY : 0;
+        const shot = makeEntity({
+          type: 'shot',
+          x: player.x + player.w / 2 - 1.5 + ax * (player.w / 2 + 2),
+          y: player.y + player.h / 2 - 1.5 + ay * (player.h / 2 + 2),
+        });
+        shot.vx = ax * ENTITY.shot.speed;
+        shot.vy = ay * ENTITY.shot.speed;
+        entities.push(shot);
         player.shotCool = 0.28; say('shoot');
       }
       player.shotHeld = input.b;
@@ -786,7 +814,17 @@
           }
         } else if (d.bullet) {
           e.x += e.vx * dt; e.y += e.vy * dt; e.life += dt;
-          if (e.life > 2.2 || solidAt(lvl, Math.floor(e.x / TILE), Math.floor(e.y / TILE), ctx2)) { e.alive = false; continue; }
+          const bx = Math.floor(e.x / TILE), by = Math.floor(e.y / TILE);
+          if (e.life > 2.2 || solidAt(lvl, bx, by, ctx2)) {
+            /* A shot into a breakable wall takes the wall with it. That is
+               what makes cover in a tank game something you spend rather than
+               something you sit behind forever. Only your shots do it: an
+               enemy demolishing its own arena is erosion, not a fight. */
+            if (!e.foe && e.life <= 2.2 && tileInfo(lvl.at(bx, by)).breakable) {
+              say('break'); breakTile(bx, by);
+            }
+            e.alive = false; continue;
+          }
         } else if (d.platform) {
           // A moving platform carries whatever is riding it.
           e.t += dt;
@@ -1019,6 +1057,16 @@
             ctx.fillStyle = 'rgba(255,255,255,.10)';
             ctx.fillRect(sx + ((tx * 3) % TILE), sy + 3, 2, 1);
           }
+          /* Side-on, a block is lit along the top because that is the face you
+             can see. From overhead there is no top: a wall shows its edge on
+             whichever sides have open floor beside them. Edging only the top
+             is what made every overhead room read as a row of ledges. */
+          if (mode === 'topdown' && info.top && !info.decor) {
+            ctx.fillStyle = info.top;
+            if (!tileInfo(lvl.at(tx, ty + 1)).fill) ctx.fillRect(sx, sy + TILE - 2, TILE, 2);
+            if (!tileInfo(lvl.at(tx - 1, ty)).fill) ctx.fillRect(sx, sy, 2, TILE);
+            if (!tileInfo(lvl.at(tx + 1, ty)).fill) ctx.fillRect(sx + TILE - 2, sy, 2, TILE);
+          }
           if (info.hazard && open) {
             ctx.fillStyle = info.top;
             for (let i = 0; i < 2; i++) {
@@ -1087,8 +1135,13 @@
         // animation frames, so the motion has to come from the transform.
         const bob = e.def.collect || e.def.goal ? Math.sin(elapsed * 4 + e.t) * 1.5
                   : Math.abs(e.vx) > 2 ? (Math.floor(elapsed * 9 + e.t) % 2) * -1 : 0;
+        /* An enemy tank points where it is driving, for the same reason the
+           player's does. Everything else keeps the mirror it always had. */
+        const wheels = art.VEHICLES.has(idx) && mode === 'topdown';
         const ok = art.draw(ctx, idx, sx + e.w / 2, sy + e.h + bob,
-                            { colour, outline: '#0a0714', flip: e.vx > 0 });
+                            { colour, outline: '#0a0714',
+                              flip: !wheels && e.vx > 0,
+                              turn: wheels ? art.turnFor(idx, e.vx, e.vy) : 0 });
         if (ok && e.def.enemy && e.hp > 1) {
           ctx.fillStyle = '#ffd23f';
           ctx.fillRect(sx, sy - 5, Math.min(e.w, e.hp * 3), 1);
@@ -1105,9 +1158,15 @@
         const pStep = b.grounded && Math.abs(b.vx) > 6 ? (Math.floor(elapsed * 10) % 2) * -1 : 0;
         // A vehicle steers, it does not turn around, so it is never mirrored.
         const vehicle = useArt && art.VEHICLES.has(b.sprite);
+        /* Seen from above a vehicle points where it is pointing, so turn the
+           art instead of mirroring it. A person is left alone: someone walking
+           up the screen should not be lying on their side. The art is drawn
+           facing right, so right is no turn and the rest follow clockwise. */
+        const turn = (vehicle && mode === 'topdown') ? art.turnFor(b.sprite, b.aimX, b.aimY) : 0;
         const pArt = useArt && typeof b.sprite === 'number'
           && art.draw(ctx, b.sprite, psx, psy + pStep,
-                      { colour: b.tint, outline: '#0a0714', flip: !vehicle && b.face < 0 });
+                      { colour: b.tint, outline: '#0a0714', turn,
+                        flip: !vehicle && b.face < 0 });
         if (pArt) { /* drawn from the atlas */ }
         else if (chars && chars[b.char]) window.NeoScene.drawChar(ctx, chars[b.char], psx, psy, 1, b.walk, b.face);
         else { ctx.fillStyle = b.tint; ctx.fillRect(psx - 3, psy - 12, 6, 12); }

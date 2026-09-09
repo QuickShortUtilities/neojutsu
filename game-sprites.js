@@ -77,18 +77,21 @@
     return ink[o + 2] ? { x: ink[o], y: ink[o + 1], w: ink[o + 2], h: ink[o + 3] } : null;
   }
 
-  function blit(ctx, sheet, b, idx, dx, dy, flip) {
+  /* `turn` is in quarter turns, clockwise. Only quarters: a right angle maps
+     every source pixel onto exactly one destination pixel, so the art stays as
+     sharp as it was drawn. Anything else would resample and blur it. */
+  function blit(ctx, sheet, b, idx, dx, dy, flip, turn) {
     const i = (idx | 0) % COUNT;
     const sx = (i % COLS) * TS + b.x, sy = ((i / COLS) | 0) * TS + b.y;
-    if (flip) {
-      ctx.save();
-      ctx.translate(dx + b.w, dy);
-      ctx.scale(-1, 1);
-      ctx.drawImage(sheet, sx, sy, b.w, b.h, 0, 0, b.w, b.h);
-      ctx.restore();
-    } else {
-      ctx.drawImage(sheet, sx, sy, b.w, b.h, dx, dy, b.w, b.h);
-    }
+    const q = ((turn | 0) % 4 + 4) % 4;
+    if (!flip && !q) { ctx.drawImage(sheet, sx, sy, b.w, b.h, dx, dy, b.w, b.h); return; }
+    ctx.save();
+    // Turn about the middle of the sprite, so it does not walk off its own feet.
+    ctx.translate(dx + b.w / 2, dy + b.h / 2);
+    if (q) ctx.rotate(q * Math.PI / 2);
+    if (flip) ctx.scale(-1, 1);
+    ctx.drawImage(sheet, sx, sy, b.w, b.h, -b.w / 2, -b.h / 2, b.w, b.h);
+    ctx.restore();
   }
 
   /* Draw a sprite standing on (cx, by): centred horizontally, feet on the
@@ -105,12 +108,12 @@
     const dx = Math.round(cx - b.w / 2), dy = Math.round(by - b.h);
     if (o.outline) {
       const halo = tinted(o.outline === true ? '#0a0714' : o.outline);
-      blit(ctx, halo, b, idx, dx - 1, dy, o.flip);
-      blit(ctx, halo, b, idx, dx + 1, dy, o.flip);
-      blit(ctx, halo, b, idx, dx, dy - 1, o.flip);
-      blit(ctx, halo, b, idx, dx, dy + 1, o.flip);
+      blit(ctx, halo, b, idx, dx - 1, dy, o.flip, o.turn);
+      blit(ctx, halo, b, idx, dx + 1, dy, o.flip, o.turn);
+      blit(ctx, halo, b, idx, dx, dy - 1, o.flip, o.turn);
+      blit(ctx, halo, b, idx, dx, dy + 1, o.flip, o.turn);
     }
-    blit(ctx, tinted(o.colour || '#f9fafb'), b, idx, dx, dy, o.flip);
+    blit(ctx, tinted(o.colour || '#f9fafb'), b, idx, dx, dy, o.flip, o.turn);
     return true;
   }
 
@@ -146,25 +149,26 @@
     chaser: [324, 323, 325],
     jumper: [372, 414, 365],
     turret: [577, 486],
+    hunter: [273, 275],
   };
   const CAST = {
     platformer: BASE,
     dungeon: { player: [122, 171, 24], walker: [323, 276, 422], flyer: [320, 322, 416],
-               chaser: [324, 325, 129], jumper: [414, 365, 372], turret: [577, 486] },
+               chaser: [324, 325, 129], jumper: [414, 365, 372], turret: [577, 486], hunter: [417, 275] },
     rpg:     { player: [24, 220, 26], walker: [421, 422, 370], flyer: [418, 369],
-               chaser: [323, 276], jumper: [372, 373], turret: [577, 486] },
+               chaser: [323, 276], jumper: [372, 373], turret: [577, 486], hunter: [374, 371] },
     racing:  { player: [25, 74], walker: [269, 271], flyer: [418],
-               chaser: [324], jumper: [414], turret: [486, 577] },
+               chaser: [324], jumper: [414], turret: [486, 577], hunter: [989, 990] },
     shooter: { player: [76, 129], walker: [271, 269], flyer: [319, 320],
-               chaser: [324, 325], jumper: [414], turret: [486, 577] },
+               chaser: [324, 325], jumper: [414], turret: [486, 577], hunter: [989, 990] },
     scifi:   { player: [129, 324, 325], walker: [271, 274], flyer: [319, 320],
-               chaser: [324, 325], jumper: [414, 415], turret: [486, 577] },
+               chaser: [324, 325], jumper: [414, 415], turret: [486, 577], hunter: [321, 322] },
     adventure: { player: [26, 220, 31], walker: [421, 422], flyer: [418, 369],
-                 chaser: [323, 276], jumper: [372, 373], turret: [577] },
+                 chaser: [323, 276], jumper: [372, 373], turret: [577], hunter: [417, 419] },
     strategy: { player: [30, 74], walker: [269, 273], flyer: [418],
-                chaser: [324], jumper: [414], turret: [486, 577] },
+                chaser: [324], jumper: [414], turret: [486, 577], hunter: [989, 990] },
     twoplayer: { player: [25, 76], walker: [269, 421], flyer: [418, 320],
-                 chaser: [324], jumper: [372], turret: [577] },
+                 chaser: [324], jumper: [372], turret: [577], hunter: [273, 417] },
   };
 
   // Pickups and the goal read the same in every game - a heart is a heart.
@@ -243,6 +247,22 @@
   // to drive left, it steers.
   const VEHICLES = new Set([989, 990, 991, 992, 1036, 1037, 1038, 1039, 1040, 1041, 736, 942, 943]);
 
+  /* Which way a sprite is drawn. A vehicle seen head-on points up the screen;
+     one drawn in profile points right. Getting this wrong is very visible - a
+     tank driving north while lying on its side - so the knowledge lives here
+     with the art rather than being guessed at by whoever is drawing it. */
+  const FACES_UP = new Set([989, 990, 991, 995, 1037, 1038, 1041, 1042]);
+
+  // Quarter turns clockwise to aim sprite `idx` along (ax, ay).
+  function turnFor(idx, ax, ay) {
+    if (!ax && !ay) return 0;                                 // standing still: leave it as drawn
+    const want = ay > 0 ? 2 : ay < 0 ? 0 : ax < 0 ? 3 : 1;    // 0 up, 1 right, 2 down, 3 left
+    return (want - (FACES_UP.has(idx) ? 0 : 1) + 4) % 4;      // profile art already points right
+  }
+
+  // A top-down vehicle has to be one drawn head-on, or turning it looks wrong.
+  const TOPDOWN_VEHICLES = [989, 990, 991, 1038];
+
   function castFor(cat) { return CAST[cat] || BASE; }
 
   // Sprite for one entity, chosen from its category cast and pinned by the
@@ -257,7 +277,7 @@
     ready(fn) { if (loaded) fn(); else waiters.push(fn); },
     get loaded() { return loaded; },
     box, draw, drawFit, pick, castFor, forEntity, group, playerFor,
-    PLAYER_BY_MODE, PLAYER_BY_CAT, VEHICLES,
+    PLAYER_BY_MODE, PLAYER_BY_CAT, VEHICLES, TOPDOWN_VEHICLES, turnFor,
     CAST, ITEM, BASE, BANDS, HANDY,
   };
 })();
