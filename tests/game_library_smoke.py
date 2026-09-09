@@ -30,7 +30,9 @@ CHECK = """(key)=>{
   for (let y=0;y<lvl.h;y++) for (let x=0;x<lvl.w;x++) tiles.add(lvl.at(x,y));
   return {
     mode: t.mode, size:[lvl.w,lvl.h], entities:(t.entities||[]).length,
-    coins, need, hasGoal: (t.entities||[]).some(e=>e.type==='goal'),
+    coins, need,
+    // Scrolling games finish by arriving at the exit strip, not at a flag.
+    hasGoal: (t.entities||[]).some(e=>e.type==='goal') || /i/.test(String(t.level.tiles||'')),
     distinctTiles: tiles.size, startsAlive, settled,
     scriptErrors: script.errors, fault: g.scriptFault,
     stateAfterWalk: g.state, lives: g.lives,

@@ -1,8 +1,8 @@
 /* Starter games. Each one is plain JSON: a tilemap in rows of digits, a
    handful of entities, a rule, and optionally a script. That is the whole
    format - no code, nothing to execute.
-   The later entries were authored by the studio's own generator from a
-   description and a fixed seed, then checked and frozen. */
+   Many were authored by the studio's own generator from a description and a
+   fixed seed, then checked and frozen. */
 (() => {
   'use strict';
   window.NeoGameCats = {"platformer": ["Platformer", "\u8df3"], "dungeon": ["Dungeon crawler", "\u8ff7"], "rpg": ["RPG", "\u7269"], "racing": ["Racing", "\u8d70"], "shooter": ["Shooter", "\u6483"], "adventure": ["Adventure", "\u5192"], "scifi": ["Sci-fi", "\u5b99"], "strategy": ["Strategy", "\u9663"], "twoplayer": ["Two player", "\u53cc"]};
@@ -966,7 +966,7 @@
       "collect": 14
     },
     "script": "on start\n set left 45\n message \"45 SECONDS\"\nend\non tick\n every 1\n  set left left - 1\n  if left == 10\n   message \"10 LEFT\"\n  end\n  if left <= 0\n   lose\n  end\n end\nend\non collect\n if score >= 14\n  message \"RUN FOR IT\"\n end\nend",
-    "cat": "racing"
+    "cat": "platformer"
   },
   "trial": {
     "name": "Time trial",
@@ -1062,7 +1062,7 @@
     },
     "script": "on start\n  message \"GOOD LUCK\"\n  set left 45\n  message \"45 SECONDS\"\nend\n\non tick\n  every 1\n    set left left - 1\n    if left == 10\n      message \"10 LEFT\"\n    end\n    if left <= 0\n      lose\n    end\n  end\nend\n\non collect\n  if score == 5\n    heal 1\n    message \"HAVE A LIFE\"\n  end\n  set pace 80 + score * 6\n  speed pace\n  if score == 5\n    message \"PICKING UP SPEED\"\n  end\nend",
     "kanji": "\u8d70",
-    "cat": "racing"
+    "cat": "platformer"
   },
   "gauntlet": {
     "name": "Gauntlet",
@@ -1542,6 +1542,439 @@
     "script": "on start\n  message \"MOVE\"\n  message \"FIND THE KEY\"\n  set wave 0\nend\n\non collect\n  if keys >= 1\n    open\n    message \"IT OPENS\"\n  end\n  if score >= 10\n    message \"RUN\"\n    shake 5\n    speed 120\n    spawn \"chaser\" 4 12\n  end\nend\n\non tick\n  every 0.5\n    if y < 6\n      push 40 0\n    end\n  end\n  every 6\n    set wave wave + 1\n    spawn \"walker\" 30 12\n    if wave >= 2\n      spawn \"flyer\" 24 8\n    end\n    message \"WAVE \" + wave\n  end\nend",
     "kanji": "\u767b",
     "cat": "platformer"
+  },
+  "speedway": {
+    "name": "Speedway",
+    "mode": "racer",
+    "seed": "4khy7a",
+    "sky0": "#1b2a5c",
+    "sky1": "#bfe9ff",
+    "player": {
+      "char": "hero",
+      "speed": 96
+    },
+    "start": {
+      "x": 72,
+      "y": 528
+    },
+    "lives": 3,
+    "level": {
+      "w": 20,
+      "h": 70,
+      "tiles": "2iiiiiiiiiiiiiiiiii2\n2222jjjjkjjjj2222222\n2222jjjjjjjjj2222222\n22222jjjjjjjj2222222\n22222j77jkjjj2222222\n22222jjjj7jjj2222222\n22222jjjjjjjj2222222\n22222jjjjjjjj2222222\n22222jjjjkjjj2222222\n2222jjjj7kjjjj222222\n2222jjjjjjjjjj222222\n2222jjjjjjjjjj222222\n2222jjjjjkjjjj222222\n2222jjjjjkjjjj222222\n2222jjjjjjjjjj222222\n2222jjjjjjjjjj222222\n2222jjjjjkjjjj222222\n2222jjjjjkjjjj222222\n2222jjjjjjjjjj222222\n2222jjjjjjjjjj222222\n222jjjjjjkjjjjj22222\n2222jjjjjkjjjj222222\n2222jjjjjjjjjj222222\n2222jjjjjjjjjj222222\n2222jjjjjkjjjj222222\n2222jjjjj77jjj222222\n222jjjjjjjjjjjj22222\n222jjjjjjjjjjjj22222\n222jjjjjjkjjjjj22222\n222jjjjjjkjjjjj22222\n2222jjjjjjjjjjjj2222\n2222jjjjjjjjjjjj2222\n2222jjjjjjkjjjjj2222\n22222jjjjjjkjjjjj222\n22222jjjjj7jjjjjj222\n22222jjjjjjjjjjjj222\n22222jjjjjjkj7jjj222\n22222jjjjj7kjjjjj222\n22222jjjjjjjjjjjj222\n22222jjjjjjjjjjjj222\n222222jjjjjjkjjjjj22\n222222jjjj7jkjjjjj22\n22222jjjjjjjjjjjj222\n22222jjjjjjjjjjjj222\n22222jjjjjjk7jjjj222\n22222jjjjjjkjjjjj222\n22222jjjjjjjjjjjj222\n2222jjjjjjjjjjjj2222\n2222jjjjjjkjjjjj2222\n2222jjjjjjkjjjjj2222\n22222jjjjjjjjjjjj222\n2222jjjjjjjjjjjj2222\n2222jjjjjj77jjjj2222\n2222jjjjjjkjjjjj2222\n222jjjjjjjjjjjj22222\n22jjjjjjjjjjjjjj2222\n22jjjjjjjkjjjjjj2222\n22jjjjjjjkjjjjjj2222\n22jjjjjjjjjjjjjj2222\n22jjjjjjjjjjjjjjj222\n22jjjjjjjkjjjjjjj222\n222jjjjjjkjjjjjj2222\n222jjjjjjjjjjjjj2222\n22jjjjjjjjjjjjjjj222\n22jjjjjjjjjjjjjj2222\n22jjjjjjjjjjjjjj2222\n22jjjjjjjjjjjjjj2222\n22jjjjjjjjjjjjjj2222\n22jjjjjjjjjjjjjj2222\n222jjjjjjjkjjjjjj222"
+    },
+    "entities": [
+      {
+        "type": "coin",
+        "x": 65,
+        "y": 457
+      },
+      {
+        "type": "coin",
+        "x": 65,
+        "y": 9
+      },
+      {
+        "type": "coin",
+        "x": 81,
+        "y": 241
+      },
+      {
+        "type": "coin",
+        "x": 57,
+        "y": 393
+      },
+      {
+        "type": "coin",
+        "x": 65,
+        "y": 425
+      },
+      {
+        "type": "coin",
+        "x": 41,
+        "y": 473
+      },
+      {
+        "type": "coin",
+        "x": 73,
+        "y": 145
+      },
+      {
+        "type": "flyer",
+        "x": 72,
+        "y": 192,
+        "dir": 1
+      },
+      {
+        "type": "flyer",
+        "x": 72,
+        "y": 224,
+        "dir": 1
+      },
+      {
+        "type": "walker",
+        "x": 96,
+        "y": 64,
+        "dir": -1
+      },
+      {
+        "type": "flyer",
+        "x": 56,
+        "y": 96,
+        "dir": 1
+      },
+      {
+        "type": "walker",
+        "x": 128,
+        "y": 208,
+        "dir": 1
+      },
+      {
+        "type": "heart",
+        "x": 80,
+        "y": 224
+      }
+    ],
+    "rules": {
+      "collect": 5,
+      "keys": 0
+    },
+    "script": "on start\n  message \"BEGIN\"\n  set solid 1\n  message \"FIND THE FLAG\"\nend\n\non tick\n  every 2\n    if solid == 1\n      tile 20 14 0\n      set solid 0\n    else\n      tile 20 14 1\n      set solid 1\n    end\n  end\nend\n\non hurt\n  message \"TRY AGAIN\"\nend\n\non collect\n  if coins == 1\n    message \"ONE LEFT\"\n  end\nend",
+    "kanji": "\u8d70",
+    "cat": "racing"
+  },
+  "rally": {
+    "name": "Night rally",
+    "mode": "racer",
+    "seed": "44d3e7",
+    "sky0": "#0d0a16",
+    "sky1": "#241a30",
+    "player": {
+      "char": "beast",
+      "speed": 96
+    },
+    "start": {
+      "x": 80,
+      "y": 528
+    },
+    "lives": 2,
+    "level": {
+      "w": 20,
+      "h": 70,
+      "tiles": "2iiiiiiiiiiiiiiiiii2\n2222222jj77kjjj22222\n2222222jjjjjjjj22222\n2222222jjjjjjjj22222\n2222222jjjjkjjj22222\n2222222jjj77jjj22222\n2222222jjjjjjjj22222\n2222222jjjjjjjj22222\n2222222jjjjkjjj22222\n22222222jjjjkjjj2222\n2222222jjjjjjjjjj222\n2222222jjjjjjjjjj222\n22222222jjjjkjjj2222\n22222222jjjjkjjj2222\n2222222jjjjjjjjjj222\n222222jjjjjjjjjj2222\n222222jjjjjkjjjj2222\n22222jjjjjjkjjjjj222\n2222jjjjjjjjjjjj2222\n2222jjjjjjjjjjjj2222\n2222jjjjjjkjjj7j2222\n22222jjjjjkjjjj22222\n222222jjjjjjjj222222\n222222jjjjjjjj222222\n222222jjjjkjjj222222\n2222222jjjjkjjj22222\n2222222jjjjjjjj22222\n2222222jjjjjjjj22222\n2222222jjjjkjjj22222\n2222222j7jjkjjj22222\n2222222jjjjjjjj22222\n222222jjjjjjjj222222\n2222222jjjjkjjj22222\n222222jjjjjkjjjj2222\n222222jjjjjjjjjj2222\n222222jjjjjjjjjj2222\n22222jjjjjkjjjj22222\n222222jjjjjkjjjj2222\n222222jjjjjjjjjj2222\n222222jjjjjjjjjj2222\n222222jjjjjkjjjj2222\n222222jjjjjkjjjj2222\n22222jjjjjjjjjj22222\n22222jjjjjjjjjj22222\n22222jjjjjkjjjj22222\n22222jjjjjkjjjj22222\n22222jjjjjjjjjj22222\n2222jjjjjjjjjjjj2222\n222jjjj7jjkjjjjjj222\n22jjjjjj77kjjjjjjj22\n22jjjjjjjjjjjjjjjj22\n222jjjjjjjjjjj7jjj22\n222jjjjjjjkjjjjjjj22\n22jjjjjjjjkjjjjjjj22\n22jjjj7jjjjjjjjjjj22\n22jjjjjjjjjjjjjjjj22\n22jjjjjjjjkjjjjjjj22\n22jjjjjjjjkjjjjjjj22\n22jjjjjjjjjjjjjjjj22\n22jjjjjjjjjjjjjjjj22\n22jjjjjjjjkjjjjjjj22\n22jjjjjjjjkjjjjjjj22\n222jjjjjjjjjjjjjj222\n222jjjjjjjjjjjjjj222\n222jjjjjjjjjjjjjj222\n222jjjjjjjjjjjjjj222\n222jjjjjjjjjjjjjj222\n222jjjjjjjjjjjjjj222\n222jjjjjjjjjjjjjj222\n222jjjjjjjkjjjjjj222"
+    },
+    "entities": [
+      {
+        "type": "coin",
+        "x": 81,
+        "y": 81
+      },
+      {
+        "type": "coin",
+        "x": 113,
+        "y": 145
+      },
+      {
+        "type": "coin",
+        "x": 33,
+        "y": 153
+      },
+      {
+        "type": "coin",
+        "x": 81,
+        "y": 337
+      },
+      {
+        "type": "coin",
+        "x": 89,
+        "y": 49
+      },
+      {
+        "type": "coin",
+        "x": 65,
+        "y": 97
+      },
+      {
+        "type": "coin",
+        "x": 129,
+        "y": 465
+      },
+      {
+        "type": "walker",
+        "x": 128,
+        "y": 152,
+        "dir": -1
+      },
+      {
+        "type": "walker",
+        "x": 16,
+        "y": 440,
+        "dir": -1
+      },
+      {
+        "type": "walker",
+        "x": 56,
+        "y": 176,
+        "dir": 1
+      },
+      {
+        "type": "walker",
+        "x": 104,
+        "y": 264,
+        "dir": -1
+      },
+      {
+        "type": "flyer",
+        "x": 40,
+        "y": 424,
+        "dir": 1
+      },
+      {
+        "type": "flyer",
+        "x": 56,
+        "y": 64,
+        "dir": 1
+      },
+      {
+        "type": "walker",
+        "x": 104,
+        "y": 248,
+        "dir": -1
+      },
+      {
+        "type": "flyer",
+        "x": 96,
+        "y": 440,
+        "dir": -1
+      }
+    ],
+    "rules": {
+      "collect": 5,
+      "keys": 0
+    },
+    "script": "on start\n  message \"BEGIN\"\n  message \"FIND THE KEY\"\n  gravity 260\n  message \"LOW GRAVITY\"\nend\n\non collect\n  if keys >= 1\n    open\n    message \"IT OPENS\"\n  end\n  if score == 5\n    heal 1\n    message \"HAVE A LIFE\"\n  end\nend",
+    "kanji": "\u8eca",
+    "cat": "racing"
+  },
+  "starfall": {
+    "name": "Starfall",
+    "mode": "shmup",
+    "seed": "qjgw4d",
+    "sky0": "#1b2a5c",
+    "sky1": "#bfe9ff",
+    "player": {
+      "char": "hero",
+      "attack": true,
+      "speed": 96
+    },
+    "start": {
+      "x": 80,
+      "y": 528
+    },
+    "lives": 4,
+    "level": {
+      "w": 20,
+      "h": 70,
+      "tiles": "2iiiiiiiiiiiiiiiiii2\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000777700000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20007770000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000007770000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000777002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20777700000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000777700000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000011100000002\n20000000000000000002"
+    },
+    "entities": [
+      {
+        "type": "coin",
+        "x": 17,
+        "y": 473
+      },
+      {
+        "type": "coin",
+        "x": 137,
+        "y": 449
+      },
+      {
+        "type": "coin",
+        "x": 25,
+        "y": 265
+      },
+      {
+        "type": "coin",
+        "x": 81,
+        "y": 337
+      },
+      {
+        "type": "coin",
+        "x": 89,
+        "y": 201
+      },
+      {
+        "type": "coin",
+        "x": 129,
+        "y": 129
+      },
+      {
+        "type": "coin",
+        "x": 105,
+        "y": 97
+      },
+      {
+        "type": "flyer",
+        "x": 96,
+        "y": 336,
+        "dir": -1
+      },
+      {
+        "type": "flyer",
+        "x": 56,
+        "y": 376,
+        "dir": 1
+      },
+      {
+        "type": "turret",
+        "x": 64,
+        "y": 304,
+        "dir": 1
+      },
+      {
+        "type": "chaser",
+        "x": 32,
+        "y": 392,
+        "dir": 1
+      },
+      {
+        "type": "heart",
+        "x": 80,
+        "y": 224
+      }
+    ],
+    "rules": {
+      "collect": 7,
+      "keys": 0
+    },
+    "script": "on start\n  message \"GO\"\n  set wave 0\nend\n\non tick\n  every 6\n    set wave wave + 1\n    spawn \"walker\" 30 12\n    if wave >= 2\n      spawn \"flyer\" 24 8\n    end\n    message \"WAVE \" + wave\n  end\nend",
+    "kanji": "\u6483",
+    "cat": "shooter"
+  },
+  "voidrun": {
+    "name": "Void run",
+    "mode": "shmup",
+    "seed": "0b5ww1",
+    "sky0": "#1b2a5c",
+    "sky1": "#bfe9ff",
+    "player": {
+      "char": "hero",
+      "attack": true,
+      "speed": 96
+    },
+    "start": {
+      "x": 80,
+      "y": 528
+    },
+    "lives": 2,
+    "level": {
+      "w": 20,
+      "h": 70,
+      "tiles": "2iiiiiiiiiiiiiiiiii2\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000777002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000077002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000077700000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000077000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000077700000000002\n20000000000000000002\n20000000000000000002\n20000000000777000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000007777002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000777700002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000000000000002\n20000000011100000002\n20000000000000000002"
+    },
+    "entities": [
+      {
+        "type": "coin",
+        "x": 49,
+        "y": 49
+      },
+      {
+        "type": "coin",
+        "x": 65,
+        "y": 337
+      },
+      {
+        "type": "coin",
+        "x": 57,
+        "y": 313
+      },
+      {
+        "type": "coin",
+        "x": 137,
+        "y": 121
+      },
+      {
+        "type": "coin",
+        "x": 49,
+        "y": 241
+      },
+      {
+        "type": "coin",
+        "x": 121,
+        "y": 393
+      },
+      {
+        "type": "coin",
+        "x": 65,
+        "y": 97
+      },
+      {
+        "type": "flyer",
+        "x": 120,
+        "y": 152,
+        "dir": -1
+      },
+      {
+        "type": "turret",
+        "x": 16,
+        "y": 128,
+        "dir": -1
+      },
+      {
+        "type": "chaser",
+        "x": 16,
+        "y": 440,
+        "dir": -1
+      },
+      {
+        "type": "chaser",
+        "x": 104,
+        "y": 288,
+        "dir": 1
+      },
+      {
+        "type": "flyer",
+        "x": 32,
+        "y": 136,
+        "dir": 1
+      },
+      {
+        "type": "turret",
+        "x": 24,
+        "y": 176,
+        "dir": -1
+      },
+      {
+        "type": "turret",
+        "x": 128,
+        "y": 80,
+        "dir": 1
+      },
+      {
+        "type": "chaser",
+        "x": 24,
+        "y": 312,
+        "dir": -1
+      },
+      {
+        "type": "flyer",
+        "x": 48,
+        "y": 312,
+        "dir": 1
+      },
+      {
+        "type": "heart",
+        "x": 80,
+        "y": 224
+      }
+    ],
+    "rules": {
+      "collect": 7,
+      "keys": 0
+    },
+    "script": "on start\n  message \"GOOD LUCK\"\n  gravity 260\n  message \"LOW GRAVITY\"\nend\n\non collect\n  if score >= 10\n    message \"RUN\"\n    shake 5\n    speed 120\n    spawn \"chaser\" 4 12\n  end\nend",
+    "kanji": "\u5b99",
+    "cat": "shooter"
   }
 };
 })();

@@ -369,11 +369,12 @@ button[aria-pressed=true].mini { background: #2ef2ff18; border-color: var(--cyan
 }
 .neo-select-btn {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  width: 100%; text-align: left; cursor: pointer;
+  width: 100%; min-width: 0; text-align: left; cursor: pointer; overflow: hidden;
   background: #100d18; color: var(--text); border: 0; border-radius: 0;
   padding: 9px 10px; font-family: var(--mono); font-size: 12px; line-height: 1.2;
   box-shadow: 0 0 0 2px #2a2340, inset 2px 2px 0 #ffffff0c, inset -2px -2px 0 #00000055;
 }
+.neo-select-btn > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .neo-select-btn:hover { color: #fff; box-shadow: 0 0 0 2px #3d3557, inset 2px 2px 0 #ffffff12, inset -2px -2px 0 #00000055; }
 .neo-select.is-open .neo-select-btn,
 .neo-select-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--cyan), inset 2px 2px 0 #ffffff12, inset -2px -2px 0 #00000055; }

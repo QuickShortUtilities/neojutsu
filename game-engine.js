@@ -37,9 +37,11 @@
     13: { name: 'checkpoint',solid: false, checkpoint: true, fill: '#101a2e', top: '#2ef2ff' },
     14: { name: 'lava',      solid: false, hazard: true, fill: '#3a0c04', top: '#ff8c1a' },
     15: { name: 'crate',     solid: true,  breakable: true, fill: '#3a2a14', top: '#b98a4a' },
-    16: { name: 'grass',     solid: false, decor: true,  top: '#3fbf4a' },
+    16: { name: 'grass',     solid: false, decor: true,  fill: '#1c3a18', top: '#3fbf4a' },
     17: { name: 'backwall',  solid: false, fill: '#1a1626' },
     18: { name: 'exit',      solid: false, exit: true,   fill: '#0d2a16', top: '#3fbf4a' },
+    19: { name: 'road',      solid: false, road: true,   fill: '#4a4a57' },
+    20: { name: 'line',      solid: false, decor: true,  fill: '#4a4a57', top: '#e8e4d8' },
   };
 
   const rng = seedStr => {
@@ -154,7 +156,12 @@
   // ---------- the game ----------
   function create(canvas, spec, opts = {}) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const mode = spec.mode === 'topdown' ? 'topdown' : 'platform';
+    const MODES = ['platform', 'topdown', 'racer', 'shmup'];
+    const mode = MODES.includes(spec.mode) ? spec.mode : 'platform';
+    // Racer and shmup scroll the world past you; you never walk, you steer.
+    const scrolling = mode === 'racer' || mode === 'shmup';
+    const scrollCfg = Object.assign({ speed: 46, accel: 2.6, max: 130 }, spec.scroll || {});
+    let scroll = 0;
     const lvl = makeLevel(spec.level || { w: 20, h: 18, tiles: '' });
     const rand = rng(spec.seed || 'neojutsu');
     const view = { w: canvas.width, h: canvas.height, x: 0, y: 0 };
@@ -167,6 +174,11 @@
     let doorsOpen, respawn, fired, effects, messageAt, shake = 0;
 
     function reset() {
+      scroll = scrollCfg.speed;
+      if (scrolling) {
+        view.y = Math.max(0, lvl.h * TILE - view.h);
+        view.x = Math.max(0, Math.min(view.x, lvl.w * TILE - view.w));
+      }
       const start = spec.start || { x: TILE, y: TILE };
       respawn = { x: start.x, y: start.y };
       player = { x: start.x, y: start.y, w: 6, h: 12, vx: 0, vy: 0, grounded: false,
@@ -296,7 +308,17 @@
       }
       player.bWasDown = input.b;
 
-      if (mode === 'platform') {
+      if (scrolling) {
+        // The world comes to you. Steering is direct in both axes, there is no
+        // gravity, and the far edge of the level is the finish line.
+        scroll = Math.min(scrollCfg.max, scroll + scrollCfg.accel * dt);
+        view.y -= scroll * dt;
+        const dirY = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+        player.vx = dir * P.speed * 1.15;
+        player.vy = dirY * P.speed * (mode === 'racer' ? 1.15 : 0.85);
+        // carried along by the scroll, so standing still still means moving
+        player.y -= scroll * dt;
+      } else if (mode === 'platform') {
         player.coyote = player.grounded ? 0.09 : Math.max(0, player.coyote - dt);
         const jumpHeld = input.a || input.up;
         if (jumpHeld && !aWasDown) player.buffer = 0.12;
@@ -332,6 +354,36 @@
       } else {
         const vdir = (input.down ? 1 : 0) - (input.up ? 1 : 0);
         player.vy = vdir * P.speed;
+      }
+
+      if (scrolling) {
+        player.x += player.vx * dt;
+        player.y += player.vy * dt;
+        // Held inside the frame: there is nowhere to go but forward.
+        player.x = Math.max(view.x + 1, Math.min(player.x, view.x + view.w - player.w - 1));
+        player.y = Math.max(view.y + 1, Math.min(player.y, view.y + view.h - player.h - 1));
+        for (const t of tilesUnder(lvl, player)) {
+          if (t.info.hazard || (mode === 'racer' && t.info.solid === true)) { die(); break; }
+          if (mode === 'shmup' && t.info.solid === true) {
+            // walls stop you rather than kill you
+            player.x -= player.vx * dt; player.y -= player.vy * dt;
+            break;
+          }
+        }
+        if (view.y <= 0) { view.y = 0; finish(); }
+        if (P.attack && mode === 'shmup' && input.a && player.shotCool <= 0) {
+          const shot = makeEntity({ type: 'shot', x: player.x + 1, y: player.y - 4 });
+          shot.vx = 0; shot.vy = -ENTITY.shot.speed * 1.4;
+          entities.push(shot); player.shotCool = 0.22; say('shoot');
+        }
+        player.shotCool = Math.max(0, player.shotCool - dt);
+        player.walk += Math.abs(player.vx) * dt * 0.35;
+        if (player.hurt > 0) player.hurt = Math.max(0, player.hurt - dt);
+        updateEntities(dt, ctx2);
+        runTriggers();
+        fire('tick');
+        if (shake > 0) shake = Math.max(0, shake - dt * 12);
+        return;
       }
 
       player.grounded = false;
@@ -536,6 +588,11 @@
 
     // ---------- drawing ----------
     function camera() {
+      if (scrolling) {
+        view.x = Math.max(0, Math.min(view.x, Math.max(0, lvl.w * TILE - view.w)));
+        view.y = Math.max(0, Math.min(view.y, Math.max(0, lvl.h * TILE - view.h)));
+        return;
+      }
       // While building, the camera is the builder's, not the player's.
       if (freeCam) {
         view.x = Math.max(0, Math.min(view.x, Math.max(0, lvl.w * TILE - view.w)));
@@ -567,9 +624,10 @@
       for (let ty = y0; ty <= y1; ty++) {
         for (let tx = x0; tx <= x1; tx++) {
           const info = tileInfo(lvl.at(tx, ty));
-          if (!info.fill) continue;
+          if (!info.fill && !info.top) continue;
           const sx = tx * TILE - ox, sy = ty * TILE - oy;
-          ctx.fillStyle = info.fill; ctx.fillRect(sx, sy, TILE, TILE);
+          if (info.fill) { ctx.fillStyle = info.fill; ctx.fillRect(sx, sy, TILE, TILE); }
+          if (info.decor && info.top) { ctx.fillStyle = info.top; ctx.fillRect(sx + 2, sy + 1, TILE - 4, TILE - 2); }
           const open = !tileInfo(lvl.at(tx, ty - 1)).fill;
           if (info.top && open) {
             ctx.fillStyle = info.top; ctx.fillRect(sx, sy, TILE, 2);
@@ -645,6 +703,12 @@
         ctx.fillRect(3, 2, 5, 5);
         ctx.fillStyle = '#ff2e88';
         for (let i = 0; i < lives; i++) ctx.fillRect(view.w - 6 - i * 7, 2, 5, 5);
+        if (scrolling) {
+          const total = Math.max(1, lvl.h * TILE - view.h);
+          const done = 1 - view.y / total;
+          ctx.fillStyle = '#2a2340'; ctx.fillRect(0, 8, view.w, 1);
+          ctx.fillStyle = '#2ef2ff'; ctx.fillRect(0, 8, Math.round(view.w * done), 1);
+        }
         if (keys) { ctx.fillStyle = '#2ef2ff'; ctx.fillText(`${keys}`, 40, 2); }
       }
       if (state !== 'play' || message) {

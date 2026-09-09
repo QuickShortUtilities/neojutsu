@@ -67,13 +67,15 @@
     const mech = best(MECHANICS, v => v); if (mech) want.mech = mech;
     want.abilities = Object.entries(ABILITIES).filter(([, v]) => hit(t, v)).map(([k]) => k);
 
-    if (/top.?down|overhead|dungeon|maze|room|zelda/.test(t)) want.mode = 'topdown';
+    if (/\brac(e|ing)|driv(e|ing)|car\b|speedway|highway|kart|rally\b/.test(t)) want.mode = 'racer';
+    else if (/shoot.?.?em.?up|shmup|space shooter|starfighter|dogfight|bullet hell/.test(t)) want.mode = 'shmup';
+    else if (/top.?down|overhead|dungeon|maze|room|zelda/.test(t)) want.mode = 'topdown';
     if (/platform|jump|side.?scroll|mario|climb|ledge/.test(t)) want.mode = want.mode || 'platform';
     // Some mechanics and every shape only make sense side-on, so asking for one
     // implies the mode rather than leaving it to chance.
     if (!want.mode && ['springs', 'belts', 'breakables', 'moving', 'ice'].includes(want.mech))
       want.mode = 'platform';
-    if (want.shape) want.mode = 'platform';
+    if (want.shape && !['racer','shmup'].includes(want.mode)) want.mode = 'platform';
 
     if (/\b(hard|difficult|brutal|tough|punishing)\b/.test(t)) want.difficulty = 2;
     else if (/\b(easy|gentle|simple|relaxed|calm)\b/.test(t)) want.difficulty = 0;
@@ -212,7 +214,63 @@
     return { g, ents, spots, start: { x: T, y: (h - 5) * T }, ground: null };
   }
 
-  const SHAPES = { islands, cavern, tower, corridor, stairs };
+  // A road that comes at you: walls either side, obstacles in the lanes.
+  function roadway(r, o) {
+    const { w, h, theme } = o, g = blank(w, h), ents = [], spots = [];
+    let left = 2, right = w - 3;
+    const lane = [];
+    for (let y = h - 1; y >= 0; y--) {
+      if (r() < .3) { left += r() < .5 ? -1 : 1; right += r() < .5 ? -1 : 1; }
+      left = Math.max(1, Math.min(left, Math.floor(w / 2) - 3));
+      right = Math.min(w - 2, Math.max(right, Math.floor(w / 2) + 3));
+      for (let x = 0; x <= left; x++) put(g, x, y, '2');
+      for (let x = right; x < w; x++) put(g, x, y, '2');
+      // A surface and a centre line, so it reads as a road rather than a gap
+      // between two walls.
+      for (let x = left + 1; x < right; x++) put(g, x, y, 'j');
+      if (y % 4 < 2) put(g, Math.round((left + right) / 2), y, 'k');
+      lane[y] = [left, right];
+      // something to swerve around
+      if (y < h - 8 && r() < .16) {
+        const bx = left + 1 + Math.floor(r() * Math.max(1, right - left - 2));
+        put(g, bx, y, theme === 'volcano' ? 'e' : '7');
+        if (r() < .4) put(g, Math.min(right - 1, bx + 1), y, '7');
+      } else if (y < h - 8 && r() < .16) {
+        spots.push([left + 1 + Math.floor(r() * Math.max(1, right - left - 2)), y]);
+      }
+    }
+    for (let x = 1; x < w - 1; x++) put(g, x, 0, 'i');       // the finish line
+    // Start on the road, with clear tarmac ahead - the lane wanders, so the
+    // middle of the level is not necessarily the middle of the road.
+    const sy = h - 4, [l0, r0] = lane[sy] || [2, w - 3];
+    const sx = Math.round((l0 + r0) / 2);
+    for (let y = sy - 3; y <= Math.min(h - 1, sy + 2); y++) {
+      const [ll, rr] = lane[y] || [l0, r0];
+      for (let x = Math.max(ll + 1, sx - 2); x <= Math.min(rr - 1, sx + 2); x++) put(g, x, y, 'j');
+    }
+    return { g, ents, spots, start: { x: sx * T, y: sy * T }, ground: null };
+  }
+
+  // Open space with drifting cover: a lane to fly up, shooting.
+  function starlane(r, o) {
+    const { w, h } = o, g = blank(w, h), ents = [], spots = [];
+    for (let y = 0; y < h; y++) { put(g, 0, y, '2'); put(g, w - 1, y, '2'); }
+    const sx = Math.floor(w / 2), sy = h - 4;
+    for (let y = h - 10; y > 4; y -= 3 + Math.floor(r() * 3)) {
+      if (r() < .45) {
+        const bx = 2 + Math.floor(r() * (w - 6));
+        const span = 2 + Math.floor(r() * 3);
+        for (let i = 0; i < span; i++) put(g, bx + i, y, '7');
+      }
+      if (r() < .5) spots.push([2 + Math.floor(r() * (w - 4)), y - 1]);
+    }
+    for (let x = 1; x < w - 1; x++) put(g, x, 0, 'i');
+    for (let y = sy - 3; y <= Math.min(h - 1, sy + 2); y++)
+      for (let x = sx - 2; x <= sx + 2; x++) put(g, x, y, '0');
+    return { g, ents, spots, start: { x: sx * T, y: sy * T }, ground: null };
+  }
+
+  const SHAPES = { islands, cavern, tower, corridor, stairs, roadway, starlane };
 
   function chooseShape(want, theme, mech, size, r) {
     if (want.shape) return want.shape;
@@ -320,7 +378,22 @@
 
   // Shapes lay out the ground and mark where a pickup would sit; this puts the
   // pieces on them, so every shape gets enemies, a goal and a way to finish.
-  function populate(r, o, built) {
+  function populate(r, o, built, scrollMode) {
+    if (scrollMode) {
+      const { w, h, difficulty } = o;
+      const ents = built.ents, spots = built.spots || [];
+      coinsOn(ents, spots, r, 6 + Math.floor(r() * 4));
+      const foes = scrollMode === 'shmup' ? ['flyer', 'turret', 'chaser'] : ['flyer', 'walker'];
+      for (let i = 0; i < 4 + difficulty * 3; i++) {
+        const ex = 2 + Math.floor(r() * (w - 5)), ey = 6 + Math.floor(r() * (h - 14));
+        ents.push({ type: pick(r, foes), x: ex * T, y: ey * T, dir: r() < .5 ? 1 : -1 });
+      }
+      if (r() < .6) ents.push({ type: 'heart', x: Math.floor(w / 2) * T, y: Math.floor(h * .4) * T });
+      const safeY = (h - 4) * T;
+      built.ents = ents.filter(e => !ENEMY_TYPES.has(e.type) || Math.abs(e.y - safeY) > 10 * T);
+      return;                       // the finish is the exit strip at the top
+    }
+
     const { w, h, difficulty, mech } = o;
     const ents = built.ents, spots = built.spots || [];
     coinsOn(ents, spots, r, 5 + Math.floor(r() * 4));
@@ -417,12 +490,16 @@
     const size = want.size || pick(r, ['small', 'normal', 'wide']);
 
     let w, h;
-    if (mode === 'topdown') [w, h] = pick(r, [[26, 20], [30, 22], [34, 24]]);
+    if (mode === 'racer' || mode === 'shmup') [w, h] = [20, pick(r, [70, 90, 120])];
+    else if (mode === 'topdown') [w, h] = pick(r, [[26, 20], [30, 22], [34, 24]]);
     else [w, h] = { small: [28, 16], normal: [40, 18], wide: [56, 18], tall: [22, 34] }[size];
 
     const o = { w, h, mech, theme, difficulty, timed: !!want.timed, boss: !!want.boss };
     let built;
-    if (mode === 'topdown') built = topdown(r, o);
+    if (mode === 'racer' || mode === 'shmup') {
+      built = (mode === 'racer' ? roadway : starlane)(r, o);
+      populate(r, o, built, mode);
+    } else if (mode === 'topdown') built = topdown(r, o);
     else {
       const shape = chooseShape(want, theme, mech, size, r);
       o.shape = shape;
@@ -437,7 +514,8 @@
     // If a number of pickups was asked for, make sure that many exist rather
     // than quietly settling for however many the level happened to get.
     let need = 0;
-    if (want.collect !== undefined) {
+    if ((mode === 'racer' || mode === 'shmup') && want.collect === undefined) need = 0;
+    else if (want.collect !== undefined) {
       need = want.collect;
       const ground = mode === 'topdown' ? null : h - 3;
       let guard = 0;
@@ -453,6 +531,8 @@
 
     const t = THEMES[theme];
     const player = { char: want.char || t.char };
+    if (mode === 'shmup') player.attack = true;
+    if (mode === 'racer' || mode === 'shmup') player.speed = 96;
     for (const a of (want.abilities || [])) player[a] = true;
     if (size === 'tall' && !player.doubleJump && !want.abilities.length) player.doubleJump = true;
 
@@ -471,14 +551,29 @@
     return { spec, understood: want };
   }
 
-  // Generate, check, and try again with a new seed if the result is not playable.
-  function generateValid(prompt, tries = 6) {
+  // Valid is not the same as playable. A game that passes every structural check
+  // and then kills you before you have touched a key is still a bad game, so the
+  // candidate is played for a moment before it is accepted.
+  function survives(spec) {
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = 160; cv.height = 144;
+      const g = window.NeoGame.create(cv, JSON.parse(JSON.stringify(spec)), { hud: false });
+      g.tick(1.6);
+      if (g.state !== 'play') return false;
+      if (g.lives < (spec.lives ?? 3)) return false;      // hit before moving
+      if (g.player.y > spec.level.h * 8 + 40) return false;
+      return !g.scriptFault;
+    } catch { return false; }
+  }
+
+  function generateValid(prompt, tries = 8) {
     let last = null;
     for (let i = 0; i < tries; i++) {
       const out = generate(prompt, Math.random().toString(36).slice(2, 8));
       const v = window.NeoGame.validate(out.spec);
       last = { ...out, validation: v };
-      if (v.ok) return last;
+      if (v.ok && survives(out.spec)) return last;
     }
     return last;
   }
