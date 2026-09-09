@@ -25,6 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from make_dataset import BUILD, SYSTEM, serve, record  # noqa: E402
+import level_kit  # noqa: E402
 from level_kit import furnish, describe as auto_describe  # noqa: E402
 
 MODE_WORDS = {
@@ -153,34 +154,29 @@ def read_txt(path):
 
 
 def describe(spec):
-    """A sentence that is true of this game, for when none was supplied."""
+    """A sentence that is true of this game, for when none was supplied.
+
+    The same one the GB Studio import uses, which reads the level rather than
+    its dimensions - four fields make twenty sentences however many levels you
+    have, and a model given one prompt and a hundred answers learns to average
+    them. What is added here is the things a hand-written game may carry that
+    an imported scene never does: a theme it named, a key, an ability.
+    """
     if spec.get('describe'):
         return str(spec['describe'])
-    bits = [MODE_WORDS.get(spec.get('mode', 'platform'), 'a game')]
+    text = level_kit.describe(spec)
+    extra = []
     theme = spec.get('theme')
     if theme in THEME_WORDS:
-        bits.append(THEME_WORDS[theme])
-    lvl = spec.get('level') or {}
-    w, h = lvl.get('w', 0), lvl.get('h', 0)
-    if w >= 48:
-        bits.append('long')
-    elif w and w <= 26:
-        bits.append('short')
-    if h >= 30:
-        bits.append('tall')
-    need = (spec.get('rules') or {}).get('collect') or 0
-    if need:
-        bits.append(f'{need} coins to collect')
+        extra.append(THEME_WORDS[theme])
     ents = spec.get('entities') or []
     if any(e.get('type') == 'key' for e in ents):
-        bits.append('with a locked door and a key')
-    foes = sum(1 for e in ents if e.get('type') in ('walker', 'flyer', 'chaser', 'jumper', 'turret'))
-    if foes >= 6:
-        bits.append('busy with enemies')
+        extra.append('with a locked door and a key')
     if (spec.get('player') or {}).get('doubleJump'):
-        bits.append('with a double jump')
-    text = 'Make ' + ', '.join(bits) + '.'
-    return text
+        extra.append('with a double jump')
+    if not extra:
+        return text
+    return text.rstrip('.') + ', ' + ', '.join(extra) + '.'
 
 
 def main():
