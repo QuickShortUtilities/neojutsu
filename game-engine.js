@@ -1362,6 +1362,7 @@
       get state() { return state; },
       get score() { return score; },
       get lives() { return lives; },
+      get keys() { return keys; },
       get player() { return player; },
       get players() { return players; },
       get bubbles() { return bubbles; },

@@ -718,23 +718,77 @@
      line on arriving, a word at the halfway mark, something when it goes
      wrong. */
   const ARRIVE = {
-    cave:    ['It is darker than the map promised.', 'Something lives down here.'],
-    ice:     ['The floor will not hold a stop.', 'Cold enough to slow a step.'],
-    sky:     ['A long way down from here.', 'The wind does half the work.'],
-    sunset:  ['We are losing the light.', 'One more before dark.'],
-    factory: ['Nothing here was built for people.', 'Mind the belts.'],
-    ruins:   ['Someone left in a hurry.', 'The walls remember more than we do.'],
-    volcano: ['The floor is warm through the boot.', 'It is waking up.'],
-    temple:  ['We are not the first ones in.', 'Quiet. Too quiet for a temple.'],
+    cave:    ['It is darker than the map promised.', 'Something lives down here.',
+              'The air tastes of old water.', 'Whatever dug this did not use hands.',
+              'Sound goes a long way in here.', 'The last torch is behind us.'],
+    ice:     ['The floor will not hold a stop.', 'Cold enough to slow a step.',
+              'Everything here is going somewhere, slowly.', 'Nothing sticks.',
+              'The cracks are older than the ice.', 'Walk like you mean to fall.'],
+    sky:     ['A long way down from here.', 'The wind does half the work.',
+              'Nothing under this but weather.', 'The next one is further than it looks.',
+              'Up here, a mistake takes a while to arrive.', 'Do not look for a floor.'],
+    sunset:  ['We are losing the light.', 'One more before dark.',
+              'The shadows have got long and confident.', 'An hour of this left, at most.',
+              'Everything looks further at this hour.', 'The day is going without us.'],
+    factory: ['Nothing here was built for people.', 'Mind the belts.',
+              'It has been running with nobody to run it.', 'Something is still on down here.',
+              'The machines kept their shift.', 'Do not put a hand where it moves.'],
+    ruins:   ['Someone left in a hurry.', 'The walls remember more than we do.',
+              'This was a room once.', 'Half of it is still standing, which is the half to use.',
+              'They took the doors with them.', 'Old stone, newer damage.'],
+    volcano: ['The floor is warm through the boot.', 'It is waking up.',
+              'The rock here is younger than this morning.', 'Breathe shallow.',
+              'Nothing grows on the fast route.', 'It has been patient long enough.'],
+    temple:  ['We are not the first ones in.', 'Quiet. Too quiet for a temple.',
+              'Someone swept this recently.', 'The steps are worn in the middle.',
+              'It was built to be walked slowly.', 'Whatever this was for, it still is.'],
   };
-  const HALFWAY = ['Halfway.', 'Nearly through.', 'Keep going.', 'That is most of it.'];
-  const HIT = ['That hurt.', 'Careless.', 'Not again.', 'It is faster than it looks.'];
+  const HALFWAY = ['Halfway.', 'Nearly through.', 'Keep going.', 'That is most of it.',
+                   'Further than I thought.', 'The back half is the short half.',
+                   'Past the worst of it.', 'Do not stop to admire it.',
+                   'Good. Again.', 'That is the middle behind us.',
+                   'Still standing.', 'It gets easier or it does not.',
+                   'Halfway is not most of the way.', 'On, then.'];
+  const HIT = ['That hurt.', 'Careless.', 'Not again.', 'It is faster than it looks.',
+               'That one was mine.', 'Do that less.', 'Noted.',
+               'It has the measure of us.', 'Slower next time. Or quicker.',
+               'That was avoidable.', 'Fine. Fine.', 'It only has to be lucky once.',
+               'Less of that.', 'I felt that one.'];
+  // Beats for the things a run actually does, rather than only for the clock.
+  const KEYED = ['That opens something.', 'Now we can go on.',
+                 'Somebody wanted this kept.', 'One door fewer.',
+                 'Heavier than it looks.', 'It was not hidden well.',
+                 'Good. The way through, then.', 'That is the hard part done.',
+                 'A key with nothing written on it.', 'Whatever it opens is worth the walk.'];
+  const KILLED = ['One down.', 'It will not be the last.',
+                  'That was quick.', 'They will have heard that.',
+                  'Fewer of them now.', 'Not built to take a hit.',
+                  'Good. Move before the next one.', 'That is how it goes, then.',
+                  'It came to us.', 'Cleaner than expected.'];
+  const NEARLY = ['The end of this is close.', 'Almost out.',
+                  'That is the far wall.', 'One more stretch.',
+                  'The way out is ahead somewhere.', 'Nearly done with this place.',
+                  'Do not hurry it now.', 'Close enough to smell the air.',
+                  'The last of it.', 'Finish it.'];
 
+  /* The engine takes five kinds of cue - a time, a score, a key count, a
+     distance along the level, or an event - and the generator only ever used
+     three of them. A story that can say something when you find the key or
+     when you reach the far end is a story about the game being played rather
+     than about the clock. */
   function story(r, o, need) {
     const beats = [{ at: +(0.6 + r() * 0.5).toFixed(1),
                      text: pick(r, ARRIVE[o.theme] || ['Here we go.']) }];
     if (need >= 4 && r() < 0.75) {
       beats.push({ score: Math.max(1, Math.round(need / 2)), text: pick(r, HALFWAY) });
+    }
+    if (o.keys > 0 && r() < 0.8) beats.push({ keys: 1, text: pick(r, KEYED) });
+    if (r() < 0.45) beats.push({ on: 'kill', text: pick(r, KILLED) });
+    /* Three quarters of the way across. Only where crossing the level is
+       what you do: a racer and a shooter scroll past you and hold you in the
+       frame, so a beat waiting on your x would fire at the start or never. */
+    if (o.w >= 24 && o.mode !== 'racer' && o.mode !== 'shmup' && r() < 0.5) {
+      beats.push({ reach: Math.round(o.w * 0.75), text: pick(r, NEARLY) });
     }
     if (r() < 0.55) beats.push({ on: 'hurt', text: pick(r, HIT) });
     return beats;
