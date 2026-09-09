@@ -118,7 +118,8 @@
              life: 0, cool: 0, tag: e.tag || '',
              // What a script can change about an actor: where it is going,
              // whether it is on stage, and what it looks like.
-             hidden: false, goal: null, sprite: (typeof e.sprite === 'number' ? e.sprite : null) };
+             hidden: false, goal: null, sprite: (typeof e.sprite === 'number' ? e.sprite : null),
+             to: e.to };
   }
 
   // ---------- collision ----------
@@ -176,7 +177,7 @@
       : [{ name: spec.name, level: spec.level, entities: spec.entities,
            props: spec.props, story: spec.story, start: spec.start,
            rules: spec.rules, cut: spec.cut }]);
-    let stageIndex = 0, stageStory = [], scoreAtStage = 0;
+    let stageIndex = 0, stageStory = [], scoreAtStage = 0, pendingStage = -1;
     let cutT = 0, cutLines = [];
     let lvl = makeLevel(stageList[0].level || { w: 20, h: 18, tiles: '' });
 
@@ -250,6 +251,31 @@
       doorsOpen = false; effects = []; shake = 0;
       message = ''; messageAt = 0;
       threads = [];
+    }
+
+    /* Which room is meant. A number counts from one, a name matches the
+       stage's own - both because a script written by a person says "the
+       cave" and a script written by a machine says 2. */
+    function findStage(which) {
+      if (typeof which === 'string') {
+        const want = which.trim().toLowerCase();
+        const byName = stageList.findIndex(st => String(st.name || '').trim().toLowerCase() === want);
+        if (byName >= 0) return byName;
+        const asNum = parseInt(want, 10);
+        return Number.isFinite(asNum) ? asNum - 1 : -1;
+      }
+      const i = Math.round(Number(which) || 0) - 1;
+      return Number.isFinite(i) ? i : -1;
+    }
+
+    // Leave for another room, with the card in between.
+    function leaveFor(target, quiet) {
+      if (!(target >= 0 && target < stageList.length) || target === stageIndex) return false;
+      pendingStage = target;
+      cutLines = cutTextFor(stageList[target], target);
+      cutT = 0; state = 'cut';
+      if (!quiet) say('checkpoint');
+      return true;
     }
 
     function stageRules() {
@@ -362,6 +388,17 @@
             say('shoot');
             break;
           }
+          // A door. `goto 2` or `goto "the cave"` - the thing 26 of the
+          // sample project's events did and ours could not say at all.
+          case 'goto': leaveFor(findStage(args[0])); break;
+          // Move an actor by an amount rather than to a place.
+          case 'nudge': {
+            for (const e of tagged(args[0])) {
+              e.goal = { x: Math.max(0, Math.min((lvl.w - 1) * TILE, e.x + n(args[1]) * TILE)),
+                         y: Math.max(0, Math.min((lvl.h - 1) * TILE, e.y + n(args[2]) * TILE)) };
+            }
+            break;
+          }
           case 'print': if (scriptLog.length < 50) scriptLog.push(String(args[0]).slice(0, 80)); break;
         }
       },
@@ -443,7 +480,10 @@
       if (state === 'cut') {
         cutT += dt; elapsed += dt;
         for (const b of bubbles) b.t += dt;
-        if (cutT >= CUT_SECS) { loadStage(stageIndex + 1); state = 'play'; cutT = 0; }
+        if (cutT >= CUT_SECS) {
+          loadStage(pendingStage >= 0 ? pendingStage : stageIndex + 1);
+          pendingStage = -1; state = 'play'; cutT = 0;
+        }
         return;
       }
       if (state !== 'play') return;
@@ -646,10 +686,13 @@
       return lines;
     }
 
-    function finish() {
+    function finish(to) {
       const need = stageRules().collect || 0;
       const got = score - scoreAtStage;
       if (got < need) { message = `${need - got} TO GO`; messageAt = elapsed; return; }
+      // An exit may name where it goes, which is what makes a hub a hub
+      // rather than a corridor.
+      if (to !== undefined && to !== null && to !== '' && leaveFor(findStage(to))) return;
       if (stageIndex + 1 < stageList.length) {
         // Not won - moved on. Lives, score and keys come with you.
         cutLines = cutTextFor(stageList[stageIndex + 1], stageIndex + 1);
@@ -772,7 +815,7 @@
             effects.push({ kind: 'pop', x: e.x, y: e.y, t: 0 });
             fire('collect');
           } else if (d.goal) {
-            finish();
+            finish(e.to);
           } else if ((d.enemy || (d.bullet && e.foe)) && b.hurt <= 0) {
             if (d.bullet) { e.alive = false; die(b); }
             else if (mode === 'platform' && b.vy > 40 && b.y + b.h - b.vy * dt <= e.y + 4 && !d.still) {
@@ -1228,7 +1271,11 @@
       get stage() { return stageIndex; },
       get stages() { return stageList.length; },
       // Skip the card, for a studio that does not want to wait for it.
-      skipCut() { if (state === 'cut') { loadStage(stageIndex + 1); state = 'play'; cutT = 0; } },
+      skipCut() {
+        if (state !== 'cut') return;
+        loadStage(pendingStage >= 0 ? pendingStage : stageIndex + 1);
+        pendingStage = -1; state = 'play'; cutT = 0;
+      },
       goToStage(i) { loadStage(i); state = 'play'; cutT = 0; draw(); },
       snapshot() {
         const here = {

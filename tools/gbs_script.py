@@ -43,9 +43,10 @@ def num(a, default=0):
 
 
 class Ctx:
-    def __init__(self, actors=None, routines=None, self_tag=''):
+    def __init__(self, actors=None, routines=None, scenes=None, self_tag=''):
         self.actors = actors or {}          # actor id -> tag
         self.routines = routines or {}      # custom event id -> routine name
+        self.scenes = scenes or {}          # scene id -> room name
         self.self_tag = self_tag
         self.missing = Counter()
         self.used_routines = set()
@@ -86,6 +87,27 @@ def translate(nodes, ctx, depth=0):
         if name == 'TEXT':
             # The structure, not the words.
             out.append('talk ""')
+            continue
+
+        if name == 'SWITCH_SCENE':
+            room = ctx.scenes.get(args.get('sceneId'))
+            if room:
+                out.append(f'goto {_q(room)}')
+            else:
+                ctx.missing[name + ' (unknown room)'] += 1
+            continue
+
+        if name == 'ACTOR_MOVE_RELATIVE':
+            tag = ctx.tag(args.get('actorId'))
+            if tag:
+                out.append(f'nudge {_q(tag)} {num(args.get("x")):g} {num(args.get("y")):g}')
+            else:
+                ctx.missing[name + ' (player)'] += 1
+            continue
+
+        if name in ('DEC_VALUE', 'INC_VALUE'):
+            v = f'v{slug(args.get("variable"))}'
+            out.append(f'set {v} {v} {"-" if name == "DEC_VALUE" else "+"} 1')
             continue
 
         if name == 'SET_VALUE':
@@ -148,6 +170,7 @@ def translate(nodes, ctx, depth=0):
 
 ACTION_WORDS = {
     'wait': 'waits', 'talk': 'someone speaks', 'move': 'walks an actor somewhere',
+    'goto': 'leaves for another room', 'nudge': 'shifts an actor',
     'hide': 'takes an actor off stage', 'show': 'brings one back', 'face': 'turns one round',
     'shoot': 'fires', 'stop': 'stops one', 'set': 'remembers something',
     'if': 'checks something first', 'do': 'runs a routine',

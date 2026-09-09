@@ -120,7 +120,15 @@ def read_scripts(src):
         except Exception:
             pass
 
-    ctx = gbs_script.Ctx(actors=actors, routines=routines)
+    scenes = {}
+    for f in src.rglob('scenes/**/scene.gbsres'):
+        try:
+            d = json.loads(f.read_text(encoding='utf-8'))
+            scenes[d.get('id')] = d.get('name') or f.parent.name
+        except Exception:
+            pass
+
+    ctx = gbs_script.Ctx(actors=actors, routines=routines, scenes=scenes)
     out, seen = [], set()
 
     def take(nodes, event, self_tag, where):
