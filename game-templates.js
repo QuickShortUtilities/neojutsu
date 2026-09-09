@@ -1,8 +1,11 @@
 /* Starter games. Each one is plain JSON: a tilemap in rows of digits, a
    handful of entities, a rule, and optionally a script. That is the whole
-   format - no code, nothing to execute. */
+   format - no code, nothing to execute.
+   The later entries were authored by the studio's own generator from a
+   description and a fixed seed, then checked and frozen. */
 (() => {
   'use strict';
+  window.NeoGameCats = {"platformer": ["Platformer", "\u8df3"], "dungeon": ["Dungeon crawler", "\u8ff7"], "rpg": ["RPG", "\u7269"], "racing": ["Racing", "\u8d70"], "shooter": ["Shooter", "\u6483"], "adventure": ["Adventure", "\u5192"], "scifi": ["Sci-fi", "\u5b99"], "strategy": ["Strategy", "\u9663"], "twoplayer": ["Two player", "\u53cc"]};
   window.NeoGameTemplates = {
   "platformer": {
     "name": "Platformer",
@@ -116,7 +119,8 @@
     ],
     "rules": {
       "collect": 12
-    }
+    },
+    "cat": "platformer"
   },
   "dungeon": {
     "name": "Dungeon crawl",
@@ -221,7 +225,8 @@
     ],
     "rules": {
       "collect": 10
-    }
+    },
+    "cat": "dungeon"
   },
   "ice": {
     "name": "Ice cavern",
@@ -315,7 +320,8 @@
     "rules": {
       "collect": 10
     },
-    "script": "on start\n message \"SLIPPERY\"\nend\non hurt\n message \"CAREFUL\"\nend"
+    "script": "on start\n message \"SLIPPERY\"\nend\non hurt\n message \"CAREFUL\"\nend",
+    "cat": "platformer"
   },
   "tower": {
     "name": "Tower climb",
@@ -403,7 +409,8 @@
     "rules": {
       "collect": 0
     },
-    "script": "on start\n message \"CLIMB\"\nend\non collect\n if score >= 6\n  message \"NEARLY\"\n end\nend"
+    "script": "on start\n message \"CLIMB\"\nend\non collect\n if score >= 6\n  message \"NEARLY\"\n end\nend",
+    "cat": "platformer"
   },
   "factory": {
     "name": "Belt factory",
@@ -513,7 +520,8 @@
     "rules": {
       "collect": 12
     },
-    "script": "on start\n message \"SHOOT WITH X\"\nend\non kill\n give 1\nend"
+    "script": "on start\n message \"SHOOT WITH X\"\nend\non kill\n give 1\nend",
+    "cat": "shooter"
   },
   "boss": {
     "name": "Boss arena",
@@ -584,7 +592,8 @@
     "rules": {
       "collect": 0
     },
-    "script": "on start\n message \"CLEAR THEM ALL\"\nend\non tick\n if enemies == 0\n  open\n  message \"THE WAY IS OPEN\"\n end\nend\non kill\n shake 4\nend"
+    "script": "on start\n message \"CLEAR THEM ALL\"\nend\non tick\n if enemies == 0\n  open\n  message \"THE WAY IS OPEN\"\n end\nend\non kill\n shake 4\nend",
+    "cat": "shooter"
   },
   "maze": {
     "name": "Key maze",
@@ -675,7 +684,8 @@
       "collect": 8,
       "keys": 1
     },
-    "script": "on start\n message \"FIND THE KEY\"\nend\non collect\n if keys >= 1\n  message \"DOOR OPEN\"\n end\nend"
+    "script": "on start\n message \"FIND THE KEY\"\nend\non collect\n if keys >= 1\n  message \"DOOR OPEN\"\n end\nend",
+    "cat": "dungeon"
   },
   "sky": {
     "name": "Sky islands",
@@ -770,7 +780,8 @@
     "rules": {
       "collect": 10
     },
-    "script": "on start\n message \"DOUBLE JUMP\"\nend"
+    "script": "on start\n message \"DOUBLE JUMP\"\nend",
+    "cat": "platformer"
   },
   "dive": {
     "name": "Deep dive",
@@ -844,7 +855,8 @@
     "rules": {
       "collect": 0
     },
-    "script": "on start\n message \"GO DOWN\"\nend\non hurt\n shake 3\nend"
+    "script": "on start\n message \"GO DOWN\"\nend\non hurt\n shake 3\nend",
+    "cat": "adventure"
   },
   "rush": {
     "name": "Coin rush",
@@ -953,7 +965,583 @@
     "rules": {
       "collect": 14
     },
-    "script": "on start\n set left 45\n message \"45 SECONDS\"\nend\non tick\n every 1\n  set left left - 1\n  if left == 10\n   message \"10 LEFT\"\n  end\n  if left <= 0\n   lose\n  end\n end\nend\non collect\n if score >= 14\n  message \"RUN FOR IT\"\n end\nend"
+    "script": "on start\n set left 45\n message \"45 SECONDS\"\nend\non tick\n every 1\n  set left left - 1\n  if left == 10\n   message \"10 LEFT\"\n  end\n  if left <= 0\n   lose\n  end\n end\nend\non collect\n if score >= 14\n  message \"RUN FOR IT\"\n end\nend",
+    "cat": "racing"
+  },
+  "trial": {
+    "name": "Time trial",
+    "mode": "platform",
+    "seed": "trial7",
+    "sky0": "#1b2a5c",
+    "sky1": "#bfe9ff",
+    "player": {
+      "char": "hero",
+      "dash": true
+    },
+    "start": {
+      "x": 8,
+      "y": 72
+    },
+    "lives": 4,
+    "level": {
+      "w": 56,
+      "h": 18,
+      "tiles": "00000000000000000000000000000000000000000000000000000000\n00000000000000000000000000000000000000000000000000000000\n00000000000000000000000000000000000000000000000000000000\n00000000000000000000000000000000000000000000000000000000\n00000000000000000000000000000000000000000000000000000000\n00000000000000000000000000000000000000000000000000000000\n00000000000000000000000000000000000000000000000000000000\n00000000000000000000000000000033333000000000000000000000\n00000000000000000000000000000000000000000000000000000000\n00000000000000000000111111000000000000000000000000000000\n00000000000000000000111111000000000000000000001111111100\n11111110001111110000000000000111111100033330001111111100\n11111110001111110000000000000111111100000000000000000000\n00000000000000000000000000000111111100000000000000000000\n00000000000000000000000000000000000000111111000000000000\n00000000000000000000000000000000000000111111000000000000\n00000000000000000000000000000000000000000000000000000000\n00000000000000000000000000000000000000000000000000000000"
+    },
+    "entities": [
+      {
+        "type": "coin",
+        "x": 105,
+        "y": 81
+      },
+      {
+        "type": "coin",
+        "x": 321,
+        "y": 81
+      },
+      {
+        "type": "coin",
+        "x": 41,
+        "y": 81
+      },
+      {
+        "type": "coin",
+        "x": 409,
+        "y": 73
+      },
+      {
+        "type": "coin",
+        "x": 25,
+        "y": 81
+      },
+      {
+        "type": "coin",
+        "x": 89,
+        "y": 81
+      },
+      {
+        "type": "coin",
+        "x": 393,
+        "y": 73
+      },
+      {
+        "type": "coin",
+        "x": 377,
+        "y": 73
+      },
+      {
+        "type": "gem",
+        "x": 272,
+        "y": 80
+      },
+      {
+        "type": "chaser",
+        "x": 96,
+        "y": 72,
+        "dir": 1
+      },
+      {
+        "type": "heart",
+        "x": 48,
+        "y": 72
+      },
+      {
+        "type": "goal",
+        "x": 424,
+        "y": 64
+      },
+      {
+        "type": "coin",
+        "x": 385,
+        "y": 89
+      }
+    ],
+    "rules": {
+      "collect": 10,
+      "keys": 0
+    },
+    "script": "on start\n  message \"GOOD LUCK\"\n  set left 45\n  message \"45 SECONDS\"\nend\n\non tick\n  every 1\n    set left left - 1\n    if left == 10\n      message \"10 LEFT\"\n    end\n    if left <= 0\n      lose\n    end\n  end\nend\n\non collect\n  if score == 5\n    heal 1\n    message \"HAVE A LIFE\"\n  end\n  set pace 80 + score * 6\n  speed pace\n  if score == 5\n    message \"PICKING UP SPEED\"\n  end\nend",
+    "kanji": "\u8d70",
+    "cat": "racing"
+  },
+  "gauntlet": {
+    "name": "Gauntlet",
+    "mode": "platform",
+    "seed": "gaunt3",
+    "sky0": "#0d0a16",
+    "sky1": "#3a2a4a",
+    "player": {
+      "char": "robot",
+      "attack": true
+    },
+    "start": {
+      "x": 8,
+      "y": 80
+    },
+    "lives": 2,
+    "level": {
+      "w": 28,
+      "h": 16,
+      "tiles": "2222222222222222222222222222\n2222222222222222222222222222\n2222222222222222222222222222\n0000000000000000000000000000\n0000000000000000000000000000\n0000000000000000000000000000\n0000000000000000000000000000\n0000000000000000000000000000\n0000000000000000000003333300\n0000000000000000000000000000\n0000000000000000000000000000\n00fffffff000000000000fffff00\n1111111111aaaaa1111111111111\n1111111111111111111111111111\n1111111111111111111111111111\n1111111111111111111111111111"
+    },
+    "entities": [
+      {
+        "type": "coin",
+        "x": 169,
+        "y": 73
+      },
+      {
+        "type": "coin",
+        "x": 177,
+        "y": 57
+      },
+      {
+        "type": "coin",
+        "x": 137,
+        "y": 81
+      },
+      {
+        "type": "coin",
+        "x": 17,
+        "y": 73
+      },
+      {
+        "type": "flyer",
+        "x": 120,
+        "y": 80,
+        "dir": 1
+      },
+      {
+        "type": "turret",
+        "x": 176,
+        "y": 48,
+        "dir": -1
+      },
+      {
+        "type": "jumper",
+        "x": 120,
+        "y": 80,
+        "dir": 1
+      },
+      {
+        "type": "walker",
+        "x": 128,
+        "y": 80,
+        "dir": 1
+      },
+      {
+        "type": "heart",
+        "x": 184,
+        "y": 48
+      },
+      {
+        "type": "goal",
+        "x": 200,
+        "y": 48
+      },
+      {
+        "type": "coin",
+        "x": 65,
+        "y": 73
+      },
+      {
+        "type": "coin",
+        "x": 161,
+        "y": 97
+      },
+      {
+        "type": "coin",
+        "x": 177,
+        "y": 97
+      },
+      {
+        "type": "coin",
+        "x": 137,
+        "y": 97
+      }
+    ],
+    "rules": {
+      "collect": 8,
+      "keys": 0
+    },
+    "script": "on start\n  message \"BEGIN\"\n  set streak 0\nend\n\non hurt\n  shake 6\n  lose\n  set streak 0\nend\n\non collect\n  set streak streak + 1\n  if streak >= 4\n    give 2\n    message \"STREAK\"\n    set streak 0\n  end\nend",
+    "kanji": "\u6483",
+    "cat": "shooter"
+  },
+  "outpost": {
+    "name": "Outpost",
+    "mode": "platform",
+    "seed": "outp11",
+    "sky0": "#0a1830",
+    "sky1": "#4a7fa8",
+    "player": {
+      "char": "ninja",
+      "dash": true
+    },
+    "start": {
+      "x": 8,
+      "y": 96
+    },
+    "lives": 4,
+    "level": {
+      "w": 40,
+      "h": 18,
+      "tiles": "2222222222222222222222222222222222222222\n2222222222222222222222222222222222222222\n2222222222222222222222222222222222222222\n0000000000000000000000000000000000000000\n0000000000000000000000000000000000000000\n0000000000000000000000000000000000000000\n0000000000000000000000000000000000000000\n0000000000000000000000000000000000000000\n0000000000000000000000000000000000000000\n0000000000000000000033300000000000000000\n0033330000000003330000000000000000000000\n0000000000000000000000000000000000000000\n0000000000000000000000000000000000000000\n0000000000000000000000000000000000000000\n1100441144444411111111111111111111999991\n1111111111111111111111111111111111111111\n1111111111111111111111111111111111111111\n1111111111111111111111111111111111111111"
+    },
+    "entities": [
+      {
+        "type": "coin",
+        "x": 129,
+        "y": 73
+      },
+      {
+        "type": "coin",
+        "x": 169,
+        "y": 65
+      },
+      {
+        "type": "coin",
+        "x": 129,
+        "y": 97
+      },
+      {
+        "type": "coin",
+        "x": 25,
+        "y": 73
+      },
+      {
+        "type": "coin",
+        "x": 169,
+        "y": 97
+      },
+      {
+        "type": "gem",
+        "x": 208,
+        "y": 96
+      },
+      {
+        "type": "walker",
+        "x": 136,
+        "y": 64,
+        "dir": 1
+      },
+      {
+        "type": "heart",
+        "x": 272,
+        "y": 96
+      },
+      {
+        "type": "mover",
+        "x": 160,
+        "y": 32
+      },
+      {
+        "type": "goal",
+        "x": 296,
+        "y": 96
+      },
+      {
+        "type": "coin",
+        "x": 201,
+        "y": 97
+      },
+      {
+        "type": "coin",
+        "x": 161,
+        "y": 105
+      }
+    ],
+    "rules": {
+      "collect": 8,
+      "keys": 0
+    },
+    "script": "on start\n  message \"BEGIN\"\nend\n\non collect\n  set pace 80 + score * 6\n  speed pace\n  if score == 5\n    message \"PICKING UP SPEED\"\n  end\nend",
+    "kanji": "\u5b99",
+    "cat": "scifi"
+  },
+  "relic": {
+    "name": "Relic hunt",
+    "mode": "topdown",
+    "seed": "relic4",
+    "sky0": "#0a1424",
+    "sky1": "#2a5a7a",
+    "player": {
+      "char": "mage"
+    },
+    "start": {
+      "x": 24,
+      "y": 24
+    },
+    "lives": 3,
+    "level": {
+      "w": 30,
+      "h": 22,
+      "tiles": "111111111111111111111111111111\n111111111111111111111111111111\n110000000000010010000000000011\n110000400000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000004000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000000000000000000011\n11000000000000cc00000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000004000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n111111111111111111111111111111\n111111111111111111111111111111"
+    },
+    "entities": [
+      {
+        "type": "coin",
+        "x": 40,
+        "y": 24
+      },
+      {
+        "type": "coin",
+        "x": 72,
+        "y": 32
+      },
+      {
+        "type": "coin",
+        "x": 208,
+        "y": 64
+      },
+      {
+        "type": "coin",
+        "x": 208,
+        "y": 64
+      },
+      {
+        "type": "coin",
+        "x": 48,
+        "y": 128
+      },
+      {
+        "type": "coin",
+        "x": 40,
+        "y": 112
+      },
+      {
+        "type": "coin",
+        "x": 200,
+        "y": 120
+      },
+      {
+        "type": "coin",
+        "x": 200,
+        "y": 144
+      },
+      {
+        "type": "walker",
+        "x": 160,
+        "y": 88,
+        "dir": 1
+      },
+      {
+        "type": "chaser",
+        "x": 128,
+        "y": 64,
+        "dir": 1
+      },
+      {
+        "type": "key",
+        "x": 152,
+        "y": 32
+      },
+      {
+        "type": "goal",
+        "x": 152,
+        "y": 112
+      }
+    ],
+    "rules": {
+      "collect": 8,
+      "keys": 1
+    },
+    "script": "on start\n  message \"GOOD LUCK\"\n  message \"FIND THE KEY\"\n  set solid 1\nend\n\non collect\n  if keys >= 1\n    open\n    message \"IT OPENS\"\n  end\n  if score >= 10\n    message \"RUN\"\n    shake 5\n    speed 120\n    spawn \"chaser\" 4 12\n  end\nend\n\non tick\n  every 2\n    if solid == 1\n      tile 20 14 0\n      set solid 0\n    else\n      tile 20 14 1\n      set solid 1\n    end\n  end\nend",
+    "kanji": "\u5192",
+    "cat": "adventure"
+  },
+  "warren": {
+    "name": "The warren",
+    "mode": "topdown",
+    "seed": "warr9",
+    "sky0": "#0d0a16",
+    "sky1": "#241a30",
+    "player": {
+      "char": "beast"
+    },
+    "start": {
+      "x": 24,
+      "y": 24
+    },
+    "lives": 3,
+    "level": {
+      "w": 30,
+      "h": 22,
+      "tiles": "111111111111111111111111111111\n111111111111111111111111111111\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010410000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000040010010000000000011\n110000000000000000000000000011\n11000000000000cc00000000000011\n110000000000040010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n110000000000010010000000000011\n111111111111111111111111111111\n111111111111111111111111111111"
+    },
+    "entities": [
+      {
+        "type": "coin",
+        "x": 32,
+        "y": 64
+      },
+      {
+        "type": "coin",
+        "x": 32,
+        "y": 40
+      },
+      {
+        "type": "coin",
+        "x": 144,
+        "y": 64
+      },
+      {
+        "type": "coin",
+        "x": 144,
+        "y": 40
+      },
+      {
+        "type": "coin",
+        "x": 88,
+        "y": 120
+      },
+      {
+        "type": "coin",
+        "x": 64,
+        "y": 136
+      },
+      {
+        "type": "coin",
+        "x": 168,
+        "y": 136
+      },
+      {
+        "type": "coin",
+        "x": 200,
+        "y": 120
+      },
+      {
+        "type": "chaser",
+        "x": 120,
+        "y": 136,
+        "dir": 1
+      },
+      {
+        "type": "chaser",
+        "x": 24,
+        "y": 112,
+        "dir": 1
+      },
+      {
+        "type": "key",
+        "x": 152,
+        "y": 32
+      },
+      {
+        "type": "goal",
+        "x": 152,
+        "y": 112
+      },
+      {
+        "type": "coin",
+        "x": 97,
+        "y": 65
+      },
+      {
+        "type": "coin",
+        "x": 193,
+        "y": 65
+      }
+    ],
+    "rules": {
+      "collect": 10,
+      "keys": 1
+    },
+    "script": "on start\n  message \"GO\"\n  message \"FIND THE KEY\"\nend\n\non collect\n  if keys >= 1\n    open\n    message \"IT OPENS\"\n  end\n  if score == 5\n    heal 1\n    message \"HAVE A LIFE\"\n  end\nend",
+    "kanji": "\u7269",
+    "cat": "rpg"
+  },
+  "ascent": {
+    "name": "Ascent",
+    "mode": "platform",
+    "seed": "asc5",
+    "sky0": "#12002a",
+    "sky1": "#7a1236",
+    "player": {
+      "char": "knight",
+      "wallJump": true
+    },
+    "start": {
+      "x": 16,
+      "y": 240
+    },
+    "lives": 4,
+    "level": {
+      "w": 22,
+      "h": 34,
+      "tiles": "2000000000000000000002\n2000000000000000000002\n2000000000000000000002\n2000000000000000000002\n2000000000000000000002\n2000000000003333333332\n2000000000000000000002\n2000000000000000000002\n2888888888000000000002\n2000000000000000000002\n2000000000000000000002\n2000000000003333333332\n2000000000000000000002\n200000000b000000000002\n2333333333000000000002\n2000000000000000000002\n2000000000000000000002\n2000000000003333333332\n2000000000000000000002\n2000000000000000000002\n2333333333000000000002\n2000000000000000000002\n2000000000000000000002\n2000000000003333333332\n2000000000000000000002\n2000000000000000000002\n2333333333000000000002\n2000000000000000000002\n2000000000000000000002\n2000000000003333333332\n2000000000000000000002\n2000000000000000000002\n2111111111111111111112\n2111111111111111111112"
+    },
+    "entities": [
+      {
+        "type": "coin",
+        "x": 33,
+        "y": 201
+      },
+      {
+        "type": "coin",
+        "x": 57,
+        "y": 153
+      },
+      {
+        "type": "coin",
+        "x": 113,
+        "y": 33
+      },
+      {
+        "type": "coin",
+        "x": 121,
+        "y": 177
+      },
+      {
+        "type": "coin",
+        "x": 105,
+        "y": 129
+      },
+      {
+        "type": "coin",
+        "x": 113,
+        "y": 225
+      },
+      {
+        "type": "coin",
+        "x": 49,
+        "y": 105
+      },
+      {
+        "type": "gem",
+        "x": 16,
+        "y": 56
+      },
+      {
+        "type": "flyer",
+        "x": 80,
+        "y": 240,
+        "dir": 1
+      },
+      {
+        "type": "chaser",
+        "x": 32,
+        "y": 48,
+        "dir": 1
+      },
+      {
+        "type": "heart",
+        "x": 112,
+        "y": 24
+      },
+      {
+        "type": "goal",
+        "x": 152,
+        "y": 24
+      }
+    ],
+    "rules": {
+      "collect": 6,
+      "keys": 0
+    },
+    "script": "on start\n  message \"MOVE\"\n  message \"FIND THE KEY\"\n  set wave 0\nend\n\non collect\n  if keys >= 1\n    open\n    message \"IT OPENS\"\n  end\n  if score >= 10\n    message \"RUN\"\n    shake 5\n    speed 120\n    spawn \"chaser\" 4 12\n  end\nend\n\non tick\n  every 0.5\n    if y < 6\n      push 40 0\n    end\n  end\n  every 6\n    set wave wave + 1\n    spawn \"walker\" 30 12\n    if wave >= 2\n      spawn \"flyer\" 24 8\n    end\n    message \"WAVE \" + wave\n  end\nend",
+    "kanji": "\u767b",
+    "cat": "platformer"
   }
 };
 })();

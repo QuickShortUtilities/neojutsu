@@ -46,7 +46,7 @@
   function parse(src) {
     const toks = lex(src);
     const errors = [];
-    let p = 0;
+    let p = 0, everyId = 0;
     const peek = () => (toks[p] ? toks[p].v : null);
     const next = () => (toks[p] ? toks[p++].v : null);
     const skipNL = () => { while (peek() === '\n') p++; };
@@ -113,7 +113,9 @@
         const secs = expr();
         const body = block(['end']);
         expect('end');
-        return { k: 'every', secs, body, last: -1e9 };
+        // The timer lives in the script's variables, not on this node, so
+        // restarting the game restarts the clock too.
+        return { k: 'every', secs, body, id: everyId++ };
       }
       if (Object.prototype.hasOwnProperty.call(ACTIONS, t)) {
         const args = [];
@@ -203,8 +205,12 @@
             break;
           }
           case 'every': {
+            // Waits a full interval before the first run. Firing at zero made
+            // "every 3 seconds, flood a row" flood one before anyone had moved.
             const now = env.read('time'), gap = ev(st.secs, depth) || 1;
-            if (now - st.last >= gap) { st.last = now; exec(st.body, depth + 1); }
+            const key = '__every' + st.id;
+            const last = Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : 0;
+            if (now - last >= gap) { vars[key] = now; exec(st.body, depth + 1); }
             break;
           }
           case 'call': env.act(st.name, st.args.map(a => ev(a, depth))); break;

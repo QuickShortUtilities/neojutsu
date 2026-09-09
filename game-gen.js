@@ -355,18 +355,56 @@
     ents.push({ type: 'goal', x: gx * T, y: ((gy ?? h - 4) - 2) * T });
   }
 
+  // Scripts are assembled from the recipe library, so a generated game gets the
+  // same rules a person would pick rather than a thinner hand-written subset.
   function script(r, o, need) {
+    const lib = window.NeoRecipes;
     const parts = [`on start\n  message "${pick(r, ['GO', 'GOOD LUCK', 'BEGIN', 'MOVE'])}"\nend`];
-    if (o.timed) {
-      const secs = pick(r, [30, 45, 60, 90]);
-      parts.push(`on start\n  set left ${secs}\nend`);
-      parts.push('on tick\n  every 1\n    set left left - 1\n    if left == 10\n      message "10 LEFT"\n    end\n    if left <= 0\n      lose\n    end\n  end\nend');
-    }
-    if (o.boss) parts.push('on tick\n  if enemies == 0\n    open\n    message "THE WAY IS OPEN"\n  end\nend');
-    if (o.mech === 'doors') parts.push('on collect\n  if keys >= 1\n    message "DOOR OPEN"\n  end\nend');
-    if (r() < .4) parts.push('on hurt\n  shake 3\nend');
-    return parts.join('\n');
+    const chosen = [];
+    const take = id => { const rec = lib && lib.byId(id); if (rec && !chosen.includes(id)) { chosen.push(id); parts.push(rec.code); } };
+
+    if (o.timed) take('timer');
+    if (o.boss) take('bossgate');
+    if (o.mech === 'doors') take('jailbreak');
+    if (o.theme === 'volcano' && r() < .5) take('rising');
+    if (o.difficulty === 2 && r() < .35) take('sudden');
+    if (o.shape === 'tower' && r() < .5) take('nudge');
+
+    // then one or two for flavour, so no two generated games read alike
+    const flavour = ['speedup', 'moon', 'waves', 'halfway', 'panic', 'combo', 'guide', 'blink'];
+    const extra = 1 + Math.floor(r() * 2);
+    for (let i = 0; i < extra; i++) take(pick(r, flavour));
+
+    return lib ? lib.merge(parts) : parts.join('\n');
   }
+
+  // Nobody should die before they have moved. Clears anything harmful around
+  // the spawn, makes sure there is something to stand on, and pushes enemies
+  // out of arm's reach.
+  function makeStartSafe(built, o) {
+    const { w, h } = o;
+    const g = built.g;
+    const sx = Math.floor(built.start.x / T), sy = Math.floor(built.start.y / T);
+    const harmful = new Set(['4', '6', 'e', 'c']);
+    for (let y = sy - 1; y <= sy + 2; y++)
+      for (let x = sx - 1; x <= sx + 2; x++)
+        if (g[y] && harmful.has(g[y][x])) g[y][x] = '0';
+    // something solid under the feet, and headroom above them
+    const foot = sy + 2;
+    let landed = false;
+    for (let y = foot; y < h; y++) if (g[y] && g[y][sx] !== '0' && !harmful.has(g[y][sx])) { landed = true; break; }
+    if (!landed && g[Math.min(h - 1, foot)]) {
+      for (let x = Math.max(0, sx - 1); x <= Math.min(w - 1, sx + 1); x++) g[Math.min(h - 1, foot)][x] = '1';
+    }
+    for (let y = sy - 1; y <= sy + 1; y++)
+      for (let x = sx; x <= sx + 1; x++)
+        if (g[y] && g[y][x] === '1' || (g[y] && g[y][x] === '2')) g[y][x] = '0';
+    built.ents = built.ents.filter(e => {
+      if (!ENEMY_TYPES.has(e.type)) return true;
+      return Math.hypot(e.x - built.start.x, e.y - built.start.y) > 5 * T;
+    });
+  }
+  const ENEMY_TYPES = new Set(['walker', 'flyer', 'chaser', 'jumper', 'turret', 'spike']);
 
   function generate(prompt, seed) {
     const want = read(prompt);
@@ -394,6 +432,7 @@
         populate(r, o, built);
       }
     }
+    makeStartSafe(built, { w, h });
     const keys = built.ents.filter(e => e.type === 'key').length;
     // If a number of pickups was asked for, make sure that many exist rather
     // than quietly settling for however many the level happened to get.

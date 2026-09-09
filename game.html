@@ -61,7 +61,12 @@
       </div>
 
       <h2 class="panel-title"><span class="k">戯</span> Game</h2>
-      <label class="field"><span>Start from</span><select id="g-template"></select></label>
+      <label class="field"><span>Start from</span>
+        <button type="button" class="picker-btn" id="g-pick-open" aria-haspopup="dialog">
+          <span id="g-pick-name">Platformer</span><span class="picker-chevron">▦</span>
+        </button>
+      </label>
+      <select id="g-template" hidden aria-hidden="true" data-neo="skip" tabindex="-1"></select>
       <label class="field"><span>Hero</span><select id="g-char"></select></label>
       <div class="two-up">
         <label class="field"><span>Lives</span>
@@ -123,6 +128,18 @@
     <section class="panel stage" aria-label="Game">
       <div class="stage-frame game-frame">
         <canvas id="g-canvas" width="160" height="144" aria-label="Game"></canvas>
+        <div class="picker" id="g-picker" role="dialog" aria-label="Choose a game" hidden>
+          <div class="picker-head">
+            <span class="eyebrow" id="g-picker-title">CHOOSE A GAME</span>
+            <span class="picker-count" id="g-picker-count"></span>
+            <button class="mini" id="g-picker-close" type="button">Close</button>
+          </div>
+          <div class="picker-cats" id="g-picker-cats" role="tablist" aria-label="Kinds of game"></div>
+          <div class="picker-body">
+            <div class="picker-grid" id="g-picker-grid"></div>
+            <button class="picker-more" id="g-picker-more" type="button" aria-label="Scroll for more" hidden>▾</button>
+          </div>
+        </div>
       </div>
       <div class="stage-bar">
         <span class="stage-meta" id="g-meta">—</span>
@@ -144,15 +161,59 @@
 
       <div class="lookbar codebar">
         <h2 class="panel-title"><span class="k">記</span> Rules &amp; script
-          <span class="code-hint">runs inside the game — no JavaScript, no access to the page</span>
+          <span class="code-hint">a language for game logic, sealed inside the game so nothing you write can break anything else</span>
         </h2>
+        <p class="hint">Pick a rule to drop in, build one from the menus, or write your own.
+          Recipes merge into what is already there.</p>
+        <div class="recipes" id="g-recipes"></div>
+
+        <div class="builder">
+          <label class="field"><span>When</span>
+            <select id="b-event">
+              <option value="start">the game starts</option>
+              <option value="tick" selected>while playing</option>
+              <option value="collect">something is collected</option>
+              <option value="hurt">the player is hurt</option>
+              <option value="kill">an enemy dies</option>
+            </select>
+          </label>
+          <label class="field"><span>If</span>
+            <select id="b-what">
+              <option value="">always</option>
+              <option value="score">score</option><option value="keys">keys</option>
+              <option value="lives">lives</option><option value="time">time</option>
+              <option value="enemies">enemies left</option><option value="coins">coins left</option>
+              <option value="x">x position</option><option value="y">y position</option>
+            </select>
+          </label>
+          <label class="field"><span>&nbsp;</span>
+            <select id="b-op"><option value=">=">is at least</option><option value="<=">is at most</option>
+              <option value="==">is exactly</option></select>
+          </label>
+          <label class="field"><span>&nbsp;</span>
+            <input type="number" id="b-val" value="5" min="0" max="999" aria-label="Value">
+          </label>
+          <label class="field"><span>Then</span>
+            <select id="b-do">
+              <option value="message">say something</option><option value="open">open the doors</option>
+              <option value="win">win</option><option value="lose">lose</option>
+              <option value="give">give points</option><option value="heal">give a life</option>
+              <option value="shake">shake the screen</option><option value="speed">change speed</option>
+              <option value="gravity">change gravity</option><option value="spawn">spawn an enemy</option>
+            </select>
+          </label>
+          <label class="field"><span>&nbsp;</span>
+            <input type="text" id="b-arg" value="NICE" maxlength="24" aria-label="Value">
+          </label>
+          <button class="mini" id="b-add" type="button">Add rule</button>
+        </div>
+
         <div class="code-grid">
           <div class="code-main">
 
-            <p class="hint">A tiny language of its own — no JavaScript, no access to
-              the page or the network. Read <b>score keys lives time x y enemies coins
-              grounded facing random</b>; do <b>message win lose open give heal hurt
-              spawn tile warp push gravity speed shake print</b>.</p>
+            <p class="hint">Write the rules of your game: timers, waves, rising lava, doors that
+          open on a condition, anything that happens because something else did. It runs sealed
+          inside the game, so however wild the rules get, nothing outside can be touched.</p>
             <textarea id="g-script" spellcheck="false" rows="10"
               placeholder="on start&#10;  message &quot;GO&quot;&#10;end&#10;&#10;on collect&#10;  if score >= 5&#10;    open&#10;  end&#10;end"></textarea>
             <div class="cloud-actions">
@@ -264,6 +325,7 @@
   <script src="game-script.js"></script>
   <script src="game-engine.js"></script>
   <script src="game-templates.js"></script>
+  <script src="game-recipes.js"></script>
   <script src="game-gen.js"></script>
   <script src="game.js"></script>
 </body>

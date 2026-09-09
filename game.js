@@ -345,6 +345,158 @@
     play();
   }
 
+  // ---------- the game picker ----------
+  // A grid of games that are actually running, rather than a dropdown of names.
+  const TILE_W = 116;
+  let pickerOpen = false, tiles = [], pRaf = 0, pLast = 0, pickerCat = 'all';
+
+  function buildPickerCats() {
+    const host = $('g-picker-cats'); host.innerHTML = '';
+    const counts = {};
+    for (const t of Object.values(window.NeoGameTemplates)) counts[t.cat || 'other'] = (counts[t.cat || 'other'] || 0) + 1;
+    const cats = window.NeoGameCats || {};
+    const entries = [['all', ['All', '全']]].concat(
+      Object.entries(cats).map(([k, v]) => [k, v]));
+    for (const [key, [label, kanji]] of entries) {
+      const n = key === 'all' ? Object.keys(window.NeoGameTemplates).length : (counts[key] || 0);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'picker-cat' + (key === pickerCat ? ' current' : '') + (n ? '' : ' empty');
+      b.dataset.cat = key;
+      b.innerHTML = `<span class="pc-k">${kanji}</span>${label}<i>${n || 'soon'}</i>`;
+      if (n) b.addEventListener('click', () => { pickerCat = key; buildPickerCats(); buildPickerGrid(); });
+      else b.disabled = true;
+      host.append(b);
+    }
+  }
+
+  function buildPickerGrid() {
+    const grid = $('g-picker-grid'); grid.innerHTML = ''; tiles = [];
+    const c = cfg();
+    const [bw, bh] = window.NeoPalette.PALETTES[c.chip].size;
+    const th = Math.max(30, Math.round(TILE_W * bh / bw));
+    let shown = 0;
+    for (const [key, t] of Object.entries(window.NeoGameTemplates)) {
+      if (pickerCat !== 'all' && (t.cat || 'other') !== pickerCat) continue;
+      shown++;
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'picker-tile' + (key === $('g-template').value ? ' current' : '');
+      tile.dataset.game = key;
+      const cv = document.createElement('canvas'); cv.width = TILE_W; cv.height = th;
+      const label = document.createElement('span');
+      label.textContent = `${t.kanji || ''} ${t.name}`.trim();
+      tile.append(cv, label);
+      tile.addEventListener('click', () => {
+        $('g-template').value = key;
+        $('g-pick-name').textContent = t.name;
+        closePicker();
+        build(JSON.parse(JSON.stringify(t)));
+        save();
+      });
+      grid.append(tile);
+      try {
+        const ctx2 = cv.getContext('2d', { willReadFrequently: true });
+        const game = window.NeoGame.create(cv, JSON.parse(JSON.stringify(t)), { hud: false });
+        tiles.push({ ctx: ctx2, game, w: TILE_W, h: th });
+      } catch {}
+    }
+    $('g-picker-count').textContent = `${shown} of ${Object.keys(window.NeoGameTemplates).length}`;
+    requestAnimationFrame(syncPickerScroll);
+  }
+
+  function syncPickerScroll() {
+    const grid = $('g-picker-grid'), body = grid.parentElement;
+    const more = grid.scrollHeight - grid.clientHeight - grid.scrollTop > 4;
+    body.classList.toggle('more', more);
+    $('g-picker-more').hidden = !more;
+  }
+
+  function pickerLoop(now) {
+    if (!pickerOpen) return;
+    pRaf = requestAnimationFrame(pickerLoop);
+    const dt = Math.min(.06, (now - pLast) / 1000 || 0); pLast = now;
+    const c = cfg();
+    for (const t of tiles) {
+      // nudge each one along so the grid is alive without anyone playing it
+      t.game.input.right = true;
+      t.game.tick(dt);
+      window.NeoPalette.snap(t.ctx, t.w, t.h, { chip: c.chip, dither: c.dither, dithAmt: .6 });
+    }
+  }
+  function openPicker() {
+    pickerOpen = true; pLast = 0;
+    $('g-picker').hidden = false;
+    buildPickerCats(); buildPickerGrid();
+    cancelAnimationFrame(pRaf); pRaf = requestAnimationFrame(pickerLoop);
+  }
+  function closePicker() {
+    pickerOpen = false; cancelAnimationFrame(pRaf);
+    $('g-picker').hidden = true;
+    for (const t of tiles) { try { t.game.stop(); } catch {} }
+    tiles = []; $('g-picker-grid').innerHTML = '';
+  }
+
+  // ---------- recipes and the rule builder ----------
+  function addScript(code) {
+    const box = $('g-script');
+    const current = box.value.trim();
+    // Merge rather than append: two rules that both use `on tick` have to end
+    // up in one event, or the second silently replaces the first.
+    box.value = current ? window.NeoRecipes.merge([current, code]) : code;
+    applyScript();
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function buildRecipes() {
+    const host = $('g-recipes');
+    if (!host || !window.NeoRecipes) return;
+    host.innerHTML = '';
+    for (const r of window.NeoRecipes.list) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'recipe'; b.title = r.blurb;
+      b.innerHTML = `<span class="rk">${r.kanji}</span>${r.name}`;
+      b.addEventListener('click', () => { addScript(r.code); cloudStatus?.(''); });
+      host.append(b);
+    }
+  }
+
+  // Turn the menus into a rule. The point is that nobody has to remember the
+  // shape of an if-block to get started.
+  function builderCode() {
+    const ev = $('b-event').value, what = $('b-what').value;
+    const op = $('b-op').value, val = $('b-val').value || '0';
+    const act = $('b-do').value, arg = $('b-arg').value.trim();
+    let doLine;
+    switch (act) {
+      case 'message': doLine = `message "${(arg || 'NICE').replace(/"/g, '').slice(0, 24).toUpperCase()}"`; break;
+      case 'spawn':   doLine = `spawn "${/^[a-z]+$/.test(arg) ? arg : 'walker'}" 20 10`; break;
+      case 'open': case 'win': case 'lose': doLine = act; break;
+      default:        doLine = `${act} ${parseFloat(arg) || (act === 'speed' ? 120 : act === 'gravity' ? 400 : 1)}`;
+    }
+    const inner = what ? `  if ${what} ${op} ${val}
+    ${doLine}
+  end` : `  ${doLine}`;
+    // "while playing" fires every frame, so a bare action there needs a pace.
+    const body = (ev === 'tick' && !what) ? `  every 2
+  ${doLine}
+  end` : inner;
+    return `on ${ev}
+${body}
+end`;
+  }
+
+  function syncBuilderArg() {
+    const act = $('b-do').value, arg = $('b-arg');
+    const numeric = ['give', 'heal', 'shake', 'speed', 'gravity'];
+    if (act === 'message') { arg.type = 'text'; arg.placeholder = 'NICE'; if (!arg.value) arg.value = 'NICE'; }
+    else if (act === 'spawn') { arg.type = 'text'; arg.placeholder = 'walker'; arg.value = 'walker'; }
+    else if (numeric.includes(act)) { arg.type = 'number'; arg.value = act === 'speed' ? 120 : act === 'gravity' ? 400 : 1; }
+    arg.disabled = ['open', 'win', 'lose'].includes(act);
+    const hasCond = !!$('b-what').value;
+    $('b-op').disabled = !hasCond; $('b-val').disabled = !hasCond;
+  }
+
   // ---------- undo ----------
   // The level and its pieces are small, so history is whole snapshots rather
   // than a diff - simpler, and impossible to get subtly wrong.
@@ -742,6 +894,7 @@ present();
     for (const [key, t] of Object.entries(window.NeoGameTemplates)) {
       const o = document.createElement('option'); o.value = key; o.textContent = `${t.kanji} ${t.name}`; tsel.append(o);
     }
+    if ($('g-pick-name')) $('g-pick-name').textContent = (window.NeoGameTemplates[tsel.value] || {}).name || 'Platformer';
     for (const id of ['g-intro', 'g-outro']) {
       const sel = $(id);
       for (const [key, def] of Object.entries(window.NeoScene.SCENES)) {
@@ -762,6 +915,13 @@ present();
 
     $('g-play').addEventListener('click', toggle);
     $('g-reset').addEventListener('click', () => { game.reset(); present(); readout(); });
+    $('g-pick-open').addEventListener('click', () => pickerOpen ? closePicker() : openPicker());
+    $('g-picker-close').addEventListener('click', closePicker);
+    $('g-picker-grid').addEventListener('scroll', syncPickerScroll);
+    $('g-picker-more').addEventListener('click', () => {
+      const g = $('g-picker-grid'); g.scrollBy({ top: g.clientHeight * .8, behavior: 'smooth' });
+    });
+    addEventListener('keydown', e => { if (e.key === 'Escape' && pickerOpen) closePicker(); });
     $('g-template').addEventListener('change', () => {
       const t = window.NeoGameTemplates[$('g-template').value];
       if (t) { build(t); save(); }
@@ -784,6 +944,10 @@ present();
         save();
       });
     $('g-title').addEventListener('input', save);
+    buildRecipes(); syncBuilderArg();
+    $('b-do').addEventListener('change', syncBuilderArg);
+    $('b-what').addEventListener('change', syncBuilderArg);
+    $('b-add').addEventListener('click', () => addScript(builderCode()));
     $('g-generate').addEventListener('click', () => runGenerate($('g-prompt').value));
     $('g-surprise').addEventListener('click', () => {
       const p = SURPRISES[Math.floor(Math.random() * SURPRISES.length)];

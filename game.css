@@ -83,3 +83,30 @@
 .ref-h { font-family: var(--pixel); font-size: 8px; color: var(--magenta); margin: 0 0 5px; letter-spacing: 1px; }
 .ref-l { font-family: var(--mono); font-size: 10px; line-height: 1.8; color: var(--muted); margin: 0 0 14px; }
 .ref-l b { color: var(--cyan); font-weight: 400; }
+
+/* recipes and the rule builder */
+.recipes { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+.recipe {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  background: #0b0913; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); font-size: 11px; padding: 6px 12px 6px 8px;
+}
+.recipe:hover { border-color: var(--cyan); color: var(--text); }
+.recipe .rk { font-family: var(--kanji); font-weight: 900; font-size: 13px; color: #6b5b8f; line-height: 1; }
+.recipe:hover .rk { color: var(--magenta); }
+.builder {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px;
+  background: #0b0913; border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 14px 4px; margin-bottom: 16px;
+}
+.builder .field { margin-bottom: 8px; min-width: 120px; }
+.builder .field > span { font-size: 9px; }
+.builder input[type=number], .builder input[type=text] {
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 5px;
+  color: var(--text); font-family: var(--mono); font-size: 12px; padding: 9px 10px; width: 100%;
+}
+.builder input:focus { outline: none; border-color: var(--cyan); }
+.builder > .mini { margin-bottom: 8px; }
+.picker-cat.empty { opacity: .45; cursor: default; }
+.picker-cat.empty i { color: var(--yellow); }
+.game-frame .picker { background: rgba(7,6,12,.97); }
