@@ -85,7 +85,10 @@ def worlds_in(path):
 
     def dig(name, data, depth=0):
         low = name.lower()
-        if low.endswith('.zzt'):
+        # Super ZZT keeps its own extension, and looking only for .zzt found
+        # five hundred ordinary worlds in the Super ZZT pack and not one of
+        # the eighty-three it was there for.
+        if low.endswith(('.zzt', '.szt')):
             out.append((name, data))
             return
         if depth > 3 or not low.endswith('.zip'):

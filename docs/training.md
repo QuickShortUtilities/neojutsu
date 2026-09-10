@@ -17,6 +17,7 @@ tools/find_sources.py    GitHub -> GB Studio projects worth fetching
 tools/find_itch.py       itch.io jams and tags -> sources, and descriptions
 tools/fetch_sources.py   those -> ~/neojutsu-sources
 tools/import_zzt.py      ZZT worlds -> overhead levels              -> data/study/
+tools/import_knytt.py    Knytt Stories levels -> side-on levels      -> data/study/
 tools/import_vglc.py     the Video Game Level Corpus -> levels       -> data/study/
 tools/import_puzzlescript.py  PuzzleScript games -> rooms           -> data/study/
 tools/vocab_gap.py       real descriptions -> the words we ignore
@@ -36,11 +37,21 @@ of downloaded worlds, which is not regenerable if a source goes offline, so
 they have a home of their own:
 
 ```
-~/neojutsu-sources    GB Studio projects, one folder each   (fetch_sources.py)
-~/neojutsu-corpus/zzt        the Museum of ZZT mass downloads
-~/neojutsu-corpus/vglc       TheVGLC, as its repository zip
-~/neojutsu-corpus/puzzlescript   the demo games
+/Users/christophercohen/Midi/GAME DEV/NEOJUTSU CORPUS/
+  gb-studio-projects/   published GB Studio games, one folder each
+  zzt/                  the Museum of ZZT: every year, featured, Super ZZT, Weave, ZIG
+  knytt-stories/        every user-made Knytt Stories level, to July 2019
+  megazeux/             the DigitalMZX archive
+  vglc/                 TheVGLC, as its repository zip
+  boxoban/              DeepMind's Sokoban levels
+  bitsy/                the Bitsy game-data archive
+  puzzlescript/         the demo games
+  derived/              what the importers made of it, and what itch.io gave
+  README.md             what each is, and whose it is
 ```
+
+That folder has its own README covering the licence of each source. It runs
+to about fifteen gigabytes.
 
 Neither folder is backed up by anything here. If these matter, back them up:
 every tool can fetch again today, and no tool can fetch a page that has been
@@ -86,6 +97,22 @@ some of it is worth nothing, so:
   The same level with five different descriptions is five examples.
 - **Prompts that produced nothing good.** Even without a fixed game, the
   prompt tells you where the vocabulary is thin.
+
+- **Knytt Stories, for the side-on half.** ZZT gave this corpus its overhead
+  levels; Knytt Stories is the same thing one axis over - a 2007 platformer
+  whose players kept making levels for fifteen years, archived complete - and
+  side-on is where the imported half is thinnest. What travels is the
+  geometry: a Knytt level's cast is objects whose meaning depends on which
+  bank they came from and on the level's own scripting, and none of that
+  survives, while its walls do. So the collision layer is read, cut into
+  level-sized pieces, and furnished with this engine's own cast, which is
+  what `import_gbstudio.py` already does with a GB Studio scene.
+
+  Which of the four tile layers collides is a convention rather than
+  something the file records, so the importer asks each level instead of
+  guessing: the player start is an object, a player stands on ground, and the
+  layer with something solid under the start and nothing at it is the one
+  doing the work. Every screen with a start in it gets a vote.
 
 - **The jams, through itch.io.** `find_sources.py` searches GitHub, which
   finds a repository only if somebody tagged it - and a jam entry is usually
@@ -212,10 +239,12 @@ here - it is about whose they are.
 | `data/imported.jsonl` | levels you wrote | yours |
 | `data/study/zzt.jsonl` | ZZT worlds, 1991 onwards | none stated by anybody |
 | `data/study/vglc.jsonl` | Super Mario Bros, Kid Icarus, Lode Runner and the rest | Nintendo's, Capcom's, Broderbund's |
+| `data/study/knytt.jsonl` | Knytt Stories levels, thousands of them | none stated by anybody |
 | `data/study/puzzlescript.jsonl` | PuzzleScript demo games | the repository's, MIT |
 
 The Museum of ZZT preserves more than four thousand community worlds and
-states no licence for any of them. The VGLC is published for research, which
+states no licence for any of them; the Knytt Stories and MegaZeux archives
+are the same story with different games. The VGLC is published for research, which
 is a well-worn path, and transcribing a commercial game's levels does not
 make them yours. Training on either at home is one question; shipping a model
 to the public that learned from them is a different question with a different

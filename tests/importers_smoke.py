@@ -103,6 +103,31 @@ if not spec2 or spec2['start'] != {'x': 11 * 8, 'y': 8 * 8}:
     issues.append(f'a player kept only in the stat list was lost: {spec2 and spec2["start"]}')
 
 
+# Both shapes of world, told apart by their first two bytes, and both
+# extensions collected. Looking only for .zzt found five hundred ordinary
+# worlds inside the Super ZZT pack and none of the ones it exists for.
+report['zzt']['shapes'] = {
+    'zzt': (Z.shape_of(struct.pack('<hh', -1, 0) + bytes(600)) or {}).get('name'),
+    'super': (Z.shape_of(struct.pack('<hh', -2, 0) + bytes(1200)) or {}).get('name'),
+    'neither': Z.shape_of(struct.pack('<hh', 7, 0) + bytes(600)),
+}
+if report['zzt']['shapes']['zzt'] != 'ZZT':
+    issues.append('a ZZT world was not recognised as one')
+if report['zzt']['shapes']['super'] != 'Super ZZT':
+    issues.append('a Super ZZT world was not recognised as one')
+if report['zzt']['shapes']['neither'] is not None:
+    issues.append('something that is not a world was taken for one')
+with tempfile.TemporaryDirectory() as td:
+    d = Path(td)
+    (d / 'a.zzt').write_bytes(zzt_world())
+    (d / 'b.szt').write_bytes(struct.pack('<hh', -2, 0) + bytes(1200))
+    (d / 'c.doc').write_bytes(b'not a world at all')
+    names = sorted(n for n, _ in Z.worlds_in(d))
+    report['zzt']['collected'] = names
+    if names != ['a.zzt', 'b.szt']:
+        issues.append(f'the wrong files were collected: {names}')
+
+
 # ---------- VGLC ----------
 legend = {
     '-': ['passable', 'empty'],
