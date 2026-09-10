@@ -1764,7 +1764,8 @@ for (const b of p.querySelectorAll('button')) {
 }
 
 window.addEventListener('load', () => {
-  g = window.NeoEngine.make(D.spec, null, { seed: 1 });
+  g = window.NeoGame.create(low, D.spec, {onFrame: present,
+      onEvent: n => { if (window.NeoSfx) window.NeoSfx.play(n); }});
   if (D.intro) g.setScript('intro', D.intro);
   if (D.outro) g.setScript('outro', D.outro);
   sceneState = g.snapshot();
