@@ -1513,7 +1513,7 @@ end`;
     if (!cloudId) { cloudStatus('Save the game first.'); return; }
     try {
       const r = await window.NeoCloud.setPublic(cloudId, true);
-      const link = `${location.origin}/game.html?p=${cloudId}`;
+      const link = `${location.origin}/play.html?p=${cloudId}`;
       try { await navigator.clipboard.writeText(link); cloudStatus(`Link copied — ${link}`); }
       catch { cloudStatus(`Playable at ${link}`); }
       return r;
@@ -1547,31 +1547,385 @@ end`;
     } finally { btn.disabled = false; btn.textContent = was; }
   }
 
-    async function packageGame() {
+      async function exportWeb() {
     const btn = $('g-package');
-    btn.disabled = true; const was = btn.textContent; btn.textContent = 'Linking…';
+    btn.disabled = true; const was = btn.textContent; btn.textContent = 'Writing…';
     try {
-      if (!cloudId) {
-        cloudStatus('Saving game to cloud first...');
-        await cloudSave(false);
-      }
-      if (!cloudId) throw new Error('Could not save to cloud');
-      
-      const r = await window.NeoCloud.setPublic(cloudId, true);
-      const link = `${location.origin}/play.html?p=${cloudId}`;
-      try {
-        await navigator.clipboard.writeText(link);
-        cloudStatus(`Link copied to clipboard! ${link}`);
-      } catch {
-        cloudStatus(`Playable at: ${link}`);
-      }
-      window.open(link, '_blank');
+      const c = cfg();
+      const track = window.NeoStudio?.track;
+      const payload = {
+        spec: game.snapshot(),
+        title: c.title || 'neojutsu-game',
+        chip: c.chip, dither: c.dither, zoom: c.zoom,
+        pattern: track ? track.pattern : null,
+        intro: c.intro.secs > 0 ? c.intro : null,
+        outro: c.outro.secs > 0 ? c.outro : null,
+      };
+      const html = PACKAGE_HTML
+        .replace('/*__ENGINE__*/', src.join('\n'))
+        .replace('/*__PAYLOAD__*/', JSON.stringify(payload).replace(/</g, '\\u003c'));
+      const blob = new Blob([html], { type: 'text/html' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${(c.title || 'neojutsu-game').replace(/[^\w.-]+/g, '-')}.html`;
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      cloudStatus(`Packaged ${a.download} · ${(blob.size / 1024).toFixed(0)} KB · send it to anyone`);
     } catch (e) {
-      cloudStatus(`Could not share: ${e.message}`);
+      cloudStatus(`Could not package: ${e.message}. Packaging needs the site to be served, not opened from a file.`);
     } finally { btn.disabled = false; btn.textContent = was; }
   }
 
+  const PACKAGE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEO術 game</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+body.play-mode {
+  background: #07060c;
+  color: #ece8f5;
+  font-family: 'Press Start 2P', monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 0;
+  min-height: 100vh;
+}
 
+.play-mode h1 {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #2ef2ff;
+  margin: 0;
+}
+
+.play-mode canvas {
+  image-rendering: pixelated;
+  box-shadow: 0 0 0 2px #2a2340;
+  border-radius: 4px;
+  touch-action: none;
+  display: block;
+}
+
+.play-mode p {
+  font-size: 7px;
+  color: #9a92b3;
+  margin: 0;
+  text-align: center;
+  line-height: 1.9;
+}
+
+.play-mode button {
+  font-family: inherit;
+  font-size: 9px;
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: transform 0.1s;
+}
+
+.play-mode button:active {
+  filter: brightness(0.8);
+  transform: scale(0.96);
+}
+
+#console {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  background: #181522;
+  padding: 40px 60px;
+  border-radius: 40px;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.8), inset 0 5px 15px rgba(255,255,255,0.05);
+}
+
+#screen-bezel {
+  background: #000;
+  padding: 25px 25px 40px 25px;
+  border-radius: 15px 15px 40px 15px;
+  position: relative;
+  box-shadow: inset 0 0 20px #2a2340;
+}
+
+#power-light {
+  position: absolute;
+  bottom: 15px;
+  left: 15px;
+  width: 6px;
+  height: 6px;
+  background: #ff2e88;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #ff2e88;
+}
+
+#dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 40px);
+  grid-template-rows: repeat(3, 40px);
+  gap: 0px;
+}
+
+#dpad button {
+  background: #222;
+  color: #555;
+}
+
+#dpad button:nth-child(1) { grid-area: 2/1; border-radius: 10px 0 0 10px; }
+#dpad button:nth-child(2) { grid-area: 1/2; border-radius: 10px 10px 0 0; }
+#dpad button:nth-child(3) { grid-area: 3/2; border-radius: 0 0 10px 10px; }
+#dpad button:nth-child(4) { grid-area: 2/3; border-radius: 0 10px 10px 0; }
+
+#action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+#ab {
+  display: flex;
+  gap: 15px;
+  transform: rotate(-15deg);
+}
+
+#ab button {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: #ff2e88;
+  color: #ffb3d9;
+  box-shadow: inset -3px -3px 8px rgba(0,0,0,0.4), inset 3px 3px 8px rgba(255,255,255,0.2), 0 5px 10px rgba(0,0,0,0.5);
+}
+
+#start-select {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  transform: rotate(-15deg);
+  margin-top: 10px;
+}
+
+.pill-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#start-select button {
+  width: 35px;
+  height: 12px;
+  border-radius: 6px;
+  background: #333;
+  color: transparent;
+  box-shadow: inset -1px -1px 3px rgba(0,0,0,0.6), inset 1px 1px 3px rgba(255,255,255,0.1);
+}
+
+.btn-label {
+  display: block;
+  font-size: 6px;
+  color: #9a92b3;
+  text-align: center;
+  margin-top: 4px;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 1px;
+}
+
+@media(max-width: 800px) {
+  #console {
+    flex-direction: column;
+    padding: 30px;
+    border-radius: 30px;
+    gap: 20px;
+  }
+  #ab, #start-select {
+    transform: rotate(0);
+  }
+}
+
+</style></head><body class="play-mode">
+<h1 id="t">NEO術</h1>
+
+<div id="console">
+  <div id="dpad">
+    <button data-k="left" aria-label="Left">◀</button>
+    <button data-k="up" aria-label="Up">▲</button>
+    <button data-k="down" aria-label="Down">▼</button>
+    <button data-k="right" aria-label="Right">▶</button>
+  </div>
+  
+  <div id="screen-bezel">
+    <canvas id="c"></canvas>
+    <div id="power-light"></div>
+  </div>
+  
+  <div id="action-buttons">
+    <div id="ab">
+      <div class="pill-btn"><button data-k="b" aria-label="B">B</button><span class="btn-label">B</span></div>
+      <div class="pill-btn"><button data-k="a" aria-label="A">A</button><span class="btn-label">A</span></div>
+    </div>
+    <div id="start-select">
+      <div class="pill-btn"><button data-k="select" aria-label="Select"></button><span class="btn-label">SELECT</span></div>
+      <div class="pill-btn"><button data-k="start" aria-label="Start"></button><span class="btn-label">START</span></div>
+    </div>
+  </div>
+</div>
+
+<p>ARROWS MOVE · Z / SPACE JUMP · X ACTION<br>MADE WITH NEOJUTSU</p>
+<script>/*__ENGINE__*/<\/script>
+<script>
+const D = /*__PAYLOAD__*/;
+document.getElementById('t').textContent = D.title || 'NEO術 Game';
+let g = null;
+let phase = 'idle';
+let tShow = 0;
+let sceneState = null;
+let sceneKey = null;
+let raf = 0;
+let last = 0;
+let low, lctx, c, dctx, FRAME;
+const EMPTY = {level:0,bass:0,mid:0,treble:0,freq:[],wave:[]};
+
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.key] = true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); });
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+const p = document.getElementById('console');
+for (const b of p.querySelectorAll('button')) {
+  b.addEventListener('pointerdown', e => { keys[b.dataset.k] = true; e.preventDefault(); });
+  b.addEventListener('pointerup', e => { keys[b.dataset.k] = false; e.preventDefault(); });
+  b.addEventListener('pointerleave', e => { keys[b.dataset.k] = false; });
+}
+
+const present = () => {
+  window.NeoPalette.snap(lctx, low.width, low.height, {chip:D.chip, dither:D.dither, dithAmt:.6});
+  dctx.drawImage(low, 0, 0, c.width, c.height);
+};
+
+function caption(text, y) {
+  lctx.save();
+  const size = low.height < 100 ? 5 : 8;
+  lctx.font = `${size}px "Press Start 2P", monospace`;
+  lctx.textAlign = 'center'; lctx.textBaseline = 'middle';
+  lctx.fillStyle = '#07060c';
+  for (const [dx, dy] of [[-1,-1],[-1,1],[1,-1],[1,1],[0,-2],[0,2],[-2,0],[2,0]])
+    lctx.fillText(text, Math.round(low.width / 2) + dx, y + dy);
+  lctx.fillStyle = '#ff2e88';
+  lctx.fillText(text, Math.round(low.width / 2), y);
+  lctx.restore();
+}
+
+function card(def, dt) {
+  const S = window.NeoScene.SCENES[def.scene] || Object.values(window.NeoScene.SCENES)[0];
+  if (sceneKey !== def.scene || !sceneState) {
+    sceneState = S.init(window.NeoScene.rng(D.spec.seed || 'neojutsu'), low.width, low.height, .5);
+    sceneKey = def.scene;
+  }
+  lctx.save();
+  S.draw(lctx, low.width, low.height, tShow, EMPTY, sceneState, {speed:1, density:.5, step:dt, bg:true});
+  lctx.restore();
+  if (def.text) {
+    const lines = def.text.split('|').map(s => s.trim());
+    lctx.save();
+    const size = low.height < 100 ? 5 : 8;
+    lctx.font = `${size}px "Press Start 2P", monospace`;
+    lctx.textAlign = 'center'; lctx.textBaseline = 'middle';
+    const y = low.height * 0.8;
+    lines.forEach((line, i) => {
+      const ly = Math.round(y - (lines.length - 1) * (size * 0.7) + i * (size * 1.4));
+      lctx.fillStyle = '#07060c';
+      for (const [dx, dy] of [[-1,-1],[-1,1],[1,-1],[1,1],[0,-2],[0,2],[-2,0],[2,0]])
+        lctx.fillText(line, Math.round(low.width / 2) + dx, ly + dy);
+      lctx.fillStyle = '#ece8f5'; lctx.fillText(line, Math.round(low.width / 2), ly);
+    });
+    lctx.restore();
+  }
+}
+
+function frame(t) {
+  raf = requestAnimationFrame(frame);
+  if (!last) last = t;
+  const dt = Math.min((t - last) / 1000, 0.1); last = t;
+  const IN = {
+    left:  keys.ArrowLeft || keys.a || keys.left,
+    right: keys.ArrowRight || keys.d || keys.right,
+    up:    keys.ArrowUp || keys.w || keys.up,
+    down:  keys.ArrowDown || keys.s || keys.down,
+    a:     keys.z || keys[" "] || keys.Enter || keys.a || keys.start || keys.select,
+    b:     keys.x || keys.Shift || keys.b
+  };
+
+  if (phase === 'intro') {
+    card(D.intro, dt);
+    tShow -= dt;
+    if (tShow <= 0 || Object.values(IN).some(v => v)) { phase = 'idle'; tShow = 0; sceneKey = null; }
+    present(); return;
+  } else if (phase === 'outro') {
+    card(D.outro, dt);
+    tShow -= dt;
+    if (tShow <= 0 || Object.values(IN).some(v => v)) { phase = 'idle'; tShow = 0; sceneKey = null; }
+    present(); return;
+  }
+
+  if (phase === 'game') {
+    g.step(IN, dt, EMPTY);
+    if (g.isOver) { phase = 'over'; tShow = 3; }
+    else if (g.isWin) {
+      if (D.outro) { phase = 'outro'; tShow = D.outro.secs; sceneState = null; }
+      else { phase = 'win'; tShow = 4; }
+    }
+  } else if (phase === 'idle') {
+    if (Object.values(IN).some(v => v)) { phase = 'game'; g.reset(sceneState); }
+  } else {
+    tShow -= dt;
+    if (tShow <= 0 && Object.values(IN).some(v => v)) { phase = 'game'; g.reset(sceneState); }
+  }
+
+  g.draw(lctx, window.NeoPalette.GAME_COLORS);
+  if (phase === 'idle') caption(sceneKey ? 'PLAY AGAIN' : 'PRESS START', low.height * 0.45);
+  else if (phase === 'over') caption('GAME OVER', low.height * 0.45);
+  else if (phase === 'win') caption('CLEAR', low.height * 0.45);
+  present();
+}
+
+window.addEventListener('load', () => {
+  if (!D.chip) D.chip = 'gameboy';
+  if (!D.zoom) D.zoom = 3;
+
+  FRAME = window.NeoPalette.GAME_FRAME;
+  low = document.createElement('canvas'); low.width = FRAME[0]; low.height = FRAME[1];
+  lctx = low.getContext('2d', {willReadFrequently:true});
+  c = document.getElementById('c'); c.width = FRAME[0]*D.zoom; c.height = FRAME[1]*D.zoom;
+  dctx = c.getContext('2d'); dctx.imageSmoothingEnabled = false;
+
+  if (D.pattern && window.NeoChip && !window.__music){
+    const ac = new (window.AudioContext||window.webkitAudioContext)();
+    window.NeoChip.render(D.pattern,{tail:false}).then(buf=>{
+      const src=ac.createBufferSource(), gn=ac.createGain();
+      gn.gain.value=.6; src.buffer=buf; src.loop=true;
+      src.connect(gn).connect(ac.destination); src.start(); window.__music=src;
+    }).catch(()=>{});
+  }
+
+  g = window.NeoGame.create(low, D.spec, {onFrame: present,
+    onEvent: n => { if (window.NeoSfx) window.NeoSfx.play(n); }});
+  
+  if (D.intro) g.setScript('intro', D.intro);
+  if (D.outro) g.setScript('outro', D.outro);
+  
+  sceneState = g.snapshot();
+  
+  if (D.intro && D.intro.secs > 0) {
+    phase = 'intro'; tShow = D.intro.secs;
+  } else {
+    phase = 'idle';
+  }
+
+  raf = requestAnimationFrame(frame);
+});
+<\/script></body></html>`;
 
   // ---------- wiring ----------
   function init() {
@@ -1709,8 +2063,8 @@ end`;
       open ? $('g-inspector').removeAttribute('hidden') : $('g-inspector').setAttribute('hidden', '');
       $('g-toggle-inspector').setAttribute('aria-expanded', String(open));
     });
-    $('g-open-share').addEventListener('click', packageGame);
-    $('g-package').addEventListener('click', packageGame);
+    $('g-open-share').addEventListener('click', exportWeb);
+    $('g-package').addEventListener('click', exportWeb);
     $('g-gbs').addEventListener('click', exportGBStudio);
     $('g-cloud-save').addEventListener('click', () => cloudSave(false));
     $('g-cloud-new').addEventListener('click', () => cloudSave(true));
