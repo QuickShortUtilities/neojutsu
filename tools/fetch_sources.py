@@ -171,11 +171,39 @@ def main():
     ap.add_argument('--to', default='~/neojutsu-sources')
     ap.add_argument('--all', action='store_true', help='include fan recreations')
     ap.add_argument('--list', action='store_true')
+    ap.add_argument('--also', default='',
+                    help='a jsonl of candidates from tools/find_itch.py, merged in '
+                         'so a new find does not have to be pasted into this file')
+    ap.add_argument('--min-scenes', type=int, default=6,
+                    help='ignore candidates with fewer rooms than this in them')
     args = ap.parse_args()
 
-    picked = [s for s in SOURCES if s['original'] or args.all]
+    sources = list(SOURCES)
+    if args.also:
+        known = {s['repo'] for s in SOURCES}
+        path = Path(args.also).expanduser()
+        added = 0
+        for line in path.read_text(encoding='utf-8').splitlines():
+            if not line.strip():
+                continue
+            c = json.loads(line)
+            # The two questions worth asking of anything found automatically:
+            # may it be reused, and is there enough in it to be worth the trip.
+            if c['repo'] in known or not c.get('usable_licence') or not c.get('original'):
+                continue
+            if c.get('scenes', 0) < args.min_scenes:
+                continue
+            known.add(c['repo'])
+            sources.append({'name': c['name'], 'repo': c['repo'],
+                            'branch': c.get('branch') or 'HEAD',
+                            'licence': c['licence'], 'original': True,
+                            'what': c.get('what') or 'found on itch.io'})
+            added += 1
+        print(f'{added} candidate(s) merged from {path}', file=sys.stderr)
+
+    picked = [s for s in sources if s['original'] or args.all]
     if args.list:
-        for s in SOURCES:
+        for s in sources:
             mark = 'original' if s['original'] else 'recreation'
             print(f"  {s['name']:<18} {s['licence']:<5} {mark:<11} {s['what']}")
             print(f"      https://github.com/{s['repo']}")

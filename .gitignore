@@ -5,6 +5,13 @@
 # again on every rebuild - costs more than making it again.
 data/*.jsonl
 data/by-genre/
+# Pages fetched from itch.io, kept so a re-run costs their server nothing.
+data/itch-cache/
+data/vocab-gap.json
+# Levels imported from elsewhere. Deliberately not in the repository: see
+# "Where the levels come from" in docs/training.md - these are other people's
+# games, and the tools to fetch them are here instead of the fetched result.
+data/study/
 runs/
 __pycache__/
 *.pyc

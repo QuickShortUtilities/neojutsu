@@ -59,6 +59,9 @@ PLACES = {
     'ruins':   ['in some ruins', 'in an old fortress', 'in a broken keep'],
     'volcano': ['inside a volcano', 'in lava caves', 'somewhere burning'],
     'temple':  ['in a temple', 'at a shrine', 'in an old sanctuary'],
+    # The two settings real games asked for and the corpus had no words for.
+    'space':   ['in space', 'on a dead planet', 'aboard a derelict', 'out past the moon'],
+    'haunted': ['in a haunted house', 'somewhere spooky', 'in a graveyard', 'in a cursed crypt'],
 }
 MECHS = {
     'springs':    ['with bounce pads', 'full of springs', 'with trampolines'],
@@ -148,6 +151,8 @@ PLACE_WORDS = (
     'ruin', 'castle', 'fortress', 'keep', 'knight', 'medieval',
     'volcano', 'lava', 'fire', 'burning', 'hell', 'magma',
     'temple', 'shrine', 'sanctuary', 'magic', 'mage', 'ancient',
+    'space', 'star', 'galaxy', 'planet', 'orbit', 'cosmic', 'alien', 'nebula', 'moon', 'asteroid',
+    'haunted', 'spooky', 'horror', 'ghostly', 'creepy', 'graveyard', 'crypt', 'nightmare', 'cursed',
 )
 
 

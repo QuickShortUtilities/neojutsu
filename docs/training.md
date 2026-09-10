@@ -13,9 +13,19 @@ This is the pipeline, what it needs from you, and what it does not.
 tools/make_dataset.py    prompts -> games, graded by playing them   -> data/
 tools/import_games.py    your games -> the same JSONL               -> data/
 tools/import_gbstudio.py published GB Studio projects -> levels + scripts
+tools/find_sources.py    GitHub -> GB Studio projects worth fetching
+tools/find_itch.py       itch.io jams and tags -> sources, and descriptions
+tools/fetch_sources.py   those -> ~/neojutsu-sources
+tools/import_zzt.py      ZZT worlds -> overhead levels              -> data/study/
+tools/import_vglc.py     the Video Game Level Corpus -> levels       -> data/study/
+tools/import_puzzlescript.py  PuzzleScript games -> rooms           -> data/study/
+tools/vocab_gap.py       real descriptions -> the words we ignore
 tools/train_lora.py      QLoRA fine-tune, one 24GB card             -> runs/
 tools/eval_model.py      generate -> validate -> play -> score      -> data/eval.json
 ```
+
+Everything under `data/study/` is deliberately outside the training command
+below. See **Where the levels come from** for why.
 
 Everything is graded the same way at every stage: a game must validate, and a
 bot must be able to get somewhere in it. Data that cannot clear that bar does
@@ -58,6 +68,21 @@ some of it is worth nothing, so:
 - **Prompts that produced nothing good.** Even without a fixed game, the
   prompt tells you where the vocabulary is thin.
 
+- **The jams, through itch.io.** `find_sources.py` searches GitHub, which
+  finds a repository only if somebody tagged it - and a jam entry is usually
+  called `my-jam-game` with no topic on it at all. `find_itch.py` goes the
+  other way round: the jam's own entry list, then each game's page, then the
+  source link the author put there. GBCompo and GBJAM together with the
+  `gbstudio` tag come to well over a thousand games. The hit rate is honest
+  rather than thrilling - roughly one in ten entries links source, and a
+  fraction of those are GB Studio - but they are games nothing else finds.
+
+  It reads repositories with a blobless clone rather than the GitHub API.
+  Unauthenticated the API allows sixty calls an hour, which is four hours of
+  waiting to check a hundred repositories; `git clone --filter=blob:none`
+  fetches the file listing without the files, in under a second, with no
+  quota at all.
+
 - **Published GB Studio projects.** The one source of real, hand-made Game
   Boy levels in a format a script can read. `import_gbstudio.py` takes a
   folder of them and writes both halves: the scenes become levels, and the
@@ -68,6 +93,23 @@ some of it is worth nothing, so:
   import_gbstudio_smoke.py` exists because forty per cent of the corpus was
   once that. And a scene with no collision layer at all is a title card, not
   an empty level, which is most of what the reject list holds.
+
+- **How people describe their own games.** The same crawl keeps every
+  description it passes, which is the half of the pairing we cannot invent.
+  Every prompt in the generated corpus came out of a vocabulary we wrote, so
+  the generator has only ever been asked for things it already had words for -
+  a closed loop that cannot tell us what a stranger would type.
+
+  `vocab_gap.py` closes it a little. It runs those descriptions past
+  `NeoGameGen.read()` and reports the words that come up often and change
+  nothing. The first run read 1,230 real descriptions, found 308 words worth
+  considering, and understood 40 of them. **space** appeared 178 times and
+  meant nothing at all - the studio had a sci-fi shelf and no sky to put a
+  game under - and horror, spooky and creepy tag close to three hundred games
+  between them with nothing dark to offer any of them. Two themes, a handful
+  of words for exploring and escaping, and `puzzle`, `rpg` and `monster`
+  later, it understands 70. The rest are mostly about art, music or a story,
+  which this engine has nothing to say about.
 
 **Worth nothing, or worse**
 
@@ -136,6 +178,35 @@ armour" reads as a racing game because of *driv*, and "three rooms" reads as an
 overhead one because of *room* - both ask for something the generator will not
 agree to, which is worse than not asking, and both show up in `rejects.jsonl`
 as "asked for X, got Y".
+
+## Where the levels come from, and which you can ship
+
+Three of the importers write to `data/study/` rather than `data/`, and the
+training command below does not read that folder. The distinction is not
+about quality - it is the opposite, `study/` holds the best-designed levels
+here - it is about whose they are.
+
+| source | what it is | licence |
+|---|---|---|
+| `data/games.jsonl` | our own generator, graded | ours |
+| `data/gbs-src.jsonl` | published GB Studio projects | each one checked; permissive or copyleft |
+| `data/imported.jsonl` | levels you wrote | yours |
+| `data/study/zzt.jsonl` | ZZT worlds, 1991 onwards | none stated by anybody |
+| `data/study/vglc.jsonl` | Super Mario Bros, Kid Icarus, Lode Runner and the rest | Nintendo's, Capcom's, Broderbund's |
+| `data/study/puzzlescript.jsonl` | PuzzleScript demo games | the repository's, MIT |
+
+The Museum of ZZT preserves more than four thousand community worlds and
+states no licence for any of them. The VGLC is published for research, which
+is a well-worn path, and transcribing a commercial game's levels does not
+make them yours. Training on either at home is one question; shipping a model
+to the public that learned from them is a different question with a different
+answer, and it is a decision for a person to take on purpose rather than a
+default to inherit by putting a folder on a command line.
+
+What they are unarguably good for is measuring. These are levels that
+professionals and obsessives made and that millions of people played, and
+comparing what the generator produces against them says something no amount
+of self-play can.
 
 ## The flywheel
 

@@ -20,6 +20,14 @@
     ruins:   { sky: ['#12002a', '#7a1236'], char: 'knight',   words: ['ruin', 'castle', 'fortress', 'keep', 'knight', 'medieval'] },
     volcano: { sky: ['#2a0410', '#8c2350'], char: 'rogue',    words: ['volcano', 'lava', 'fire', 'burning', 'hell', 'magma'] },
     temple:  { sky: ['#0a1424', '#2a5a7a'], char: 'mage',     words: ['temple', 'shrine', 'sanctuary', 'magic', 'mage', 'ancient'] },
+    /* These two are here because a thousand real Game Boy games said so.
+       `tools/vocab_gap.py` reads how people describe their own games and asks
+       the reader what it makes of each word: "space" came up a hundred and
+       seventy-eight times and meant nothing at all, and horror, spooky and
+       creepy together tag close to three hundred games. The studio had a
+       sci-fi shelf with no sky to put a game under, and no dark at all. */
+    space:   { sky: ['#02020a', '#141433'], char: 'robot',    words: ['space', 'star', 'galaxy', 'planet', 'orbit', 'cosmic', 'alien', 'nebula', 'moon', 'asteroid'] },
+    haunted: { sky: ['#0b0713', '#2b1636'], char: 'rogue',    words: ['haunted', 'spooky', 'horror', 'ghostly', 'creepy', 'graveyard', 'crypt', 'nightmare', 'cursed'] },
   };
   const MECHANICS = {
     springs:    ['spring', 'bounce', 'bouncy', 'trampoline', 'jump pad'],
@@ -87,6 +95,19 @@
     const theme = best(THEMES, v => v.words); if (theme) want.theme = theme;
     const mech = best(MECHANICS, v => v); if (mech) want.mech = mech;
     want.abilities = Object.entries(ABILITIES).filter(([, v]) => hit(t, v)).map(([k]) => k);
+    /* Words a thousand people used for their own games that meant nothing
+       here. Asking to explore is asking for somewhere to go; asking to escape
+       is asking for a clock. Both are things this generator can already
+       build and neither had a word. */
+    if (/\bexplor|\badventur|\bquest\b|\bjourney\b|\bwander/.test(t)) want.explore = true;
+    /* "monsters" is the commonest word for a cast in the wild and this
+       reader had no opinion about it at all. It names who is in the game
+       rather than where it is, which is what a category is for here: the
+       category picks which creatures get drawn. */
+    if (/\bmonster|\bcreature|\bbeast|\bcritter|\bkaiju\b/.test(t)) want.cat = 'rpg';
+    if (/\bescape\b|\bget out\b|\brun for it\b|\bbefore.{0,12}\b(dawn|midnight|it blows)/.test(t)) {
+      want.timed = true;
+    }
 
     /* A maze you are chased round, eating as you go, is a different game from
        a dungeon with a flag in it - so it is asked first, before "maze" on its
@@ -94,15 +115,17 @@
     /* Turn-based fights on a map. A different thing entirely from walking
        into an enemy and losing a life, and until now there was no way to ask
        for one. */
-    if (/pokemon|pok\u00e9mon|turn.?based|creature battl|monster battl|rpg battl|duel/.test(raw)) {
+    if (/pokemon|pok\u00e9mon|turn.?based|creature battl|monster battl|rpg battl|duel|\brpg\b/.test(raw)) {
       want.mode = 'topdown'; want.fights = true;
+      // Somebody who says "rpg" has named the shelf as well as the game.
+      if (/\brpg\b/.test(raw)) want.cat = 'rpg';
     }
     /* A bike over hills, which is a different game from a car on a road: one
        is about steering and the other is about what angle you land at. */
     else if (/motocross|dirt bike|excitebike|stunt bike|bike over|\brider\b|trials\b/.test(raw)) {
       want.mode = 'rider';
     }
-    else if (/tetris|falling blocks?|block puzzle|stacker|drop the blocks|line clear/.test(raw)) {
+    else if (/tetris|falling blocks?|block puzzle|stacker|drop the blocks|line clear|\bpuzzle\b/.test(raw)) {
       want.mode = 'blocks';
     }
     else if (/space invaders|invaders|galaga|galaxian|fixed shooter|wave of aliens/.test(raw)) {
@@ -1051,6 +1074,9 @@
      drew the same handful of monsters whatever you asked for - which is a
      large part of why they all felt like the same game with a new palette. */
   function chooseCat(want, mode, theme, shape) {
+    // Asked for by name. The category decides which creatures are drawn, so
+    // a description that says what is in the game has already chosen it.
+    if (want.cat && CATS.has(want.cat)) return want.cat;
     // The two that are their own thing rather than a setting.
     if (mode === 'blocks') return 'puzzle';
     if (mode === 'rider') return 'racing';
@@ -1072,6 +1098,11 @@
     return 'platformer';
   }
 
+  // The shelves a game can sit on. Kept beside chooseCat so a category asked
+  // for by name is checked against the same list the picker uses.
+  const CATS = new Set(['platformer', 'dungeon', 'rpg', 'racing', 'shooter',
+                        'adventure', 'scifi', 'strategy', 'twoplayer', 'puzzle']);
+
   function chooseTopdown(want, r) {
     if (want.shape && TOPDOWN_SHAPES[want.shape]) return want.shape;
     /* Asking for doors and locked rooms is asking for a shape, and it beats
@@ -1079,6 +1110,7 @@
        locked rooms answered with an open field is the wrong game. */
     if (want.chase) return 'maze';
     if (want.fights) return 'quest';
+    if (want.explore) return 'quest';
     if (want.mech === 'doors') return 'rooms';
     if (want.abilities && want.abilities.includes('aimLock')) return 'arena';
     if (want.boss) return 'arena';
@@ -1374,6 +1406,10 @@
     ruins:   { tint: '#8a7f6a', on: [147, 148, 196, 622], back: [106, 107, 110] },
     volcano: { tint: '#c04a3a', on: [620, 622, 567],      back: [106, 107] },
     temple:  { tint: '#7fa8c4', on: [12, 57, 61, 567],    back: [107, 108, 109] },
+    // Borrowed scenery, new palette. The sprite numbers are ones already
+    // proven to draw; what makes these places is the colour and the sky.
+    space:   { tint: '#8fa0c8', on: [8, 9, 10, 829],      back: [106, 108, 109] },
+    haunted: { tint: '#6a5f80', on: [147, 148, 196, 622], back: [106, 107, 110] },
   };
 
   // Distance is depth: the same tint, darker, is what puts a thing behind
