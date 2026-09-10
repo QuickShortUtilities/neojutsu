@@ -28,7 +28,7 @@ const present = () => {
 function caption(text, y) {
   lctx.save();
   const size = low.height < 100 ? 5 : 8;
-  lctx.font = `${size}px "Press Start 2P", monospace`;
+  lctx.font = size + 'px "Press Start 2P", monospace';
   lctx.textAlign = 'center'; lctx.textBaseline = 'middle';
   lctx.fillStyle = '#07060c';
   for (const [dx, dy] of [[-1,-1],[-1,1],[1,-1],[1,1],[0,-2],[0,2],[-2,0],[2,0]])
@@ -51,7 +51,7 @@ function card(def, dt) {
     const lines = def.text.split('|').map(s => s.trim());
     lctx.save();
     const size = low.height < 100 ? 5 : 8;
-    lctx.font = `${size}px "Press Start 2P", monospace`;
+    lctx.font = size + 'px "Press Start 2P", monospace';
     lctx.textAlign = 'center'; lctx.textBaseline = 'middle';
     const y = low.height * 0.8;
     lines.forEach((line, i) => {

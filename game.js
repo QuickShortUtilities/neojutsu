@@ -1553,7 +1553,14 @@ end`;
     try {
       const c = cfg();
       const track = window.NeoStudio?.track;
-      const payload = {
+          const src = [];
+    try {
+      for (const url of ['neo-cloud.js', 'chip.js', 'video-gen.js', 'game-sfx.js', 'game-sprites.js', 'game-script.js', 'game-templates.js', 'game-engine.js', 'game-gen.js', 'game-recipes.js', 'game-windows.js']) {
+        const r = await fetch(url);
+        src.push(await r.text());
+      }
+    } catch (e) { throw new Error('Could not fetch engine files'); }
+    const payload = {
         spec: game.snapshot(),
         title: c.title || 'neojutsu-game',
         chip: c.chip, dither: c.dither, zoom: c.zoom,
@@ -1807,7 +1814,7 @@ const present = () => {
 function caption(text, y) {
   lctx.save();
   const size = low.height < 100 ? 5 : 8;
-  lctx.font = `${size}px "Press Start 2P", monospace`;
+  lctx.font = size + 'px "Press Start 2P", monospace';
   lctx.textAlign = 'center'; lctx.textBaseline = 'middle';
   lctx.fillStyle = '#07060c';
   for (const [dx, dy] of [[-1,-1],[-1,1],[1,-1],[1,1],[0,-2],[0,2],[-2,0],[2,0]])
@@ -1830,7 +1837,7 @@ function card(def, dt) {
     const lines = def.text.split('|').map(s => s.trim());
     lctx.save();
     const size = low.height < 100 ? 5 : 8;
-    lctx.font = `${size}px "Press Start 2P", monospace`;
+    lctx.font = size + 'px "Press Start 2P", monospace';
     lctx.textAlign = 'center'; lctx.textBaseline = 'middle';
     const y = low.height * 0.8;
     lines.forEach((line, i) => {
