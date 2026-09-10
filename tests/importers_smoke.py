@@ -1,7 +1,7 @@
 """The importers read what they claim to read.
 
-Four formats arrive from outside: ZZT worlds, the Video Game Level Corpus,
-PuzzleScript games and itch.io pages. Each is somebody else's, none of them
+Five formats arrive from outside: ZZT worlds, Knytt Stories levels, the
+Video Game Level Corpus, PuzzleScript games and itch.io pages. Each is somebody else's, none of them
 can be changed to suit us, and all four are parsed by hand - which is exactly
 the kind of code that quietly starts returning something plausible and wrong.
 
@@ -253,6 +253,69 @@ else:
             issues.append('a push room should end by clearing the board')
 
 
+# ---------- Knytt Stories ----------
+import gzip                                                     # noqa: E402
+import import_knytt as K                                        # noqa: E402
+
+
+def knytt_level(collision_layer):
+    """A container holding one Map.bin of four screens. The collision layer is
+    given a floor and a player standing on it; the others get decoration."""
+    body = bytearray(K.SCREEN_BYTES)
+    for L in range(4):
+        for i in range(K.PER):
+            x, y = i % K.SW, i // K.SW
+            if L == collision_layer:
+                body[L * K.PER + i] = 7 if y == K.SH - 1 else 0     # a floor
+            else:
+                body[L * K.PER + i] = 9 if (x + y) % 7 == 0 else 0  # scatter
+    # the player, in object layer 0, standing on the floor
+    base = 1000
+    at = (K.SH - 2) * K.SW + 3
+    body[base + at] = 1                       # object id
+    body[base + K.PER + at] = 0               # bank
+
+    raw = bytearray()
+    for pos in ((1000, 1000), (1001, 1000), (1000, 1001), (1001, 1001)):
+        raw += f'x{pos[0]}y{pos[1]}\0'.encode()
+        raw += struct.pack('<I', K.SCREEN_BYTES) + bytes(body)
+    mapbin = gzip.compress(bytes(raw))
+
+    out = bytearray(b'NF' + b'A Test Level' + b'\0' + struct.pack('<I', 2))
+    for name, data in (('World.ini', b'[World]\nName=A Test Level\n'), ('Map.bin', mapbin)):
+        out += b'NF' + name.encode() + b'\0' + struct.pack('<I', len(data)) + data
+    return bytes(out)
+
+
+for want in (3, 2):
+    blob = knytt_level(want)
+    box = K.entries(blob)
+    report.setdefault('knytt', {})[f'layer{want}'] = {'files': sorted(box)}
+    if sorted(box) != ['Map.bin', 'World.ini']:
+        issues.append(f'the container walk went wrong: {sorted(box)}')
+        continue
+    # The last record has to end exactly at the end of the file. Reading the
+    # header as though it were a file walks into the middle of the first one.
+    world = K.screens(box['Map.bin'])
+    report['knytt'][f'layer{want}']['screens'] = len(world)
+    if len(world) != 4:
+        issues.append(f'{len(world)} screens read, expected four')
+        continue
+    got = K.solid_layer(world)
+    report['knytt'][f'layer{want}']['voted'] = got
+    if got != want:
+        issues.append(f'the collision layer was read as {got}, not {want}')
+    grid, filled = K.stitch(world, got, 1000, 1000, 2, 2)
+    report['knytt'][f'layer{want}']['solid'] = filled
+    if len(grid) != 2 * K.SH or len(grid[0]) != 2 * K.SW:
+        issues.append('a 2x2 block came out the wrong size')
+    if any(isinstance(c, str) for row in grid for c in row):
+        issues.append('the grid is characters, and "0" is true: level_kit would '
+                      'read every cell as solid')
+    if filled != 2 * K.SW * 2:                 # two screens wide, one floor row each
+        issues.append(f'the floor did not come through: {filled} solid')
+
+
 # ---------- itch.io ----------
 PAGE = """<html><body>
 <div class="formatted_description user_formatted">
@@ -291,5 +354,5 @@ if len(found) != 2:
     issues.append(f'a game link is only read when its attributes are in one order: {found}')
 
 print(json.dumps({'report': report, 'issues': issues}, indent=2, default=str))
-print('\nFour formats, read the way they are written.' if not issues else f'\n{len(issues)} issue(s).')
+print('\nFive formats, read the way they are written.' if not issues else f'\n{len(issues)} issue(s).')
 sys.exit(1 if issues else 0)

@@ -42,18 +42,28 @@ SCREEN_BYTES = 3006
 
 
 def entries(data):
-    """The container: "NF", a path, a length, the bytes. Anything that does
-    not start with NF is not one of ours and ends the walk."""
-    out, at = {}, 0
-    while at + 2 < len(data):
-        if data[at:at + 2] != b'NF':
+    """The container: a header, then one record per file.
+
+    Every record looks the same - "NF", a null-terminated name, a
+    little-endian u32 - but the first one is the archive's own header, and
+    its number is not a byte count. Reading it as one walks four-thousand-odd
+    bytes into the middle of the first real file and the whole level comes
+    back as one unreadable entry. The proof the walk is right is that the
+    last record ends exactly at the end of the file.
+    """
+    if data[:2] != b'NF':
+        return {}
+    end = data.find(b'\0', 2)
+    if end < 0 or end + 5 > len(data):
+        return {}
+    out, at = {}, end + 5                        # past the header, not through it
+    while at + 2 < len(data) and data[at:at + 2] == b'NF':
+        e = data.find(b'\0', at + 2)
+        if e < 0 or e + 5 > len(data):
             break
-        end = data.find(b'\0', at + 2)
-        if end < 0 or end + 5 > len(data):
-            break
-        name = data[at + 2:end].decode('cp1252', 'replace').replace('\\', '/')
-        size = struct.unpack_from('<I', data, end + 1)[0]
-        start = end + 5
+        name = data[at + 2:e].decode('cp1252', 'replace').replace('\\', '/')
+        size = struct.unpack_from('<I', data, e + 1)[0]
+        start = e + 5
         if size > len(data) - start:
             break
         out[name] = data[start:start + size]
