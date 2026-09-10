@@ -1547,231 +1547,31 @@ end`;
     } finally { btn.disabled = false; btn.textContent = was; }
   }
 
-  async function packageGame() {
-    const c = cfg();
+    async function packageGame() {
     const btn = $('g-package');
-    btn.disabled = true; const was = btn.textContent; btn.textContent = 'Packing…';
+    btn.disabled = true; const was = btn.textContent; btn.textContent = 'Linking…';
     try {
-      const files = ['neo-palette.js', 'chip.js', 'video-gen.js', 'game-sprites.js', 'game-sfx.js', 'game-script.js', 'game-engine.js'];
-      const src = [];
-      for (const f of files) {
-        const r = await fetch(f);
-        if (!r.ok) throw new Error(`could not read ${f}`);
-        src.push(`/* ${f} */\n` + await r.text());
+      if (!cloudId) {
+        cloudStatus('Saving game to cloud first...');
+        await cloudSave(false);
       }
-      const track = savedTracks.find(t => t.id === c.audioSrc);
-      const payload = {
-        spec: game.snapshot(),
-        title: c.title || 'neojutsu-game',
-        chip: c.chip, dither: c.dither, zoom: c.zoom,
-        pattern: track ? track.pattern : null,
-        intro: c.intro.secs > 0 ? c.intro : null,
-        outro: c.outro.secs > 0 ? c.outro : null,
-      };
-      const html = PACKAGE_HTML
-        .replace('/*__ENGINE__*/', src.join('\n'))
-        .replace('/*__PAYLOAD__*/', JSON.stringify(payload).replace(/</g, '\\u003c'));
-      const blob = new Blob([html], { type: 'text/html' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${(c.title || 'neojutsu-game').replace(/[^\w.-]+/g, '-')}.html`;
-      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-      cloudStatus(`Packaged ${a.download} · ${(blob.size / 1024).toFixed(0)} KB · send it to anyone`);
+      if (!cloudId) throw new Error('Could not save to cloud');
+      
+      const r = await window.NeoCloud.setPublic(cloudId, true);
+      const link = `${location.origin}/play.html?p=${cloudId}`;
+      try {
+        await navigator.clipboard.writeText(link);
+        cloudStatus(`Link copied to clipboard! ${link}`);
+      } catch {
+        cloudStatus(`Playable at: ${link}`);
+      }
+      window.open(link, '_blank');
     } catch (e) {
-      cloudStatus(`Could not package: ${e.message}. Packaging needs the site to be served, not opened from a file.`);
+      cloudStatus(`Could not share: ${e.message}`);
     } finally { btn.disabled = false; btn.textContent = was; }
   }
 
-  const PACKAGE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NEO術 game</title>
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-<style>
- html,body{margin:0;height:100%;background:#07060c;color:#ece8f5;font-family:'Press Start 2P',monospace;
-   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px}
- h1{font-size:14px;letter-spacing:2px;color:#2ef2ff;margin:0;text-shadow: 0 0 10px rgba(46,242,255,0.5);}
- 
- #console {
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   background: #1a1a24;
-   padding: 40px 50px;
-   border-radius: 60px;
-   box-shadow: inset -5px -5px 15px rgba(0,0,0,0.6), inset 5px 5px 15px rgba(255,255,255,0.05), 0 20px 50px rgba(0,0,0,0.8);
-   gap: 40px;
- }
- 
- #screen-bezel {
-   background: #000;
-   padding: 30px 30px 45px 30px;
-   border-radius: 15px 15px 40px 40px;
-   position: relative;
-   box-shadow: inset 0 0 20px #000;
- }
- 
- canvas {
-   image-rendering:pixelated;
-   box-shadow:0 0 0 2px #2a2340;
-   border-radius:4px;
-   touch-action:none;
-   display:block;
- }
- 
- #power-light {
-   position: absolute;
-   bottom: 18px;
-   left: 25px;
-   width: 10px;
-   height: 10px;
-   background: #ff2e88;
-   border-radius: 50%;
-   box-shadow: 0 0 8px #ff2e88;
- }
- 
- p{font-size:7px;color:#9a92b3;margin:0;text-align:center;line-height:1.9}
- 
- button{font-family:inherit;font-size:9px;touch-action:none;user-select:none;cursor:pointer;}
- 
- #dpad{
-   display:grid;
-   grid-template-columns:repeat(3,40px);
-   grid-template-rows:repeat(3,40px);
-   gap:0px;
- }
- #dpad button{
-   background: #222;
-   color: #555;
-   border: none;
- }
- #dpad button:nth-child(1){grid-area:2/1; border-radius: 10px 0 0 10px;}
- #dpad button:nth-child(2){grid-area:1/2; border-radius: 10px 10px 0 0;}
- #dpad button:nth-child(3){grid-area:3/2; border-radius: 0 0 10px 10px;}
- #dpad button:nth-child(4){grid-area:2/3; border-radius: 0 10px 10px 0;}
- 
- #ab {
-   display:flex;
-   gap:15px;
-   transform: rotate(-15deg);
-   margin-top: 20px;
- }
- #ab button {
-   width:50px;
-   height:50px;
-   border-radius:50%;
-   background: #ff2e88;
-   color: #ffb3d9;
-   border: none;
-   box-shadow: inset -3px -3px 8px rgba(0,0,0,0.4), inset 3px 3px 8px rgba(255,255,255,0.2), 0 5px 10px rgba(0,0,0,0.5);
- }
- 
- button:active { filter: brightness(0.8); transform: scale(0.96); }
- 
- @media(max-width:800px){
-   #console { flex-direction: column; padding: 30px; border-radius: 30px; gap: 20px; }
-   #ab { transform: rotate(0); margin-top: 0; }
- }
-</style></head><body>
-<h1 id="t">NEO術</h1>
-<div id="console">
-  <div id="dpad">
-    <button data-k="left">◀</button><button data-k="up">▲</button><button data-k="down">▼</button><button data-k="right">▶</button>
-  </div>
-  <div id="screen-bezel">
-    <canvas id="c"></canvas>
-    <div id="power-light"></div>
-  </div>
-  <div id="ab"><button data-k="b">B</button><button data-k="a">A</button></div>
-</div>
-<p id="h">ARROWS MOVE · Z / SPACE JUMP · X ACTION<br>MADE WITH NEOJUTSU</p>
-<script>/*__ENGINE__*/<\/script>
-<script>
-const D = /*__PAYLOAD__*/;
-document.getElementById('t').textContent = D.title;
-const FRAME = window.NeoPalette.GAME_FRAME;
-const low = document.createElement('canvas'); low.width = FRAME[0]; low.height = FRAME[1];
-const lctx = low.getContext('2d', {willReadFrequently:true});
-const c = document.getElementById('c'); c.width = FRAME[0]*D.zoom; c.height = FRAME[1]*D.zoom;
-const dctx = c.getContext('2d'); dctx.imageSmoothingEnabled = false;
-const present = () => { window.NeoPalette.snap(lctx, low.width, low.height, {chip:D.chip, dither:D.dither, dithAmt:.6});
-  dctx.drawImage(low,0,0,c.width,c.height); };
-let g = null, phase = 'idle', tShow = 0, sceneState = null, sceneKey = null, raf = 0, last = 0;
-const EMPTY = {level:0,bass:0,mid:0,treble:0,freq:[],wave:[]};
 
-function caption(text, y) {
-  if (!text) return;
-  lctx.save();
-  lctx.textAlign = 'center'; lctx.textBaseline = 'middle';
-  const lines = String(text).split('|').map(s => s.trim()).slice(0, 3);
-  const room = low.width - 8;
-  let size = Math.max(5, Math.round(low.height * 0.075));
-  while (size > 4) {
-    lctx.font = size + 'px "Press Start 2P", monospace';
-    if (Math.max(...lines.map(l => lctx.measureText(l).width)) <= room) break;
-    size--;
-  }
-  lctx.font = size + 'px "Press Start 2P", monospace';
-  lines.forEach((line, i) => {
-    const ly = Math.round(y - (lines.length - 1) * (size * 0.7) + i * (size * 1.4));
-    lctx.fillStyle = '#07060c';
-    for (const [dx, dy] of [[-1,-1],[-1,1],[1,-1],[1,1],[0,-2],[0,2],[-2,0],[2,0]])
-      lctx.fillText(line, Math.round(low.width / 2) + dx, ly + dy);
-    lctx.fillStyle = '#ece8f5'; lctx.fillText(line, Math.round(low.width / 2), ly);
-  });
-  lctx.restore();
-}
-
-function frame(t) {
-  raf = requestAnimationFrame(frame);
-  if (!last) last = t;
-  const dt = Math.min((t - last) / 1000, 0.1); last = t;
-  const IN = {
-    left:  keys.ArrowLeft || keys.a,
-    right: keys.ArrowRight || keys.d,
-    up:    keys.ArrowUp || keys.w,
-    down:  keys.ArrowDown || keys.s,
-    a:     keys.z || keys[" "] || keys.Enter,
-    b:     keys.x || keys.Shift
-  };
-  
-  if (phase === 'game') {
-    g.step(IN, dt, EMPTY);
-    if (g.isOver) { phase = 'over'; tShow = 3; }
-    else if (g.isWin) { phase = 'win'; tShow = 4; }
-  } else if (phase === 'idle') {
-    if (Object.values(IN).some(v => v)) { phase = 'game'; g.reset(sceneState); }
-  } else {
-    tShow -= dt;
-    if (tShow <= 0 && Object.values(IN).some(v => v)) { phase = 'game'; g.reset(sceneState); }
-  }
-
-  g.draw(lctx, window.NeoPalette.GAME_COLORS);
-  if (phase === 'idle') caption(sceneKey ? 'PLAY AGAIN' : 'PRESS START', low.height * 0.45);
-  else if (phase === 'over') caption('GAME OVER', low.height * 0.45);
-  else if (phase === 'win') caption('CLEAR', low.height * 0.45);
-  present();
-}
-
-const keys = {};
-window.addEventListener('keydown', e => { keys[e.key] = true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); });
-window.addEventListener('keyup', e => { keys[e.key] = false; });
-
-const p = document.getElementById('console');
-for (const b of p.querySelectorAll('button')) {
-  b.addEventListener('pointerdown', e => { keys[b.dataset.k] = true; e.preventDefault(); });
-  b.addEventListener('pointerup', e => { keys[b.dataset.k] = false; e.preventDefault(); });
-  b.addEventListener('pointerleave', e => { keys[b.dataset.k] = false; });
-}
-
-window.addEventListener('load', () => {
-  g = window.NeoGame.create(low, D.spec, {onFrame: present,
-      onEvent: n => { if (window.NeoSfx) window.NeoSfx.play(n); }});
-  if (D.intro) g.setScript('intro', D.intro);
-  if (D.outro) g.setScript('outro', D.outro);
-  sceneState = g.snapshot();
-  raf = requestAnimationFrame(frame);
-});
-<\/script></body></html>`;
 
   // ---------- wiring ----------
   function init() {

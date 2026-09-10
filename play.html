@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEO術 Player</title>
+  <meta name="theme-color" content="#07060c">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="play.css">
+</head>
+<body class="play-mode">
+  <h1 id="t">NEO術</h1>
+  
+  <div id="console">
+    <div id="dpad">
+      <button data-k="left" aria-label="Left">◀</button>
+      <button data-k="up" aria-label="Up">▲</button>
+      <button data-k="down" aria-label="Down">▼</button>
+      <button data-k="right" aria-label="Right">▶</button>
+    </div>
+    
+    <div id="screen-bezel">
+      <canvas id="c"></canvas>
+      <div id="power-light"></div>
+    </div>
+    
+    <div id="action-buttons">
+      <div id="ab">
+        <div class="pill-btn">
+          <button data-k="b" aria-label="B">B</button>
+          <span class="btn-label">B</span>
+        </div>
+        <div class="pill-btn">
+          <button data-k="a" aria-label="A">A</button>
+          <span class="btn-label">A</span>
+        </div>
+      </div>
+      <div id="start-select">
+        <div class="pill-btn">
+          <button data-k="select" aria-label="Select"></button>
+          <span class="btn-label">SELECT</span>
+        </div>
+        <div class="pill-btn">
+          <button data-k="start" aria-label="Start"></button>
+          <span class="btn-label">START</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p>ARROWS MOVE · Z / SPACE JUMP · X ACTION<br>MADE WITH NEOJUTSU</p>
+  <p id="loading-msg">Loading from cloud...</p>
+
+  <script src="neo-palette.js"></script>
+  <script src="neo-cloud.js"></script>
+  <script src="chip.js"></script>
+  <script src="video-gen.js"></script>
+  <script src="game-sfx.js"></script>
+  <script src="game-sprites.js"></script>
+  <script src="game-script.js"></script>
+  <script src="game-engine.js"></script>
+  <script src="play.js"></script>
+</body>
+</html>

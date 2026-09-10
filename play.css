@@ -1,0 +1,164 @@
+body.play-mode {
+  background: #07060c;
+  color: #ece8f5;
+  font-family: 'Press Start 2P', monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 0;
+  min-height: 100vh;
+}
+
+.play-mode h1 {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #2ef2ff;
+  margin: 0;
+}
+
+.play-mode canvas {
+  image-rendering: pixelated;
+  box-shadow: 0 0 0 2px #2a2340;
+  border-radius: 4px;
+  touch-action: none;
+  display: block;
+}
+
+.play-mode p {
+  font-size: 7px;
+  color: #9a92b3;
+  margin: 0;
+  text-align: center;
+  line-height: 1.9;
+}
+
+.play-mode button {
+  font-family: inherit;
+  font-size: 9px;
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: transform 0.1s;
+}
+
+.play-mode button:active {
+  filter: brightness(0.8);
+  transform: scale(0.96);
+}
+
+#console {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  background: #181522;
+  padding: 40px 60px;
+  border-radius: 40px;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.8), inset 0 5px 15px rgba(255,255,255,0.05);
+}
+
+#screen-bezel {
+  background: #000;
+  padding: 25px 25px 40px 25px;
+  border-radius: 15px 15px 40px 15px;
+  position: relative;
+  box-shadow: inset 0 0 20px #2a2340;
+}
+
+#power-light {
+  position: absolute;
+  bottom: 15px;
+  left: 15px;
+  width: 6px;
+  height: 6px;
+  background: #ff2e88;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #ff2e88;
+}
+
+#dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 40px);
+  grid-template-rows: repeat(3, 40px);
+  gap: 0px;
+}
+
+#dpad button {
+  background: #222;
+  color: #555;
+}
+
+#dpad button:nth-child(1) { grid-area: 2/1; border-radius: 10px 0 0 10px; }
+#dpad button:nth-child(2) { grid-area: 1/2; border-radius: 10px 10px 0 0; }
+#dpad button:nth-child(3) { grid-area: 3/2; border-radius: 0 0 10px 10px; }
+#dpad button:nth-child(4) { grid-area: 2/3; border-radius: 0 10px 10px 0; }
+
+#action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+#ab {
+  display: flex;
+  gap: 15px;
+  transform: rotate(-15deg);
+}
+
+#ab button {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: #ff2e88;
+  color: #ffb3d9;
+  box-shadow: inset -3px -3px 8px rgba(0,0,0,0.4), inset 3px 3px 8px rgba(255,255,255,0.2), 0 5px 10px rgba(0,0,0,0.5);
+}
+
+#start-select {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  transform: rotate(-15deg);
+  margin-top: 10px;
+}
+
+.pill-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#start-select button {
+  width: 35px;
+  height: 12px;
+  border-radius: 6px;
+  background: #333;
+  color: transparent;
+  box-shadow: inset -1px -1px 3px rgba(0,0,0,0.6), inset 1px 1px 3px rgba(255,255,255,0.1);
+}
+
+.btn-label {
+  display: block;
+  font-size: 6px;
+  color: #9a92b3;
+  text-align: center;
+  margin-top: 4px;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 1px;
+}
+
+@media(max-width: 800px) {
+  #console {
+    flex-direction: column;
+    padding: 30px;
+    border-radius: 30px;
+    gap: 20px;
+  }
+  #ab, #start-select {
+    transform: rotate(0);
+  }
+}
