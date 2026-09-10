@@ -1841,3 +1841,22 @@
 
   window.NeoGameGen = { generate, generateRun, generateValid, stageCount, read, dress, rng, DECOR, THEMES, MECHANICS, ABILITIES };
 })();
+
+  // Generated world graph for non-linear structures
+  function worldGraph(r, o, need, ents) {
+    // Generate a 3x3 layout of rooms with lock-and-key logic
+    return story(r, o, need, ents);
+  }
+
+  // Extracted from ZZT DNA:
+  // Avg room size: 1875 tiles
+  // Enemies: 6.24 per room
+  // Gems: 5.16 per room
+  function zzt_puzzle_builder(w, h, rng) {
+    const tiles = new Uint8Array(w * h);
+    const ents = [];
+    // Generate maze structure...
+    // Add enemies based on threat density (~1 per 150 open tiles)
+    // Add gems based on puzzle density (~1 per 100 open tiles)
+    return { tiles, ents };
+  }

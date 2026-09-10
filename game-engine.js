@@ -37,7 +37,7 @@
     13: { name: 'checkpoint',solid: false, checkpoint: true, fill: '#101a2e', top: '#2ef2ff' },
     14: { name: 'lava',      solid: false, hazard: true, fill: '#3a0c04', top: '#ff8c1a' },
     15: { name: 'crate',     solid: true,  breakable: true, fill: '#3a2a14', top: '#b98a4a' },
-    16: { name: 'grass',     solid: false, decor: true,  fill: '#1c3a18', top: '#3fbf4a' },
+    16: { name: 'grass',     solid: false, decor: true, hide: true, fill: '#1c3a18', top: '#3fbf4a' },
     17: { name: 'backwall',  solid: false, fill: '#1a1626' },
     18: { name: 'exit',      solid: false, exit: true,   fill: '#0d2a16', top: '#3fbf4a' },
     19: { name: 'road',      solid: false, road: true,   fill: '#4a4a57' },
@@ -118,17 +118,17 @@
     goal:   { w: 8, h: 12, goal: true },
     walker: { w: 8, h: 10, enemy: true, speed: 22, turns: true, hp: 1 },
     flyer:  { w: 8, h: 8,  enemy: true, speed: 26, floats: true, hp: 1 },
-    chaser: { w: 8, h: 10, enemy: true, speed: 40, chases: true, sight: 90, hp: 2 },
+    chaser: { w: 8, h: 10, enemy: true, speed: 40, chases: true, sight: 90, cone: true, hp: 2 },
     jumper: { w: 9, h: 9,  enemy: true, speed: 14, hops: true, hp: 1 },
     turret: { w: 8, h: 8,  enemy: true, speed: 0, fires: 1.4, hp: 3, still: true },
     // Hunts you and shoots back. A walker that fires is a soldier; a chaser
     // that fires is an enemy tank, and nothing else in the cast is both.
-    hunter: { w: 8, h: 10, enemy: true, speed: 26, chases: true, sight: 110, fires: 1.7, hp: 2 },
+    hunter: { w: 8, h: 10, enemy: true, speed: 26, chases: true, sight: 110, cone: true, fires: 1.7, hp: 2 },
     /* A ghost always knows where you are - that is the genre - so it is slow
        enough to be outrun instead. A chaser at its own speed catches a
        standing player in a second and a half, which makes a maze a coin flip
        rather than a chase. */
-    ghost:  { w: 8, h: 10, enemy: true, speed: 30, chases: true, sight: 9999, hp: 1 },
+    ghost:  { w: 8, h: 10, enemy: true, speed: 30, chases: true, sight: 9999, smells: true, hp: 1 },
     /* Something you fight rather than something you avoid. Touching it does
        not take a life; it takes over the screen, and what happens next is
        turns and a menu rather than jumping and running. */
@@ -150,7 +150,7 @@
              /* Pace belongs to the thing, not to its kind. The def is shared
                 by every walker in the level, so changing it changed all of
                 them; this is the copy a script is allowed to touch. */
-             speed: def.speed || 0,
+             speed: def.speed || 0, face: e.dir || 1,
              home: { x: e.x, y: e.y }, alive: true, t: (e.x * 7 + e.y * 13) % 628 / 100,
              life: 0, cool: 0, tag: e.tag || '',
              // What a script can change about an actor: where it is going,
@@ -1372,10 +1372,19 @@
                see you from anywhere - a ghost that stopped fleeing because you
                were out of range would just wait for you round the corner. */
             const run = scared > 0 ? -1 : 1;
-            const near = run < 0 || Math.hypot(dx, dy) < d.sight;
+            let near = run < 0 || Math.hypot(dx, dy) < d.sight;
+            if (near && run > 0 && !d.smells) {
+              const inGrass = tilesUnder(lvl, target).some(t => t.info.hide);
+              if (inGrass) near = false;
+              else if (d.cone) {
+                if (e.face > 0 && dx < -4) near = false;
+                if (e.face < 0 && dx > 4) near = false;
+              }
+            }
             const sp = e.speed * (run < 0 ? 0.6 : 1);
             e.vx = near ? Math.sign(dx) * sp * run : 0;
             if (mode === 'topdown') { e.vy = near ? Math.sign(dy) * sp * run : 0; e.y += e.vy * dt; }
+            if (e.vx) e.face = e.vx > 0 ? 1 : -1;
             e.x += e.vx * dt;
             if (solidAt(lvl, Math.floor((e.x + (e.vx > 0 ? e.w : 0)) / TILE), Math.floor((e.y + e.h / 2) / TILE), ctx2)) e.x -= e.vx * dt;
           } else if (d.floats) {
