@@ -502,6 +502,47 @@ def record(prompt, spec):
     ]}
 
 
+def real_prompts(path, page):
+    """Sentences people wrote about their own Game Boy games, and what this
+    generator makes of each one.
+
+    A description is only usable as a prompt if the reader gets something out
+    of it: told "a cosy game about a cat", the generator has heard the word
+    cat and nothing else, and the level it builds is a level it would have
+    built anyway. Pairing that with the sentence teaches a model that the
+    words do not matter, which is worse than not training on it.
+
+    So each one is read first, and only those that settle a mode or a place
+    are kept - with what was understood carried along as the thing to check
+    the built game against, exactly as for a prompt we wrote ourselves.
+    """
+    rows = []
+    for line in Path(path).read_text(encoding='utf-8').splitlines():
+        if not line.strip():
+            continue
+        d = json.loads(line)
+        text = (d.get('short_text') or '').strip()
+        # Long enough to be a description, short enough to be a request.
+        if not (12 <= len(text) <= 180):
+            continue
+        rows.append(text)
+    heard = page.evaluate("""(texts) => texts.map(t => {
+      const w = NeoGameGen.read(t);
+      return { mode: w.mode || null, theme: w.theme || null };
+    })""", rows)
+    out = []
+    for text, w in zip(rows, heard):
+        if not (w['mode'] or w['theme']):
+            continue
+        expect = {}
+        if w['mode']:
+            expect['mode'] = w['mode']
+        if w['theme']:
+            expect['theme'] = w['theme']
+        out.append((text, expect))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--count', type=int, default=800)
@@ -510,6 +551,12 @@ def main():
     ap.add_argument('--rejects', default='data/rejects.jsonl')
     ap.add_argument('--batch', type=int, default=12)
     ap.add_argument('--seed', default='neojutsu')
+    ap.add_argument('--real-prompts', default='',
+                    help='a jsonl from tools/find_itch.py. A share of the corpus is '
+                         'then built from sentences real people wrote about their own '
+                         'games, rather than from our vocabulary')
+    ap.add_argument('--real-share', type=float, default=0.25,
+                    help='how much of the corpus those should be, at most')
     ap.add_argument('--min-moved', type=int, default=24,
                     help='pixels a bot must cover before a game counts as playable')
     ap.add_argument('--chip', default='gameboy',
@@ -537,9 +584,25 @@ def main():
             page.wait_for_function('!!(window.NeoGameGen && window.NeoSprites && window.NeoSprites.loaded)',
                                    timeout=30000)
 
+            # A share of the prompts written by people rather than by us.
+            real, real_left = [], 0
+            if args.real_prompts:
+                real = real_prompts(args.real_prompts, page)
+                rng.shuffle(real)
+                real_left = min(len(real), int(args.count * args.real_share))
+                print(f'{len(real)} real descriptions the reader understands; '
+                      f'using up to {real_left}', file=sys.stderr)
+
+            def next_prompt(r):
+                nonlocal real_left
+                if real_left > 0 and real and r.random() < args.real_share:
+                    real_left -= 1
+                    return real[real_left % len(real)]
+                return make_prompt(r)
+
             guard = 0
             while len(kept) < args.count and guard < args.count * 6:
-                batch = [make_prompt(rng) for _ in range(args.batch)]
+                batch = [next_prompt(rng) for _ in range(args.batch)]
                 guard += len(batch)
                 results = page.evaluate(BUILD, {'prompts': [pr for pr, _ in batch], 'chip': args.chip})
                 for (prompt, expect), r in zip(batch, results):

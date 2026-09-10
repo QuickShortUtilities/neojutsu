@@ -19,7 +19,7 @@ games built with it free; each one belongs to whoever made it.
     python3 tools/import_gbstudio.py --in "~/GAME DEV/Untitled"
     python3 tools/import_gbstudio.py --in ~/projects --out data/gbs.jsonl
 """
-import argparse, json, random, sys
+import argparse, json, random, re, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -313,6 +313,10 @@ def main():
     ap.add_argument('--seed', default='gbs')
     ap.add_argument('--scripts', default='data/gbstudio-scripts.jsonl',
                     help='where to write translated scripts as training pairs')
+    ap.add_argument('--descriptions', default='',
+                    help='a jsonl from tools/find_itch.py. Where a project matches '
+                         'a game on itch, its biggest room is paired with the '
+                         "description that game's author wrote for it")
     args = ap.parse_args()
 
     src = Path(args.src).expanduser()
@@ -348,7 +352,7 @@ def main():
                 if spec is None:
                     rejects.append({'scene': sc['name'] + f' ({m})', 'why': why})
                 else:
-                    made.append((sc['name'], spec, sc))
+                    made.append((sc['name'], spec, sc, path.stem))
             for event, nodes, self_tag, where in sc['scripts']:
                 ctx.self_tag = self_tag
                 lines = [l for l in gbs_script.translate(nodes, ctx) if l.strip()]
@@ -373,7 +377,13 @@ def main():
         if spec is None:
             rejects.append({'scene': name, 'why': why})
         else:
-            made.append((name, spec, scene))
+            # Which project this room came out of, so a description written
+            # for the game can be matched to it later.
+            try:
+                project = f.relative_to(src).parts[0]
+            except ValueError:
+                project = f.parent.name
+            made.append((name, spec, scene, project))
 
     # Scripts travel separately from levels: they are the part a generator
     # cannot invent, and the part our language was missing until now.
@@ -421,8 +431,8 @@ def main():
                                   '{ spec: prompt, understood: {} }')
             for i in range(0, len(made), 6):
                 chunk = made[i:i + 6]
-                verdicts = page.evaluate(CHECK, {'prompts': [s for _, s, _ in chunk]})
-                for (name, spec, scene), v in zip(chunk, verdicts):
+                verdicts = page.evaluate(CHECK, {'prompts': [s for _, s, _, _ in chunk]})
+                for (name, spec, scene, project), v in zip(chunk, verdicts):
                     if v.get('error'):
                         rejects.append({'scene': name, 'why': 'threw: ' + v['error'][:60]})
                     elif not v.get('ok'):
@@ -430,15 +440,56 @@ def main():
                     elif v.get('moved', 0) < args.min_moved:
                         rejects.append({'scene': name, 'why': f"a bot got {v.get('moved', 0)}px into it"})
                     else:
-                        kept.append((describe(spec), spec))
+                        kept.append((describe(spec), spec, project))
             b.close()
     finally:
         srv.shutdown()
 
     out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
+    # A room described in its author's own words. Every prompt in this corpus
+    # so far was written by a machine reading geometry - "a top-down dungeon,
+    # long, cramped, with a locked door" - which is accurate and is nothing
+    # like how a person asks for a game. Where a project matches a game on
+    # itch.io, the biggest room it has is paired with the sentence its author
+    # wrote to sell it.
+    # One per project, not one per room: the same description against twenty
+    # rooms is one example with a thumb on the scale, which is the mistake the
+    # script half of this file already learned not to make.
+    paired = []
+    if args.descriptions:
+        dpath = Path(args.descriptions).expanduser()
+        if not dpath.is_absolute():
+            dpath = ROOT / args.descriptions
+        said = {}
+        for line in dpath.read_text(encoding='utf-8').splitlines():
+            if not line.strip():
+                continue
+            d = json.loads(line)
+            text = (d.get('short_text') or '').strip()
+            if not text:
+                continue
+            for key in (d.get('url', '').rstrip('/').rsplit('/', 1)[-1], d.get('title', '')):
+                k = re.sub(r'[^a-z0-9]', '', (key or '').lower())
+                if len(k) >= 4:
+                    said.setdefault(k, text)
+        biggest = {}
+        for prompt, spec, project in kept:
+            k = re.sub(r'[^a-z0-9]', '', (project or '').lower())
+            hit = said.get(k) or next((v for kk, v in said.items()
+                                       if len(kk) >= 6 and (kk in k or k in kk)), None)
+            if not hit:
+                continue
+            size = spec['level']['w'] * spec['level']['h']
+            if size > biggest.get(k, (0, None, None))[0]:
+                biggest[k] = (size, hit, spec)
+        paired = [(text, spec) for _, (_, text, spec) in sorted(biggest.items())]
+        print(f'{len(paired)} room(s) paired with what their author said',
+              file=sys.stderr)
     with out.open('w', encoding='utf-8') as fh:
-        for prompt, spec in kept:
+        for prompt, spec, _ in kept:
+            fh.write(json.dumps(record(prompt, spec), ensure_ascii=False) + '\n')
+        for prompt, spec in paired:
             fh.write(json.dumps(record(prompt, spec), ensure_ascii=False) + '\n')
     if rejects:
         rj = ROOT / args.rejects
@@ -448,9 +499,11 @@ def main():
                 fh.write(json.dumps(r, ensure_ascii=False) + '\n')
 
     by = {}
-    for _, spec in kept:
+    for _, spec, _ in kept:
         by[spec['mode']] = by.get(spec['mode'], 0) + 1
-    print(json.dumps({'scenes': len(split) + len(made), 'written': len(kept), 'file': str(out),
+    print(json.dumps({'scenes': len(split) + len(made),
+                      'written': len(kept) + len(paired),
+                      'described_by_their_author': len(paired), 'file': str(out),
                       'by_mode': by, 'rejected': len(rejects),
                       'why': [r['why'][:50] for r in rejects[:6]],
                       'scripts': {'translated': len(scripts), 'routines': len(routines),

@@ -136,27 +136,43 @@ SOURCES = [
 
 
 def grab(entry, dest):
-    url = f"https://codeload.github.com/{entry['repo']}/zip/refs/heads/{entry['branch']}"
+    # Whatever the default branch is called. A repository found automatically
+    # does not come with that name attached, and asking for a branch called
+    # "HEAD" is a 404 - which is how six projects found in one afternoon were
+    # reported as missing when every one of them was there. codeload
+    # understands zip/HEAD and hands back whatever the default is, so that is
+    # tried first, and a named branch only when one is known.
+    branch = entry.get('branch') or 'HEAD'
+    urls = [f"https://codeload.github.com/{entry['repo']}/zip/HEAD"] if branch == 'HEAD' else [
+        f"https://codeload.github.com/{entry['repo']}/zip/refs/heads/{branch}",
+        f"https://codeload.github.com/{entry['repo']}/zip/HEAD",
+    ]
     out = dest / entry['name']
     if out.exists():
         return 'already here'
     # Python's own SSL often has no certificate bundle on a Mac, while curl
     # always does, so curl is tried first and urllib is the fallback.
-    data = None
-    if shutil.which('curl'):
-        try:
-            r = subprocess.run(['curl', '-sSL', '--fail', '--max-time', '300', url],
-                               capture_output=True, timeout=320)
-            if r.returncode == 0 and r.stdout:
-                data = r.stdout
-        except Exception:
-            data = None
+    data, why = None, 'no url tried'
+    for url in urls:
+        if shutil.which('curl'):
+            try:
+                r = subprocess.run(['curl', '-sSL', '--fail', '--max-time', '300', url],
+                                   capture_output=True, timeout=320)
+                if r.returncode == 0 and r.stdout:
+                    data = r.stdout
+            except Exception:
+                data = None
+        if data is None:
+            try:
+                with urllib.request.urlopen(url, timeout=120,
+                                            context=ssl._create_unverified_context()) as r:
+                    data = r.read()
+            except Exception as e:
+                why = str(e)
+        if data is not None:
+            break
     if data is None:
-        try:
-            with urllib.request.urlopen(url, timeout=120, context=ssl._create_unverified_context()) as r:
-                data = r.read()
-        except Exception as e:
-            return f'could not fetch: {e}'
+        return f'could not fetch: {why}'
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             z.extractall(out)

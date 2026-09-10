@@ -23,6 +23,13 @@ from level_kit import describe                          # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 MIN_W, MIN_H = 20, 14
+# And the size a room has to be already. The median PuzzleScript room is
+# eleven by ten, which grown out to a screen is a small abstract shape
+# floating in a walled box - a picture of a puzzle rather than a place, and a
+# hundred of those would teach exactly that. Only rooms drawn near the scale
+# they will be looked at survive; two thirds are not, and the summary says so
+# rather than quietly padding them.
+DRAWN_W, DRAWN_H = 16, 11
 
 # What an object's name says it is. PuzzleScript has no types, only names, and
 # a decade of people naming things has settled into a small vocabulary.
@@ -99,6 +106,8 @@ def levels_of(parts):
 
 def convert(title, name, grid, look):
     h, w = len(grid), max(len(r) for r in grid)
+    if w < DRAWN_W or h < DRAWN_H:
+        return None
     tiles = [['0'] * w for _ in range(h)]
     ents, start = [], None
     for y, row in enumerate(grid):
@@ -176,7 +185,7 @@ def main():
             if spec:
                 made.append((f'{f.stem}/{i + 1}', spec))
             else:
-                why['nobody in it, or nothing to reach'] += 1
+                why['too small, or nobody in it'] += 1
     print(f'{len(files)} files, {len(made)} rooms to grade', file=sys.stderr)
     if not made:
         print(json.dumps({'files': len(files), 'why': dict(why)}, indent=2))

@@ -40,7 +40,11 @@ JAMS = ['gbcompo21', 'gbcompo23', 'gbcompo25', 'gbjam-11', 'gbjam-12', 'gbjam-13
 # one summer; a tag is everybody who has ever ticked the box. GBJAM in
 # particular accepts any engine, so most of its entries are not GB Studio at
 # all, while everything under `tag-gbstudio` says it is.
-TAGS = ['gbstudio', 'gb-studio']
+# Ordered by how likely a game under one is to be a game we can read. A game
+# tagged `gameboy-rom` has produced a ROM, so it was built in GB Studio or
+# GBDK; `gameboy` takes in everything that merely looks like one, which is
+# most of the tag and worth reading anyway for how it describes itself.
+TAGS = ['gbstudio', 'gb-studio', 'gameboy-rom', 'gbdk', 'homebrew', 'gameboy']
 
 FORGE = re.compile(r'https?://(?:www\.)?(github\.com|gitlab\.com|codeberg\.org|git\.sr\.ht)/'
                    r'([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)')

@@ -27,6 +27,25 @@ tools/eval_model.py      generate -> validate -> play -> score      -> data/eval
 Everything under `data/study/` is deliberately outside the training command
 below. See **Where the levels come from** for why.
 
+## Where the raw archives live
+
+The tools download other people's archives, and those are not in this
+repository - `data/` is ignored, on purpose, because the generated corpus is
+rebuilt from a seed in minutes. That reasoning does not extend to a gigabyte
+of downloaded worlds, which is not regenerable if a source goes offline, so
+they have a home of their own:
+
+```
+~/neojutsu-sources    GB Studio projects, one folder each   (fetch_sources.py)
+~/neojutsu-corpus/zzt        the Museum of ZZT mass downloads
+~/neojutsu-corpus/vglc       TheVGLC, as its repository zip
+~/neojutsu-corpus/puzzlescript   the demo games
+```
+
+Neither folder is backed up by anything here. If these matter, back them up:
+every tool can fetch again today, and no tool can fetch a page that has been
+taken down.
+
 Everything is graded the same way at every stage: a game must validate, and a
 bot must be able to get somewhere in it. Data that cannot clear that bar does
 not go in, and a model that cannot clear it has not improved.

@@ -25,7 +25,7 @@ import find_itch as I             # noqa: E402
 def zzt_world():
     """A world of one board: a room with a wall down the middle, a player, a
     gem, a key, a lion and a passage out."""
-    W, H = Z.W, Z.H
+    W, H = Z.SHAPES[-1]['w'], Z.SHAPES[-1]['h']
     cells = [22] * (W * H)                      # normal wall everywhere
     for y in range(2, H - 2):
         for x in range(2, W - 2):
@@ -92,10 +92,11 @@ else:
                 issues.append('the passage out was lost')
 
 # A board whose player is only in the stat list, never drawn.
-b2 = {'name': 'Unvisited', 'cells': [0] * (Z.W * Z.H), 'stats': [(12, 9)]}
-for i in range(Z.W * Z.H):
+ZW, ZH = Z.SHAPES[-1]['w'], Z.SHAPES[-1]['h']
+b2 = {'name': 'Unvisited', 'cells': [0] * (ZW * ZH), 'stats': [(12, 9)], 'w': ZW, 'h': ZH}
+for i in range(ZW * ZH):
     b2['cells'][i] = 0
-b2['cells'][3 * Z.W + 3] = 7
+b2['cells'][3 * ZW + 3] = 7
 spec2 = Z.to_spec(b2, 'test2')
 report['zzt']['from_stats'] = spec2['start'] if spec2 else None
 if not spec2 or spec2['start'] != {'x': 11 * 8, 'y': 8 * 8}:
@@ -185,13 +186,18 @@ LEVELS
 
 message Here we go.
 
-#########
-#.......#
-#.P.*...#
-#...#..@#
-#..~....#
-#.......#
-#########
+##################
+#................#
+#.P.*............#
+#...#..@.........#
+#..~.............#
+#........*.......#
+#.....#####......#
+#................#
+#...@............#
+#................#
+#................#
+##################
 
 """
 parts = P.sections(PS)
@@ -204,6 +210,10 @@ if look.get('~') != 'hazard':
     issues.append(f"water did not read as a hazard: {look.get('~')}")
 if len(rooms) != 1:
     issues.append(f'{len(rooms)} rooms found, expected one (a message is not a room)')
+# And a room drawn smaller than the screen is a puzzle diagram, not a place.
+tiny = P.convert('Tiny', '1', ['#####', '#.P.#', '#.*.#', '#.@.#', '#####'], look)
+if tiny is not None:
+    issues.append('a five-tile room was accepted and padded out to a screen')
 else:
     spec = P.convert('Test Push', '1', rooms[0], look)
     if not spec:

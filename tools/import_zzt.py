@@ -28,7 +28,14 @@ from make_dataset import BUILD, serve, record          # noqa: E402
 from level_kit import describe, spread                  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-W, H = 60, 25                                           # a ZZT board, always
+
+# The two shapes a board comes in. Super ZZT is the same game with a bigger
+# window on it: wider boards, a longer name field, and a shorter properties
+# block, all of which have to be right or the tiles come out as noise.
+SHAPES = {
+    -1: {'name': 'ZZT',       'w': 60, 'h': 25, 'start': 512,  'namelen': 50, 'props': 86},
+    -2: {'name': 'Super ZZT', 'w': 96, 'h': 80, 'start': 1024, 'namelen': 60, 'props': 28},
+}
 
 # What each ZZT element becomes here. The numbering is the one in the file
 # format, not the one in the editor's menus.
@@ -105,13 +112,21 @@ def worlds_in(path):
     return out
 
 
+def shape_of(data):
+    """Which of the two this file is, or None if it is not a world at all."""
+    if len(data) < 32:
+        return None
+    return SHAPES.get(struct.unpack_from('<h', data, 0)[0])
+
+
 def boards(data):
     """Split a world into its boards without trusting anything but the length
     each one declares. Stat parsing is where a malformed world bites, and a
     board that says how long it is can be skipped past whatever is inside."""
-    if len(data) < 512 or struct.unpack_from('<h', data, 0)[0] != -1:
+    shape = shape_of(data)
+    if not shape or len(data) < shape['start']:
         return []
-    at, got = 512, []
+    at, got = shape['start'], []
     while at + 2 <= len(data):
         size = struct.unpack_from('<h', data, at)[0]
         if size <= 0 or at + 2 + size > len(data):
@@ -123,15 +138,17 @@ def boards(data):
     return got
 
 
-def read_board(body):
+def read_board(body, shape=None):
     """Name, tiles and stats. Tiles are run-length encoded in threes, and a
     count of zero means 256 rather than none - a decoder quirk from 1991 that
     is still in every file."""
-    if len(body) < 52:
+    shape = shape or SHAPES[-1]
+    W, H, NL = shape['w'], shape['h'], shape['namelen']
+    if len(body) < NL + 2:
         return None
     n = body[0]
-    name = body[1:1 + min(n, 50)].decode('cp437', 'replace').strip()
-    at = 51
+    name = body[1:1 + min(n, NL)].decode('cp437', 'replace').strip()
+    at = NL + 1
     cells, colours = [], []
     while len(cells) < W * H and at + 2 < len(body):
         count, elem, col = body[at], body[at + 1], body[at + 2]
@@ -145,10 +162,10 @@ def read_board(body):
         return None
 
     stats = []
-    props = at
-    if props + 88 <= len(body):
-        count = struct.unpack_from('<h', body, props + 86)[0]
-        s = props + 88
+    props, PL = at, shape['props']
+    if props + PL + 2 <= len(body):
+        count = struct.unpack_from('<h', body, props + PL)[0]
+        s = props + PL + 2
         for _ in range(max(0, min(count + 1, 300))):
             if s + 33 > len(body):
                 break
@@ -156,13 +173,14 @@ def read_board(body):
             length = struct.unpack_from('<h', body, s + 23)[0]
             stats.append((x, y))
             s += 33 + (length if length > 0 else 0)
-    return {'name': name, 'cells': cells, 'stats': stats}
+    return {'name': name, 'cells': cells, 'stats': stats, 'w': W, 'h': H}
 
 
 def to_spec(board, source):
     """One board, as a game. The floor is what you can walk on, the monsters
     are the cast, and the way out is a passage where there is one."""
     cells = board['cells']
+    W, H = board.get('w', 60), board.get('h', 25)
     grid = [['0'] * W for _ in range(H)]
     found, start, exits = {}, None, 0
     for i, e in enumerate(cells):
@@ -251,11 +269,16 @@ def main():
     found = worlds_in(args.src)
     print(f'{len(found)} world file(s)', file=sys.stderr)
 
-    made, why = [], Counter()
+    made, why, kinds = [], Counter(), Counter()
     for name, data in found:
+        shape = shape_of(data)
+        if not shape:
+            why['not a world file'] += 1
+            continue
+        kinds[shape['name']] += 1
         bs = boards(data)
         for i, body in enumerate(bs):
-            b = read_board(body)
+            b = read_board(body, shape)
             if not b:
                 why['unreadable board'] += 1
                 continue
@@ -323,7 +346,8 @@ def main():
             fh.write(json.dumps(r, ensure_ascii=False) + '\n')
 
     print(json.dumps({
-        'worlds': len(found), 'boards_offered': len(made), 'written': len(kept),
+        'worlds': len(found), 'by_kind': dict(kinds),
+        'boards_offered': len(made), 'written': len(kept),
         'file': str(out), 'rejected': len(rejects),
         'skipped_before_grading': dict(why.most_common(6)),
         'top_rejections': dict(Counter(r['why'].split(':')[0][:40] for r in rejects).most_common(5)),
