@@ -14,7 +14,7 @@
   const MIN_MIDI = 36, MAX_MIDI = 84;          // C2..C6
   const DRUMS = NeoChip.DRUM_KEYS;            // k s h H t T c r b z
   const DRUM_LABEL = Object.fromEntries(Object.entries(NeoChip.DRUM_KIT).map(([k, v]) => [k, v.label]));
-  const ENGINE_LABEL = { kataA: 'kata-A', kataB: 'kata-B', kataC: 'kata-C' };
+  const ENGINE_LABEL = { kataA: 'kata-A', kataB: 'kata-B', kataC: 'kata-C', onjutsu: 'Onjutsu v1' };
   const LANE_NAME = { p1: 'Pulse 1', p2: 'Pulse 2', p3: 'Pulse 3', p4: 'Pulse 4', tr: 'Triangle', no: 'Noise' };
 
   const voiceFx = () => ({ vib: 0, trem: 0, echo: 0, duty: null, slide: false, arp: null, env: 'hold', inst: null });
@@ -99,7 +99,7 @@
   }
   function applySession(data) {
     const next = normalize(data.pattern); stop(); pattern = next;
-    seedUsed = data.seed || '—'; engineUsed = ENGINES[data.engine] ? data.engine : 'kataA';
+    seedUsed = data.seed || '—'; engineUsed = isEngine(data.engine) ? data.engine : 'kataA';
     trackTitle = data.title || data.name || 'neojutsu-track'; $('x-title').value = trackTitle;
     if (data.generator) for (const key of ['mood', 'key', 'scale']) { const el = $('g-' + key); if ([...el.options].some(o => o.value === data.generator[key])) el.value = data.generator[key]; }
     syncUI(); queueSave();
@@ -324,6 +324,17 @@
 
   const ENGINES = { kataA, kataB, kataC };
 
+  // NeoJutsu is an engine like the kata are, but it runs a model in a worker
+  // and returns a promise. It stays out of ENGINES -- whose members are called
+  // synchronously -- and is recognised by isEngine() everywhere the question is
+  // "did a generator make this?" rather than "call it right now".
+  const AI_ENGINE = 'onjutsu';
+  const isEngine = (name) => !!ENGINES[name] || name === AI_ENGINE;
+  const engineBadgeText = (name) => isEngine(name)
+    ? `engine: ${name === AI_ENGINE ? '音術' : '型'} ${ENGINE_LABEL[name]}`
+    : 'source: imported MIDI';
+  if (window.OnjutsuAI) OnjutsuAI.configure({ baseUrl: 'onjutsu/' });
+
   // =============== audio ===============
   const engine = NeoChip.create();
   let audibleStep = -1;
@@ -341,7 +352,14 @@
   const randomSeed = () => Math.random().toString(36).slice(2, 8);
   gDice.addEventListener('click', () => { gSeed.value = randomSeed(); });
   gBpm.addEventListener('input', () => { gBpmVal.textContent = gBpm.value; });
-  gEngine.addEventListener('change', () => { engineBadge.textContent = `engine: 型 ${ENGINE_LABEL[gEngine.value]}`; });
+  const gDrums = $('g-drums'), gDrumsField = $('g-drums-field');
+  // Only the model takes a drums instruction: the kata engines write
+  // their own percussion from rules, so the control is hidden for them.
+  const syncDrumsField = () => {
+    if (gDrumsField) gDrumsField.style.display = gEngine.value === AI_ENGINE ? '' : 'none';
+  };
+  gEngine.addEventListener('change', () => { engineBadge.textContent = engineBadgeText(gEngine.value); syncDrumsField(); });
+  syncDrumsField();
   gMutate.addEventListener('click', () => {
     const cur = gSeed.value.trim() || randomSeed();
     const base = cur.replace(/~\d+$/, '');
@@ -349,12 +367,45 @@
     gSeed.value = `${base}~${n}`; run();
   });
 
-  function run() {
+  let generating = false;
+  async function run() {
+    if (generating) return;
     snapshot();
     const seed = gSeed.value.trim() || randomSeed();
     gSeed.value = seed; seedUsed = seed; engineUsed = gEngine.value;
-    pattern = ENGINES[engineUsed]({ seed, engine: engineUsed, chip: gChip.value, mood: gMood.value, key: gKey.value, scale: gScale.value, bars: +gBars.value, bpm: +gBpm.value });
-    stop(); rememberSeed(seed); syncUI(); start();
+    const opts = { seed, engine: engineUsed, chip: gChip.value, mood: gMood.value, key: gKey.value, scale: gScale.value, bars: +gBars.value, bpm: +gBpm.value };
+
+    if (engineUsed === AI_ENGINE) {
+      // Seconds, not a tick: the weights download once per session and every
+      // step of the pattern is a forward pass. The button locks and the wait is
+      // narrated, because a Studio that looks frozen is worse than one that
+      // looks slow.
+      generating = true; gGo.disabled = true; stop();
+      try {
+        opts.drums = (gDrums && gDrums.value) || null;
+        const notes = await OnjutsuAI.generate(opts, (p) => {
+          flash(p.stage === 'download' ? `downloading model · ${p.detail}`
+            : p.stage === 'generate' ? `generating · ${Math.round((p.progress || 0) * 100)}%`
+            : p.detail || 'preparing model');
+        });
+        // The same treatment the kata engines get: a normalised blank carrying
+        // this chip's FX, with only the note lanes replaced. Going through
+        // setup() means the model's output cannot arrive configured differently
+        // from everything else the Studio makes.
+        const { p } = setup(opts);
+        for (const l of LANES) p[l] = notes[l];
+        p.bpm = opts.bpm;
+        pattern = normalize(p);
+      } catch (e) {
+        flash(`NeoJutsu failed · ${e.message}`);
+        generating = false; gGo.disabled = false; return;
+      }
+      generating = false; gGo.disabled = false;
+    } else {
+      pattern = ENGINES[engineUsed](opts);
+      stop();
+    }
+    rememberSeed(seed); syncUI(); start();
     flash(`generated · ${ENGINE_LABEL[engineUsed]} · seed ${seed}`);
   }
   gGo.addEventListener('click', run);
@@ -493,8 +544,8 @@
     syncLength();
     xSeed.textContent = seedUsed; xEngine.textContent = ENGINE_LABEL[engineUsed] || engineUsed;
     gChip.value = pattern.chip;
-    if (ENGINES[engineUsed]) { gSeed.value = seedUsed; gEngine.value = engineUsed; }
-    gBars.value = String(pattern.steps / 16); engineBadge.textContent = ENGINES[engineUsed] ? `engine: 型 ${ENGINE_LABEL[engineUsed]}` : 'source: imported MIDI';
+    if (isEngine(engineUsed)) { gSeed.value = seedUsed; gEngine.value = engineUsed; }
+    gBars.value = String(pattern.steps / 16); engineBadge.textContent = engineBadgeText(engineUsed);
     clampView(); syncFx(); syncMix(); syncLoop(); syncCopy(); renderSeeds(); historyUI(); resize();
   }
   gChip.addEventListener('change', () => { pattern.chip = gChip.value; syncUI(); });

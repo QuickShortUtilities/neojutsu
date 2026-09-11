@@ -1,0 +1,29 @@
+{
+  "vocab_size": 178,
+  "n_layer": 8,
+  "n_head": 6,
+  "head_dim": 64,
+  "d_model": 384,
+  "context": 3328,
+  "header_len": 58,
+  "voice_embed": true,
+  "bos": 1,
+  "bar": 4,
+  "eos": 2,
+  "builds": {
+    "fp32": {
+      "file": "onjutsu.onnx",
+      "mb": 77.0,
+      "max_logit_err": 1.1205673217773438e-05,
+      "max_kl": 2.2786131325374508e-11,
+      "top1_agree": "48/48"
+    },
+    "int8": {
+      "file": "onjutsu_int8.onnx",
+      "mb": 20.1,
+      "max_logit_err": 0.5998575687408447,
+      "max_kl": 0.0030358085001476864,
+      "top1_agree": "48/48"
+    }
+  }
+}

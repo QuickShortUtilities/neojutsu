@@ -58,7 +58,16 @@
           <option value="kataA">型 kata-A · motif &amp; variation</option>
           <option value="kataB">型 kata-B · chords &amp; sustain</option>
           <option value="kataC">型 kata-C · arcade arps</option>
-          <option value="neojutsu" disabled>術 NeoJutsu v1 · training…</option>
+          <option value="onjutsu">音術 Onjutsu v1 · trained model</option>
+        </select>
+      </label>
+
+      <label class="field" id="g-drums-field" style="display:none">
+        <span>Drums</span>
+        <select id="g-drums">
+          <option value="">Let the model choose</option>
+          <option value="yes">Always</option>
+          <option value="no">None</option>
         </select>
       </label>
 
@@ -128,7 +137,7 @@
 
       <button class="btn btn-primary wide" id="g-go" type="button"><span class="btn-icon">◆</span> Generate</button>
 
-      <p class="gen-note">Choose a mood. Find a seed. Make it yours.<br><b>型 kata</b> composes with rules; NeoJutsu v1 is still training.</p>
+      <p class="gen-note">Choose a mood. Find a seed. Make it yours.<br><b>型 kata</b> composes with rules; <b>音術 Onjutsu</b> is a model trained on 160k tunes.</p>
     </aside>
 
     <!-- ===== centre: editor ===== -->
@@ -299,6 +308,7 @@
   <script src="audio-export.js"></script>
   <script src="midi-import.js"></script>
   <script src="fx-ui.js"></script>
+  <script src="onjutsu-engine.js"></script>
   <script src="studio.js"></script>
 </body>
 </html>
