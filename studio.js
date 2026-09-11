@@ -356,7 +356,11 @@
   // Scene, Drums and the prompt box are conditions only the model has.
   // The kata engines compose from rules, so showing them there would be
   // a lie about what the controls do.
-  const AI_FIELDS = ['g-prompt-field', 'g-scene-field', 'g-drums-field'];
+  // No Scene select. The <SCENE> token measured inert -- prompts
+  // separate slightly BETTER with it blanked -- so a dropdown for it
+  // would imply control the model does not have. The prompt box still
+  // reads scene words; it sets the fields that actually work.
+  const AI_FIELDS = ['g-prompt-field', 'g-drums-field'];
   const syncAiFields = () => {
     const on = gEngine.value === AI_ENGINE;
     for (const id of AI_FIELDS) { const el = $(id); if (el) el.style.display = on ? '' : 'none'; }
