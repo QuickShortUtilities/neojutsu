@@ -60,8 +60,8 @@
     threads: null,        // null = decide from the hardware
     temperature: 1.15,
     topP: 0.96,
-    drumTemperature: 0.9,
-    drumTopP: 0.95,
+    drumTemperature: 1.15,
+    drumTopP: 0.96,
     drums: null,
     scene: null,
   };
