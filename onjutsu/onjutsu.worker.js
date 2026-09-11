@@ -144,14 +144,18 @@ function headerIds(o) {
     need("<BPM>"), need(`bpm_${bpmBucket(o.bpm)}`),
     need("<BARS>"), need(`bars_${o.bars}`),
     // null -> <UNCOND>: let the model pick, which reproduces the corpus mix
-    need("<DRUMS>"), cond(o.drums ? `drums_${o.drums}` : null)];
+    need("<DRUMS>"), cond(o.drums ? `drums_${o.drums}` : null),
+    // "unknown" is the absence of a scene, not a scene you can ask for --
+    // same thing <UNCOND> already means
+    need("<SCENE>"),
+    cond(o.scene && o.scene !== "unknown" ? `scene_${o.scene}` : null)];
 }
 
 async function generate(opts) {
   const o = Object.assign({
     chip: "nes", mood: "unknown", key: "unknown", scale: "unknown",
     bpm: 150, bars: 8, seed: "neojutsu", temperature: 1.15, topP: 0.96,
-    drumTemperature: 0.9, drumTopP: 0.95, drums: null,
+    drumTemperature: 0.9, drumTopP: 0.95, drums: null, scene: null,
   }, opts || {});
   // The noise voice wants its own temperature. The corpus is bimodal -- 91% of
   // 8-bar chip patterns have no drums at all, and the 9% that do are dense --

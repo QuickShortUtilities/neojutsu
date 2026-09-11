@@ -1,11 +1,11 @@
 {
-  "vocab_size": 178,
+  "vocab_size": 199,
   "n_layer": 8,
   "n_head": 6,
   "head_dim": 64,
   "d_model": 384,
   "context": 3328,
-  "header_len": 58,
+  "header_len": 60,
   "voice_embed": true,
   "bos": 1,
   "bar": 4,
@@ -13,16 +13,16 @@
   "builds": {
     "fp32": {
       "file": "onjutsu.onnx",
-      "mb": 77.0,
-      "max_logit_err": 1.1205673217773438e-05,
-      "max_kl": 2.2786131325374508e-11,
+      "mb": 77.1,
+      "max_logit_err": 9.5367431640625e-06,
+      "max_kl": 5.321484392157221e-12,
       "top1_agree": "48/48"
     },
     "int8": {
       "file": "onjutsu_int8.onnx",
       "mb": 20.1,
-      "max_logit_err": 0.5998575687408447,
-      "max_kl": 0.0030358085001476864,
+      "max_logit_err": 0.5306189060211182,
+      "max_kl": 0.004844753258672061,
       "top1_agree": "48/48"
     }
   }

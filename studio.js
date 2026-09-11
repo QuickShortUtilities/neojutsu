@@ -352,14 +352,39 @@
   const randomSeed = () => Math.random().toString(36).slice(2, 8);
   gDice.addEventListener('click', () => { gSeed.value = randomSeed(); });
   gBpm.addEventListener('input', () => { gBpmVal.textContent = gBpm.value; });
-  const gDrums = $('g-drums'), gDrumsField = $('g-drums-field');
-  // Only the model takes a drums instruction: the kata engines write
-  // their own percussion from rules, so the control is hidden for them.
-  const syncDrumsField = () => {
-    if (gDrumsField) gDrumsField.style.display = gEngine.value === AI_ENGINE ? '' : 'none';
+  const gDrums = $('g-drums'), gScene = $('g-scene'), gPrompt = $('g-prompt');
+  // Scene, Drums and the prompt box are conditions only the model has.
+  // The kata engines compose from rules, so showing them there would be
+  // a lie about what the controls do.
+  const AI_FIELDS = ['g-prompt-field', 'g-scene-field', 'g-drums-field'];
+  const syncAiFields = () => {
+    const on = gEngine.value === AI_ENGINE;
+    for (const id of AI_FIELDS) { const el = $(id); if (el) el.style.display = on ? '' : 'none'; }
   };
-  gEngine.addEventListener('change', () => { engineBadge.textContent = engineBadgeText(gEngine.value); syncDrumsField(); });
-  syncDrumsField();
+
+  // The prompt drives the VISIBLE controls. Typing 'final boss' moves
+  // Mood, Scale, Tempo and Drums where you can see them, so a wrong
+  // guess can be corrected by hand. It is a keyword parser, not a
+  // language model, and it will sometimes guess wrong.
+  function applyPrompt() {
+    if (!gPrompt || !window.OnjutsuPrompt) return;
+    const read = $('g-prompt-read');
+    const text = gPrompt.value.trim();
+    if (!text) { if (read) read.textContent = ''; return; }
+    const p = OnjutsuPrompt.parse(text);
+    const set = (el, v) => { if (el && v != null && [...el.options].some(o => o.value === String(v))) el.value = String(v); };
+    set(gScene, p.scene); set(gMood, p.mood); set(gKey, p.key);
+    set(gScale, p.scale); set(gChip, p.chip); set(gBars, p.bars);
+    set(gDrums, p.drums);
+    if (p.bpm != null) { gBpm.value = String(p.bpm); gBpmVal.textContent = String(p.bpm); }
+    if (read) read.textContent = OnjutsuPrompt.describe(p);
+  }
+  if (gPrompt) {
+    gPrompt.addEventListener('input', applyPrompt);
+    gPrompt.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyPrompt(); run(); } });
+  }
+  gEngine.addEventListener('change', () => { engineBadge.textContent = engineBadgeText(gEngine.value); syncAiFields(); });
+  syncAiFields();
   gMutate.addEventListener('click', () => {
     const cur = gSeed.value.trim() || randomSeed();
     const base = cur.replace(/~\d+$/, '');
@@ -383,6 +408,7 @@
       generating = true; gGo.disabled = true; stop();
       try {
         opts.drums = (gDrums && gDrums.value) || null;
+        opts.scene = (gScene && gScene.value) || null;
         const notes = await OnjutsuAI.generate(opts, (p) => {
           flash(p.stage === 'download' ? `downloading model · ${p.detail}`
             : p.stage === 'generate' ? `generating · ${Math.round((p.progress || 0) * 100)}%`

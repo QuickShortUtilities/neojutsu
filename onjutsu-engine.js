@@ -62,6 +62,7 @@
     drumTemperature: 0.9,
     drumTopP: 0.95,
     drums: null,
+    scene: null,
   };
 
   let worker = null, loading = null, ready = false, active = null;
@@ -234,6 +235,7 @@
         drumTemperature: opts.drumTemperature == null ? cfg.drumTemperature : +opts.drumTemperature,
         drumTopP: opts.drumTopP == null ? cfg.drumTopP : +opts.drumTopP,
         drums: opts.drums == null ? cfg.drums : opts.drums,
+        scene: opts.scene == null ? cfg.scene : opts.scene,
       },
     });
     const out = await p;
