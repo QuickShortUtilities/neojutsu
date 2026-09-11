@@ -360,9 +360,22 @@
   // Scene select: that token measured inert, and a dropdown for it would
   // imply control the model does not have.
   const AI_FIELDS = ['g-drums-field'];
+  // The model knows 2, 4, 8, 16 and 32 bars. 64 is not a missing token,
+  // it does not fit: 64 bars needs ~6,270 positions against a 3,328
+  // context. Offering it and then failing on Generate is the worst of
+  // both, so lengths it cannot do are disabled while it is selected.
+  const AI_BARS = ['2', '4', '8', '16', '32'];
   const syncAiFields = () => {
     const on = gEngine.value === AI_ENGINE;
     for (const id of AI_FIELDS) { const el = $(id); if (el) el.style.display = on ? '' : 'none'; }
+    if (gBars) {
+      for (const o of gBars.options) o.disabled = on && !AI_BARS.includes(o.value);
+      if (on && !AI_BARS.includes(gBars.value)) {
+        gBars.value = '32';
+        gBars.dispatchEvent(new Event('change', { bubbles: true }));
+        flash('Onjutsu tops out at 32 bars');
+      }
+    }
   };
 
   // The prompt drives the VISIBLE controls. Typing 'final boss' moves

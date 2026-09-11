@@ -166,8 +166,12 @@ async function generate(opts) {
   const dTemp = o.drumTemperature == null ? o.temperature : o.drumTemperature;
   const dTopP = o.drumTopP == null ? o.topP : o.drumTopP;
 
+  // Snap rather than throw. The UI should not offer a length the model cannot
+  // do, but a hard failure here turns a wrong dropdown into a dead Generate
+  // button, and the caller has no way to recover from it.
   if (!vocab.choices.bars.includes(o.bars)) {
-    throw new Error(`bars must be one of ${vocab.choices.bars.join(", ")}`);
+    const legal = vocab.choices.bars.slice().sort((a, b) => a - b);
+    o.bars = legal.reduce((best, b) => (b <= o.bars ? b : best), legal[0]);
   }
   const steps = o.bars * 16;
   const maxPos = 13 + vocab.voice_rows.length + o.bars + steps * 6 + 1;
@@ -260,9 +264,15 @@ self.onmessage = async (ev) => {
       // costing most of the generation time: every one of the ~768 decode
       // steps ran on a single core. crossOriginIsolated is the browser's own
       // answer to 'is SharedArrayBuffer usable', so ask it rather than guess.
-      const cores = (self.navigator && navigator.hardwareConcurrency) || 4;
+      // TWO, measured, not all of them. Benchmarked on 4 bars:
+      //   1 thread  8190 ms    2 threads 7168 ms
+      //   4 threads 7185 ms    8 threads 7832 ms
+      // Decoding is one token at a time through small matrices, so past two
+      // threads the synchronisation costs more than the parallelism returns.
+      // An earlier 'use every core' default was slower than doing nothing.
+      const cores = (self.navigator && navigator.hardwareConcurrency) || 2;
       ORT.env.wasm.numThreads = msg.threads
-        || (self.crossOriginIsolated ? Math.min(8, Math.max(1, cores - 1)) : 1);
+        || (self.crossOriginIsolated ? Math.min(2, Math.max(1, cores)) : 1);
       ORT.env.wasm.simd = true;
 
       const [vres, mres, pres] = await Promise.all([

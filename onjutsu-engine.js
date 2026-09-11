@@ -57,6 +57,7 @@
     precision: "half",
     fallback: "int8",
     ep: null,
+    threads: null,        // null = decide from the hardware
     temperature: 1.15,
     topP: 0.96,
     drumTemperature: 0.9,
@@ -177,6 +178,7 @@
         parityUrl: url("parity.json"),
         precision: build.io,
         ep: cfg.ep,
+        threads: cfg.threads,
       }, transfer);
     });
   }
