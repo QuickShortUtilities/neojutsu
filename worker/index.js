@@ -242,7 +242,22 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    if (!path.startsWith('/api/')) return env.ASSETS.fetch(request);
+    if (!path.startsWith('/api/')) {
+      const res = await env.ASSETS.fetch(request);
+      // Cross-origin isolation, so onnxruntime can use SharedArrayBuffer and
+      // run the model on more than one core. Without these headers every one of
+      // the ~768 decode steps in a generation is single-threaded, which is most
+      // of why it feels slow.
+      //
+      // `credentialless` rather than `require-corp` on purpose: require-corp
+      // blocks any cross-origin resource that does not send a CORP header, and
+      // this page loads its fonts from Google. credentialless gets the same
+      // isolation without breaking them.
+      const out = new Response(res.body, res);
+      out.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+      out.headers.set('Cross-Origin-Embedder-Policy', 'credentialless');
+      return out;
+    }
     if (!env.DB) return fail(503, 'no_database', 'The database is not bound to this Worker yet.');
 
     if (path === '/api/health') return json({ ok: true, configured: !requireConfig(env) });

@@ -65,7 +65,7 @@
     scene: null,
   };
 
-  let worker = null, loading = null, ready = false, active = null;
+  let worker = null, loading = null, ready = false, active = null, backend = null;
   let onProgress = null, pendingGen = null;
   let nextId = 1;
 
@@ -139,6 +139,9 @@
         const m = ev.data;
         if (m.type === "ready") {
           settled = true;
+          // {ep, threads, isolated} -- worth surfacing, because "slow" almost
+          // always means wasm on one core rather than the model being heavy
+          backend = m;
           resolve(w);
         } else if (m.type === "parity") {
           // Surfaced, not thrown: a browser whose numbers drift still makes
@@ -199,7 +202,10 @@
           worker = await spawn(build, data);
           active = name;
           ready = true;
-          report("ready", 1, `model ready (${name})`);
+          report("ready", 1, `model ready · ${name} · `
+        + `${backend && backend.ep}`
+        + (backend && backend.threads > 1 ? ` · ${backend.threads} threads`
+                                          : " · 1 thread"));
           return;
         } catch (e) {
           lastErr = e;
@@ -247,6 +253,7 @@
     configure(o) { Object.assign(cfg, o || {}); },
     get ready() { return ready; },
     get build() { return active; },
+    get backend() { return backend; },   // {ep, threads, isolated}
     get settings() { return Object.assign({}, cfg); },
     load,
     generate,

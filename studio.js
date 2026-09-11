@@ -44,7 +44,7 @@
     if (!p || !Number.isInteger(p.steps) || p.steps < 16 || p.steps > 1024 || p.steps % 16 || !NeoChip.CHIPS[p.chip]) throw new Error('Invalid pattern');
     p = JSON.parse(JSON.stringify(p));
     const bounded = (v, min, max, fallback) => typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fallback;
-    p.bpm = bounded(p.bpm, 80, 220, 150);
+    p.bpm = bounded(p.bpm, 40, 220, 150);
     const defaults = defaultFx(); p.fx ||= {}; p.mix ||= {};
     for (const l of LANES) {
       if (!Array.isArray(p[l]) || p[l].length !== p.steps) {
@@ -353,17 +353,12 @@
   gDice.addEventListener('click', () => { gSeed.value = randomSeed(); });
   gBpm.addEventListener('input', () => { gBpmVal.textContent = gBpm.value; });
   const gDrums = $('g-drums'), gScene = $('g-scene'), gPrompt = $('g-prompt');
-  // Scene, Drums and the prompt box are conditions only the model has.
-  // The kata engines compose from rules, so showing them there would be
-  // a lie about what the controls do.
-  // No Scene select. The <SCENE> token measured inert -- prompts
-  // separate slightly BETTER with it blanked -- so a dropdown for it
-  // would imply control the model does not have. The prompt box still
-  // reads scene words; it sets the fields that actually work.
-  // Drums is the only control unique to the model -- the kata engines
-  // write their percussion from rules. The prompt box is deliberately
-  // NOT in here: it sets mood, key, scale, tempo and bars, which every
-  // engine uses, so hiding it for the kata was a mistake.
+  // Drums is the only control unique to the model: the kata engines
+  // write their percussion from rules, so offering it there would be a
+  // lie. The prompt box is deliberately NOT model-only -- it sets mood,
+  // key, scale, tempo and bars, which every engine uses. There is no
+  // Scene select: that token measured inert, and a dropdown for it would
+  // imply control the model does not have.
   const AI_FIELDS = ['g-drums-field'];
   const syncAiFields = () => {
     const on = gEngine.value === AI_ENGINE;
@@ -455,7 +450,10 @@
     rememberSeed(seed); syncUI(); start();
     flash(`generated · ${ENGINE_LABEL[engineUsed]} · seed ${seed}`);
   }
-  gGo.addEventListener('click', run);
+  gGo.addEventListener('click', () => {
+    if (gSeed.value.trim() === seedUsed) gSeed.value = randomSeed();
+    run();
+  });
 
   const outStereo = $('out-stereo'), outMono = $('out-mono');
   function syncOutput() {

@@ -256,7 +256,14 @@ self.onmessage = async (ev) => {
       importScripts(msg.ortUrl);
       ORT = self.ort;
       if (msg.wasmPath) ORT.env.wasm.wasmPaths = msg.wasmPath;
-      ORT.env.wasm.numThreads = msg.threads || 1;
+      // Threads, when the page is cross-origin isolated. Defaulting to 1 was
+      // costing most of the generation time: every one of the ~768 decode
+      // steps ran on a single core. crossOriginIsolated is the browser's own
+      // answer to 'is SharedArrayBuffer usable', so ask it rather than guess.
+      const cores = (self.navigator && navigator.hardwareConcurrency) || 4;
+      ORT.env.wasm.numThreads = msg.threads
+        || (self.crossOriginIsolated ? Math.min(8, Math.max(1, cores - 1)) : 1);
+      ORT.env.wasm.simd = true;
 
       const [vres, mres, pres] = await Promise.all([
         fetch(msg.vocabUrl).then((x) => x.json()),
@@ -288,7 +295,9 @@ self.onmessage = async (ev) => {
           }
           session = await ORT.InferenceSession.create(
             msg.modelData ? new Uint8Array(msg.modelData) : msg.modelUrl, opts);
-          self.postMessage({ type: "ready", ep, precision });
+          self.postMessage({ type: "ready", ep, precision,
+            threads: ORT.env.wasm.numThreads,
+            isolated: !!self.crossOriginIsolated });
           lastErr = null;
           break;
         } catch (e) { lastErr = e; session = null; }
