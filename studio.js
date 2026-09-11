@@ -360,7 +360,11 @@
   // separate slightly BETTER with it blanked -- so a dropdown for it
   // would imply control the model does not have. The prompt box still
   // reads scene words; it sets the fields that actually work.
-  const AI_FIELDS = ['g-prompt-field', 'g-drums-field'];
+  // Drums is the only control unique to the model -- the kata engines
+  // write their percussion from rules. The prompt box is deliberately
+  // NOT in here: it sets mood, key, scale, tempo and bars, which every
+  // engine uses, so hiding it for the kata was a mistake.
+  const AI_FIELDS = ['g-drums-field'];
   const syncAiFields = () => {
     const on = gEngine.value === AI_ENGINE;
     for (const id of AI_FIELDS) { const el = $(id); if (el) el.style.display = on ? '' : 'none'; }
@@ -376,11 +380,24 @@
     const text = gPrompt.value.trim();
     if (!text) { if (read) read.textContent = ''; return; }
     const p = OnjutsuPrompt.parse(text);
-    const set = (el, v) => { if (el && v != null && [...el.options].some(o => o.value === String(v))) el.value = String(v); };
+    // A change event, not just .value. The Studio wraps its selects in
+    // a custom control that repaints on 'change'; assigning .value alone
+    // updates the hidden element while the visible one keeps its old
+    // label -- the readout would say chill while the box still showed
+    // Stage theme, which is exactly the confusion it exists to prevent.
+    const set = (el, v) => {
+      if (!el || v == null) return;
+      if (![...el.options].some(o => o.value === String(v))) return;
+      el.value = String(v);
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
     set(gScene, p.scene); set(gMood, p.mood); set(gKey, p.key);
     set(gScale, p.scale); set(gChip, p.chip); set(gBars, p.bars);
     set(gDrums, p.drums);
-    if (p.bpm != null) { gBpm.value = String(p.bpm); gBpmVal.textContent = String(p.bpm); }
+    if (p.bpm != null) {
+      gBpm.value = String(p.bpm);
+      gBpm.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     if (read) read.textContent = OnjutsuPrompt.describe(p);
   }
   if (gPrompt) {
@@ -1058,5 +1075,6 @@
     rememberSeed(seedUsed);
   }
   renderSaved(); syncUI(); saveDraft(); animate();
+  if (!loaded) { gEngine.value = AI_ENGINE; gEngine.dispatchEvent(new Event('change')); }
   if (restoredDraft) $('autosave-status').textContent = 'Restored your last session';
 })();
