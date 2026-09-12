@@ -412,8 +412,31 @@
     gPrompt.addEventListener('input', applyPrompt);
     gPrompt.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyPrompt(); run(); } });
   }
-  gEngine.addEventListener('change', () => { engineBadge.textContent = engineBadgeText(gEngine.value); syncAiFields(); });
+  gEngine.addEventListener('change', () => { engineBadge.textContent = engineBadgeText(gEngine.value); syncAiFields(); preloadAi(); });
   syncAiFields();
+
+  // Fetch the weights while the user is still choosing a mood, not after
+  // they click Generate. Decoding itself is ~13 ms per token on every
+  // runtime measured here -- wasm at 1, 2, 4 and 8 threads, and WebGPU,
+  // which came out SLOWER because a one-token step is far too small to
+  // amortise the per-op GPU dispatch. That floor is the model's size and
+  // cannot be moved from inside the browser. The 60 MB download and the
+  // ~1.2 s session init can be, and together they were most of what the
+  // first Generate actually felt like.
+  let preloaded = false;
+  function preloadAi() {
+    if (preloaded || gEngine.value !== AI_ENGINE || !window.OnjutsuAI) return;
+    preloaded = true;
+    const go = () => OnjutsuAI.load((p) => {
+      // Quiet unless it is actually slow: a progress line nobody asked for
+      // reads as an error on a fast connection.
+      if (p.stage === 'download' && p.progress != null && p.progress < 0.95) {
+        flash('loading 音術 Onjutsu Sora · ' + p.detail);
+      }
+    }).catch(() => { preloaded = false; });   // generate() will retry
+    if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 3000 });
+    else setTimeout(go, 1200);
+  }
   gMutate.addEventListener('click', () => {
     const cur = gSeed.value.trim() || randomSeed();
     const base = cur.replace(/~\d+$/, '');
@@ -1087,5 +1110,8 @@
   }
   renderSaved(); syncUI(); saveDraft(); animate();
   if (!loaded) { gEngine.value = AI_ENGINE; gEngine.dispatchEvent(new Event('change')); }
+  // A restored session never fires that change event, so ask again here:
+  // whoever comes back to a saved draft on Onjutsu wants it warm too.
+  preloadAi();
   if (restoredDraft) $('autosave-status').textContent = 'Restored your last session';
 })();
