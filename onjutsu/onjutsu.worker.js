@@ -106,10 +106,23 @@ function sampleToken(logits, allowed, temperature, topP, rand) {
   for (let i = 0; i < n; i++) p[i] /= sum;
 
   const idx = Array.from(allowed).sort((a, b) => p[b] - p[a]);
+  /* The nucleus EXCLUDES the token that crosses topP, which is what sample.py
+   * does:
+   *     cut = cum > tp        # zero everything whose inclusive cum exceeds tp
+   *     cut[0] = False        # unless it is the top token
+   * This used to keep that token (keep = i + 1), making the browser's nucleus
+   * exactly one token wider than PyTorch's at every one of the ~770 sampling
+   * steps in a generation. The logits were identical -- the parity fixture
+   * proved that, and went on proving it while the two produced audibly
+   * different music, because parity checks logits and never checks the sampler.
+   * For a peaked distribution the extra token is systematically the next
+   * unlikely option, and on the noise voice that is a drum hit: measured drum
+   * density 0.68 in the browser against 0.49 in Python, and one generation in
+   * four came out with a hit on all 128 steps. */
   let cum = 0, keep = idx.length;
   for (let i = 0; i < idx.length; i++) {
     cum += p[idx[i]];
-    if (cum > topP) { keep = i + 1; break; }     // always keep the top token
+    if (cum > topP) { keep = Math.max(1, i); break; }   // never drop the top one
   }
   let tot = 0;
   for (let i = 0; i < keep; i++) tot += p[idx[i]];

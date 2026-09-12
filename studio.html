@@ -12,6 +12,19 @@
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Serif+JP:wght@700;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="studio.css">
+<style id="g-advanced-style">
+  #g-advanced { margin: 0 0 14px; }
+  #g-advanced > summary {
+    cursor: pointer; list-style: none; user-select: none;
+    font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+    opacity: .55; padding: 6px 0; border-bottom: 1px solid rgba(128,128,128,.22);
+  }
+  #g-advanced > summary::-webkit-details-marker { display: none; }
+  #g-advanced > summary::after { content: " +"; }
+  #g-advanced[open] > summary::after { content: " -"; }
+  #g-advanced > summary:hover { opacity: .9; }
+  #g-advanced[open] { padding-bottom: 4px; }
+</style>
 </head>
 <body class="studio-body">
   <div class="scanlines" aria-hidden="true"></div>
@@ -58,6 +71,9 @@
                placeholder="final boss &middot; peaceful forest, no drums &middot; sad ending in C minor">
         <small id="g-prompt-read" style="display:block;opacity:.65;margin-top:6px"></small>
       </div>
+
+      <details id="g-advanced">
+        <summary>Options</summary>
 
       <label class="field">
         <span>Model</span>
@@ -141,10 +157,11 @@
         </div>
       </label>
       <div class="seed-history" id="seed-history" aria-label="Recent seeds"></div>
+      </details>
 
       <button class="btn btn-primary wide" id="g-go" type="button"><span class="btn-icon">◆</span> Generate</button>
 
-      <p class="gen-note">Choose a mood. Find a seed. Make it yours.<br><b>型 kata</b> composes with rules; <b>音術 Onjutsu</b> is a model trained on 160k tunes from every console.</p>
+      <p class="gen-note">Press Generate. Everything else is optional.<br><b>音術 Onjutsu</b> is a model trained on 160k tunes from every console; <b>型 kata</b> composes with rules instead.</p>
     </aside>
 
     <!-- ===== centre: editor ===== -->
