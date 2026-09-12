@@ -1105,7 +1105,9 @@
   }
   if (!loaded) {
     gSeed.value = randomSeed(); seedUsed = gSeed.value;
-    pattern = kataA({ seed: seedUsed, engine: 'kataA', chip: 'nes', mood: 'stage', key: 'A', scale: 'minor', bars: 4, bpm: 150 });
+    // must match the generator defaults in studio.html, or the boxes
+    // describe one thing and the canvas shows another
+    pattern = kataA({ seed: seedUsed, engine: 'kataA', chip: 'nes', mood: 'stage', key: 'C', scale: 'major', bars: 8, bpm: 150 });
     rememberSeed(seedUsed);
   }
   renderSaved(); syncUI(); saveDraft(); animate();
