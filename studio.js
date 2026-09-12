@@ -14,7 +14,7 @@
   const MIN_MIDI = 36, MAX_MIDI = 84;          // C2..C6
   const DRUMS = NeoChip.DRUM_KEYS;            // k s h H t T c r b z
   const DRUM_LABEL = Object.fromEntries(Object.entries(NeoChip.DRUM_KIT).map(([k, v]) => [k, v.label]));
-  const ENGINE_LABEL = { kataA: 'kata-A', kataB: 'kata-B', kataC: 'kata-C', onjutsu: 'Onjutsu v1' };
+  const ENGINE_LABEL = { kataA: 'kata-A', kataB: 'kata-B', kataC: 'kata-C', onjutsu: 'Onjutsu Sora' };
   const LANE_NAME = { p1: 'Pulse 1', p2: 'Pulse 2', p3: 'Pulse 3', p4: 'Pulse 4', tr: 'Triangle', no: 'Noise' };
 
   const voiceFx = () => ({ vib: 0, trem: 0, echo: 0, duty: null, slide: false, arp: null, env: 'hold', inst: null });

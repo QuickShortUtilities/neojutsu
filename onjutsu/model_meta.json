@@ -14,16 +14,16 @@
     "fp32": {
       "file": "onjutsu.onnx",
       "mb": 77.1,
-      "max_logit_err": 9.5367431640625e-06,
-      "max_kl": 5.321484392157221e-12,
-      "top1_agree": "48/48"
+      "max_logit_err": 1.33514404296875e-05,
+      "max_kl": 7.65513596758252e-12,
+      "top1_agree": "64/64"
     },
     "int8": {
       "file": "onjutsu_int8.onnx",
       "mb": 20.1,
-      "max_logit_err": 0.5306189060211182,
-      "max_kl": 0.004844753258672061,
-      "top1_agree": "48/48"
+      "max_logit_err": 1.6405607461929321,
+      "max_kl": 0.02425835502908668,
+      "top1_agree": "59/64"
     }
   }
 }
