@@ -128,12 +128,22 @@
     chill: { density: .40, jump: 3, bassRate: 4, arp: false, drums: 'light',  oct: 0,  sustain: 1 },
     dark:  { density: .35, jump: 6, bassRate: 2, arp: false, drums: 'sparse', oct: -1, sustain: 1 },
   };
+  /* Three of these used to have a hit on all sixteen steps -- drive, heavy and
+     arcade had no rests at all. `stage` is the default mood and uses `drive`,
+     so the pattern this page draws on load, before anyone has generated
+     anything, was a drum on every 16th: at 150 bpm, ten hits a second of noise
+     channel over everything else. That is the buzzsaw, and it was the first
+     thing every visitor heard.
+     They now obey the same ceiling the model does -- at most 14 of 16, against
+     a corpus drummed density of 0.598 -- and keep their character: drive is
+     still eighths driving under the backbeat, heavy still busy, arcade still
+     has its bass hits. */
   const KITS = {
-    drive:  ['k','h','h','h','s','h','h','h','k','h','k','h','s','h','h','H'],
-    heavy:  ['k','h','k','r','s','h','k','h','k','H','k','h','s','t','T','s'],
+    drive:  ['k',null,'h',null,'s',null,'h',null,'k',null,'k','h','s',null,'h','H'],
+    heavy:  ['k',null,'k','r','s',null,'k','h','k','H','k',null,'s','t','T','s'],
     light:  ['k',null,'h',null,'s',null,'h',null,'k',null,'h',null,'s',null,'h','H'],
     sparse: ['k',null,null,'r','s',null,null,null,'k',null,null,'k','s',null,null,'r'],
-    arcade: ['k','h','b','h','s','h','b','h','k','h','k','b','s','h','T','t'],
+    arcade: ['k','h','b',null,'s','h','b',null,'k','h','k','b','s',null,'T','t'],
   };
   const FILLS = [['t','t','T','T'], ['s','s','T','c'], ['T','t','s','c'], ['s',null,'s','c']];
 

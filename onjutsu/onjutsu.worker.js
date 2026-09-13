@@ -168,7 +168,7 @@ async function generate(opts) {
   const o = Object.assign({
     chip: "nes", mood: "unknown", key: "unknown", scale: "unknown",
     bpm: 150, bars: 8, seed: "neojutsu", temperature: 1.15, topP: 0.96,
-    drumTemperature: 1.15, drumTopP: 0.96, drums: null, scene: null,
+    drumTemperature: 1.15, drumTopP: 0.92, drums: null, scene: null,
   }, opts || {});
   // The noise voice wants its own temperature. The corpus is bimodal -- 91% of
   // 8-bar chip patterns have no drums at all, and the 9% that do are dense --
@@ -209,16 +209,29 @@ async function generate(opts) {
   const pattern = { steps, bpm: o.bpm, chip: o.chip };
   for (const v of vocab.voices) pattern[v] = [];
   const sounding = [false, false, false, false, false];
+  let barHits = 0;                 // drum hits so far in the current bar
   const t0 = performance.now();
 
   for (let s = 0; s < steps; s++) {
     if (s % 16 === 0) {
+      barHits = 0;
       r = await step([vocab.special.bar], pos, past);
       pos += 1; past = r.past; logits = r.logits;
     }
     for (let slot = 0; slot < 6; slot++) {
+      /* DRUM_BAR_CAP, and sample.py holds the same number. The model puts a
+         hit on essentially every 16th in about 10% of stage and boss
+         generations, and it is not wrong to: 12% of DRUMMED corpus patterns do
+         the same, because on real hardware that is a noise-channel roll.
+         Through this synth at 150 bpm it is ten hits a second over everything
+         and reads as garble. No temperature or top-p setting removes it --
+         swept 15 combinations -- because it is a mode the corpus contains
+         rather than a sampling error, so it is excluded here as a legality
+         constraint, exactly like TIE. 14 of 16 leaves ordinary grooves alone:
+         corpus drummed density is 0.598, and the densest thing this still
+         permits is 0.88. */
       const allowed = slot === 5
-        ? vocab.drum_ids
+        ? (barHits >= 14 ? [vocab.special.rest_d] : vocab.drum_ids)
         : (sounding[slot] ? vocab.melodic_ids : vocab.melodic_no_tie);
       const tok = sampleToken(logits, allowed,
         slot === 5 ? dTemp : o.temperature,
@@ -227,6 +240,7 @@ async function generate(opts) {
       const name = vocab.vocab[tok];
       const v = vocab.voices[slot];
       if (slot === 5) {
+        if (name !== "REST_D") barHits += 1;
         pattern[v].push(name === "REST_D" ? null : name.slice(2));
       } else if (name === "REST") {
         pattern[v].push(null); sounding[slot] = false;
